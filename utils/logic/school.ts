@@ -45,7 +45,7 @@ export const SchoolLogic = {
         );
     },
     // 动态获取学校位置并传送
-    sendToSchool(sim: Sim, type: string) {
+    sendToSchool(sim: Sim, type: string): boolean {
         // 定义主要落地点的房间 ID 后缀 (优先寻找大块地面)
         const targetRoomSuffixes: Record<string, string> = {
             'kindergarten': '_kg_ground',
@@ -75,7 +75,7 @@ export const SchoolLogic = {
             targetY = targetRoom.y + targetRoom.h / 2 + (Math.random() - 0.5) * 40;
         } else {
             console.warn(`[SchoolLogic] 未找到学校类型 ${type} 的房间，传送失败`);
-            return; // 找不到学校就不送了
+            return false; // [修复] 返回 false 表示发送失败
         }
 
         // 执行传送/通勤逻辑
@@ -84,12 +84,13 @@ export const SchoolLogic = {
             sim.target = null;
             sim.path = [];
             sim.action = 'schooling'; 
-            return;
+            return true;
         }
 
         sim.target = { x: targetX, y: targetY };
         sim.action = 'commuting_school';
         sim.say("去学校...", 'act');
+        return true;
     },
 
 
@@ -180,7 +181,14 @@ export const SchoolLogic = {
                 return;
             }
 
-            SchoolLogic.sendToSchool(sim, config.id);
+            // [FIX] 尝试去上学
+            const success = SchoolLogic.sendToSchool(sim, config.id);
+            if (!success) {
+                // 如果找不到学校（房间未生成等bug），则标记为“今日已放学/无需上学”
+                // 防止每一帧都重新判定逃学概率，导致最终必定“逃课”
+                sim.hasLeftWorkToday = true; 
+                sim.say("学校好像关门了...", 'sys');
+            }
         } 
         else if (hour >= config.endHour && sim.action === 'schooling') {
             // 放学

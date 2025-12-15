@@ -656,7 +656,8 @@ export class Sim {
         }
 
         if (['Infant', 'Toddler'].includes(this.ageStage)) {
-            if (this.homeId && !this.isAtHome()) {
+            // [FIX] 修复婴幼儿“反复横跳”Bug：如果正在上学或去学校，不要触发回家逻辑
+            if (this.homeId && !this.isAtHome() && this.action !== 'schooling' && this.action !== 'commuting_school') {
                 if (!this.target || this.action !== 'moving_home') {
                     const homePos = this.getHomeLocation();
                     if (homePos) {
@@ -686,7 +687,7 @@ export class Sim {
                     }
                 }
             }
-            else {
+            else if (this.action !== 'schooling' && this.action !== 'commuting_school') { // 上学状态下不跟随
                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                 if (parent) {
                     const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
