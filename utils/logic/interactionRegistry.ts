@@ -1,7 +1,7 @@
 import { ITEMS, BUFFS } from '../../constants';
 import { Furniture } from '../../types';
-// [关键] 使用 type 导入 Sim，避免循环依赖导致的运行时错误
 import type { Sim } from '../Sim';
+import { SchoolLogic } from './school';
 
 // === 接口定义 ===
 export interface InteractionHandler {
@@ -323,6 +323,57 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             if (obj.label.includes('试妆') || obj.label.includes('镜')) {
                 sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.1 * f);
             }
+        }
+    },
+    'nap_crib': {
+        verb: '午睡 👶', duration: 120,
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs.energy += getRate(120);
+            if (sim.ageStage === 'Infant') sim.health += 0.01 * f;
+        }
+    },
+    'play_blocks': {
+        verb: '堆积木 🧱', duration: 40,
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs.fun += getRate(60);
+            sim.creativity += 0.05 * f; // 启蒙
+        }
+    },
+    'study': {
+        verb: '写作业 📝', duration: 60,
+        onStart: (sim) => {
+            // 只有好学生或心情好才愿意做
+            if (sim.mood < 40 && !sim.mbti.includes('J')) {
+                sim.say("不想写...", 'bad');
+                return false;
+            }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs.fun -= getRate(200); // 写作业很枯燥
+        },
+        onFinish: (sim) => {
+            SchoolLogic.doHomework(sim);
+        }
+    },
+    'study_high': {
+        verb: '自习 📖', duration: 90,
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.skills.logic += 0.05 * f;
+        },
+        onFinish: (sim) => {
+            SchoolLogic.doHomework(sim);
+        }
+    },
+    'eat_canteen': {
+        verb: '吃食堂 🍛', duration: 20,
+        onStart: (sim, obj) => {
+            if (sim.money < 10) { sim.say("饭卡没钱了...", 'bad'); return false; }
+            sim.money -= 10;
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs.hunger += getRate(30);
         }
     }
 };

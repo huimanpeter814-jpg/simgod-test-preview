@@ -217,6 +217,8 @@ export interface SimData {
   bubble?: { text: string | null; type: string; timer: number };
   target?: Vector2 | null;
   interactionTarget?: any;
+
+  schoolPerformance?: number; // 0-100
 }
 
 export interface LogEntry {

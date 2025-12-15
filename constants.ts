@@ -19,7 +19,7 @@ export const ASSET_CONFIG = {
 };
 
 export const CONFIG = {
-    CANVAS_W: 3500,
+    CANVAS_W: 4600,
     CANVAS_H: 2500,
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],
@@ -248,3 +248,29 @@ export const ORIENTATIONS = [
     { type: 'homo', label: '同性恋' },
     { type: 'bi', label: '双性恋' }
 ];
+
+export const SCHOOL_CONFIG = {
+    kindergarten: {
+        id: 'kindergarten',
+        label: '向日葵幼儿园',
+        startHour: 8,
+        endHour: 17,
+        stages: ['Infant', 'Toddler']
+    },
+    elementary: {
+        id: 'elementary',
+        label: '第一小学',
+        startHour: 8,
+        endHour: 15,
+        stages: ['Child'],
+        allowanceBase: 20 // 基础零花钱
+    },
+    high_school: {
+        id: 'high_school',
+        label: '星海中学',
+        startHour: 7.5, // 7:30
+        endHour: 18, // 晚自习
+        stages: ['Teen'],
+        allowanceBase: 50
+    }
+};

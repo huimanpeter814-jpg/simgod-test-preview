@@ -16,12 +16,17 @@ export const ROADS = [
     { id: 'road_v_left', x: 840, y: 0, w: ROAD_W, h: 2200, label: '', color: '#3d404b', pixelPattern: 'stripes' }, 
     // 第二条纵路：分隔中部与东部区域 (X=1910)
     { id: 'road_v_right', x: 1910, y: 0, w: ROAD_W, h: 2200, label: '', color: '#3d404b', pixelPattern: 'stripes' },
-    
+    // 新增通往学校的横路 (Y=440延伸)
+    { id: 'road_h_edu', x: 3400, y: 440, w: 1200, h: 100, label: '', color: '#3d404b', pixelPattern: 'stripes' },
+    // 新增学校门前的纵路
+    { id: 'road_v_edu', x: 3300, y: 0, w: 100, h: 2200, label: '', color: '#3d404b', pixelPattern: 'stripes' },
+
     // --- 斑马线 (交叉口优化) ---
     { id: 'zebra_1', x: 840, y: 440, w: 100, h: 6, color: '#f8f9fa', pixelPattern: 'zebra' },
     { id: 'zebra_2', x: 1910, y: 440, w: 100, h: 6, color: '#f8f9fa', pixelPattern: 'zebra' },
     { id: 'zebra_3', x: 840, y: 1320, w: 100, h: 6, color: '#f8f9fa', pixelPattern: 'zebra' },
     { id: 'zebra_4', x: 1910, y: 1320, w: 100, h: 6, color: '#f8f9fa', pixelPattern: 'zebra' }
+
 ];
 
 // 定义路边的装饰物
@@ -67,5 +72,7 @@ export const WORLD_LAYOUT: WorldPlot[] = [
     
     // === 远东新区 (最右侧纵向长条) ===
     // 位于地图最右侧边缘，贯穿上下
-    { id: 'plot_fareast', templateId: 'fareast', x: 2900, y: 50 }
+    { id: 'plot_fareast', templateId: 'fareast', x: 4100, y: 50 },
+    // 教育园区 (位于中间偏右，Service 右边)
+    { id: 'plot_edu', templateId: 'education', x: 2850, y: 20 }
 ];

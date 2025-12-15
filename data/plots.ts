@@ -440,6 +440,53 @@ const PLOT_FAREAST: PlotTemplate = {
     ]
 };
 
+// ==========================================
+// 10. 教育园区 (Education District) [NEW]
+// ==========================================
+const PLOT_EDUCATION: PlotTemplate = {
+    id: 'education_template',
+    width: 1400, // 巨大的地块
+    height: 1000,
+    type: 'public',
+    rooms: [
+        // --- 幼儿园 (左上) ---
+        { id: 'kg_ground', x: 20, y: 20, w: 400, h: 400, label: '向日葵幼儿园', color: '#fff0f5', pixelPattern: 'simple' },
+        { id: 'kg_playroom', x: 40, y: 40, w: 260, h: 200, label: '活动室', color: '#ffeaa7', pixelPattern: 'carpet' },
+        { id: 'kg_nap_room', x: 40, y: 260, w: 260, h: 140, label: '午睡室', color: '#dff9fb', pixelPattern: 'wood' },
+        { id: 'kg_yard', x: 310, y: 40, w: 100, h: 360, label: '', color: '#55efc4', pixelPattern: 'grass' },
+
+        // --- 小学 (右上) ---
+        { id: 'elem_ground', x: 460, y: 20, w: 900, h: 450, label: '第一小学', color: '#f0f2f8', pixelPattern: 'concrete' },
+        { id: 'elem_class_1', x: 480, y: 40, w: 200, h: 180, label: '一年级', color: '#dcede6', pixelPattern: 'wood' },
+        { id: 'elem_class_2', x: 700, y: 40, w: 200, h: 180, label: '二年级', color: '#dcede6', pixelPattern: 'wood' },
+        { id: 'elem_playground', x: 920, y: 40, w: 400, h: 400, label: '操场', color: '#e55039', pixelPattern: 'run_track' }, // 红色跑道
+
+        // --- 中学 (下方) ---
+        { id: 'high_ground', x: 20, y: 500, w: 1340, h: 480, label: '星海中学', color: '#dfe6e9', pixelPattern: 'concrete' },
+        { id: 'high_class_main', x: 40, y: 520, w: 400, h: 200, label: '教学楼', color: '#ffffff', pixelPattern: 'tile' },
+        { id: 'high_library', x: 460, y: 520, w: 300, h: 200, label: '图书馆', color: '#81ecec', pixelPattern: 'library' },
+        { id: 'high_canteen', x: 40, y: 740, w: 300, h: 200, label: '食堂', color: '#fab1a0', pixelPattern: 'kitchen' },
+        { id: 'high_gym', x: 800, y: 520, w: 500, h: 400, label: '体育馆', color: '#a29bfe', pixelPattern: 'gym' },
+    ],
+    furniture: [
+        // === 幼儿园 ===
+        ...createGrid('kg_crib', 50, 270, 4, 2, 60, 60, { w: 40, h: 40, color: '#ff9ff3', label: '婴儿床', utility: 'nap_crib', pixelPattern: 'bed_crib' }),
+        ...createGrid('kg_mat', 50, 50, 4, 3, 60, 60, { w: 44, h: 44, color: '#74b9ff', label: '游戏垫', utility: 'play_blocks', pixelPattern: 'play_mat' }),
+        { id: 'kg_slide', x: 330, y: 60, w: 60, h: 100, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'slide' },
+        
+        // === 小学 ===
+        ...createGrid('elem_desk_1', 490, 60, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
+        ...createGrid('elem_desk_2', 710, 60, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
+        { id: 'elem_blackboard_1', x: 530, y: 30, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
+        
+        // === 中学 ===
+        ...createGrid('high_desk', 60, 540, 8, 3, 45, 50, { w: 34, h: 24, color: '#b2bec3', label: '书桌', utility: 'study_high', pixelPattern: 'desk_simple' }),
+        ...createGrid('high_book', 480, 540, 5, 2, 50, 80, { w: 40, h: 60, color: '#0984e3', label: '藏书', utility: 'read', pixelPattern: 'bookshelf_sci' }),
+        ...createGrid('high_lunch', 60, 760, 4, 2, 70, 80, { w: 60, h: 60, color: '#fab1a0', label: '餐桌', utility: 'eat_canteen', pixelPattern: 'table_dining', cost: 10 }),
+        { id: 'high_hoop', x: 850, y: 550, w: 20, h: 60, color: '#e17055', label: '篮筐', utility: 'play', pixelPattern: 'hoop' },
+    ]
+};
+
 // 汇总导出
 export const PLOTS: Record<string, PlotTemplate> = {
     'cbd': PLOT_CBD,
@@ -450,5 +497,6 @@ export const PLOTS: Record<string, PlotTemplate> = {
     'commercial': PLOT_COMMERCIAL,
     'service': PLOT_SERVICE,
     'nightlife': PLOT_NIGHTLIFE,
-    'fareast': PLOT_FAREAST
+    'fareast': PLOT_FAREAST,
+    'education': PLOT_EDUCATION
 };

@@ -6,6 +6,7 @@ import { SocialLogic } from './logic/social';
 import { CareerLogic } from './logic/career';
 import { DecisionLogic } from './logic/decision';
 import { INTERACTIONS, RESTORE_TIMES, InteractionHandler } from './logic/interactionRegistry';
+import { SchoolLogic } from './logic/school';
 
 interface SimInitConfig {
     x?: number;
@@ -19,7 +20,7 @@ interface SimInitConfig {
     motherId?: string;
     orientation?: string;
     homeId?: string | null;
-    money?: number; // [新增] 允许外部传入初始资金
+    money?: number; // 允许外部传入初始资金
 }
 
 export class Sim {
@@ -88,6 +89,8 @@ export class Sim {
     dailyIncome: number; 
     isSideHustle: boolean = false;
     currentShiftStart: number = 0;
+
+    schoolPerformance: number = 60; // 学业表现
     
     hasLeftWorkToday: boolean = false;
 
@@ -609,6 +612,7 @@ export class Sim {
         const f = 0.0008 * dt;
 
         if (minuteChanged) {
+            SchoolLogic.checkKindergarten(this);
             this.updateBuffs(1);
             if (this.isPregnant) {
                 this.pregnancyTimer -= 1; 
@@ -618,6 +622,26 @@ export class Sim {
                     if(Math.random() > 0.8) this.say("宝宝踢我了...", 'act');
                 }
             }
+            // 每日零花钱 (早上6点)
+            if (GameStore.time.hour === 6 && GameStore.time.minute === 0) {
+                SchoolLogic.giveAllowance(this);
+            }
+        }
+
+        // [修改] 动作判断
+        if (this.action === 'commuting_school') {
+            this.commuteTimer += dt;
+            // 简单处理：通勤一定时间后到达
+            if (this.commuteTimer > 1200 && this.target) {
+                this.pos = { ...this.target };
+                this.action = 'schooling';
+                this.say("上课中...", 'act');
+            }
+        } else if (this.action === 'schooling') {
+            // 上课中，需求下降减缓
+            this.needs.fun -= 0.005 * dt; // 没那么无聊
+            // 增加知识
+            this.skills.logic += 0.002 * dt;
         }
 
         this.checkSchedule();
@@ -755,12 +779,12 @@ export class Sim {
         } 
         else if (!this.target) {
             if (this.job.id !== 'unemployed') {
-                if (this.action !== 'commuting' && this.action !== 'working') {
+                if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
                      if (this.action === 'moving') this.action = 'idle';
                      DecisionLogic.decideAction(this);
                 }
             } else {
-                if (this.action !== 'commuting' && this.action !== 'working') {
+                if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
                     if (this.action === 'moving') this.action = 'idle';
                     DecisionLogic.decideAction(this);
                 }
@@ -774,8 +798,13 @@ export class Sim {
                 this.target = null;
                 this.path = []; 
                 this.currentPathIndex = 0;
-                this.commuteTimer = 0; 
-                if (this.action !== 'moving_home') {
+                this.commuteTimer = 0;
+                // 添加对 commuting_school 的特判
+                if (this.action === 'commuting_school') {
+                    this.action = 'schooling'; // 锁定为上学状态
+                    this.say("乖乖上学", 'act');
+                } 
+                else if (this.action !== 'moving_home') {
                     this.startInteraction();
                 } else {
                     this.action = 'idle'; 
@@ -880,6 +909,7 @@ export class Sim {
 
     checkSchedule() {
         CareerLogic.checkSchedule(this);
+        SchoolLogic.checkSchoolSchedule(this);
     }
 
     updateBuffs(minutesPassed: number) {

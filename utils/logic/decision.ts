@@ -124,6 +124,24 @@ export const DecisionLogic = {
         } else {
             DecisionLogic.wander(sim);
         }
+
+        // 学生做作业决策
+        if (['Child', 'Teen'].includes(sim.ageStage) && sim.job.id === 'unemployed') {
+            // 勤奋的学生(J)或者害怕挂科(成绩差)会倾向于做作业
+            let studyDesire = 0;
+            if (sim.mbti.includes('J')) studyDesire += 40;
+            if ((sim.schoolPerformance || 60) < 60) studyDesire += 50; // 临阵磨枪
+            
+            // 下午/晚上才有做作业的想法
+            const hour = GameStore.time.hour;
+            if (hour > 16 && hour < 21) studyDesire += 30;
+
+            if (studyDesire > 60) {
+                // 寻找课桌
+                DecisionLogic.findObject(sim, sim.ageStage === 'Teen' ? 'study_high' : 'study');
+                return;
+            }
+        }
     },
 
     findSideHustle(sim: Sim) {
