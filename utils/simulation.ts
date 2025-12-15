@@ -245,7 +245,7 @@ function generateFamily(count: number) {
                 SocialLogic.setKinship(p, child, 'child');
                 SocialLogic.setKinship(child, p, 'parent');
                 p.childrenIds.push(child.id);
-            } else if (p.ageStage !== 'Adult') {
+            } else {
                 // 兄弟姐妹
                 SocialLogic.setKinship(p, child, 'sibling');
                 SocialLogic.setKinship(child, p, 'sibling');

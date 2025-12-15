@@ -151,10 +151,29 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                     </div>
                     
                     <div className="flex flex-wrap gap-1 mt-2">
+                        {/* 基础信息 */}
                         <span className="text-[10px] px-2 py-0.5 rounded border" style={{ color: ageInfo.color, borderColor: ageInfo.color + '40', background: ageInfo.color + '20' }}>
                             {ageInfo.label} ({Math.floor(sim.age)}岁)
                         </span>
+
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30" title="星座">
+                            {sim.zodiac.name}
+                        </span>
                         
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/20 text-pink-200 border border-pink-500/30" title="性取向">
+                            {ORIENTATIONS.find(o => o.type === sim.orientation)?.label}
+                        </span>
+                        
+                        <span 
+                            className={`text-[10px] px-2 py-0.5 rounded border ${partner ? 'bg-love/10 border-love/30 text-love' : 'bg-white/5 border-white/10 text-gray-400'}`} 
+                            title="情感状态"
+                        >
+                            {partner ? `恋爱中` : '单身'}
+                        </span>
+
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-accent/20 text-accent font-bold border border-accent/20" title="MBTI">{sim.mbti}</span>
+                        
+                        {/* 状态特有信息 */}
                         {sim.isPregnant && (
                             <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30 animate-pulse">
                                 🤰 孕期
@@ -167,6 +186,10 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         
                         <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30" title="职业">
                             {sim.job.title}
+                        </span>
+
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-warning/10 text-warning border border-warning/20" title="人生目标">
+                            🎯 {sim.lifeGoal}
                         </span>
                     </div>
                 </div>

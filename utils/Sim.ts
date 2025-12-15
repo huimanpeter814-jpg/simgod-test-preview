@@ -1050,6 +1050,10 @@ export class Sim {
         this.buffs = this.buffs.filter(b => b.duration > 0);
     }
 
+    removeBuff(id: string) {
+        this.buffs = this.buffs.filter(b => b.id !== id);
+    }
+
     addBuff(buffDef: any) {
         if (this.hasBuff(buffDef.id)) {
             const b = this.buffs.find(b => b.id === buffDef.id);
