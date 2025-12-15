@@ -1,5 +1,5 @@
 ﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, HOLIDAYS } from '../constants';
-import { Vector2, Job, Buff, SimAppearance, Furniture, Memory } from '../types';
+import { Vector2, Job, Buff, SimAppearance, Furniture, Memory  } from '../types';
 import { GameStore } from './simulation'; // 需要引入 GameStore 来访问 pathFinder
 import { minutes, getJobCapacity } from './simulationHelpers';
 import { SocialLogic } from './logic/social';
@@ -12,7 +12,6 @@ export class Sim {
     prevPos: Vector2; 
     target: Vector2 | null = null;
     
-    // [新增] 路径相关属性
     path: Vector2[] = [];
     currentPathIndex: number = 0;
     
@@ -31,6 +30,17 @@ export class Sim {
     lifeGoal: string;
     orientation: string;
     faithfulness: number;
+
+    height: number;
+    weight: number;
+    appearanceScore: number;
+    luck: number;
+    constitution: number;
+    eq: number;
+    iq: number;
+    reputation: number;
+    morality: number;
+    creativity: number;
 
     needs: any;
     skills: any;
@@ -73,6 +83,40 @@ export class Sim {
         this.speed = (5.0 + Math.random() * 2.0) * 2.0;
 
         this.gender = Math.random() > 0.5 ? 'M' : 'F';
+
+        // 身高：男性平均较高，女性平均较矮，但这只是概率
+        const baseHeight = this.gender === 'M' ? 175 : 163;
+        this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); // ±10cm波动
+        
+        // 体重：简单关联身高
+        const bmi = 18 + Math.random() * 8; // BMI 18-26
+        this.weight = Math.floor((this.height / 100) * (this.height / 100) * bmi);
+        
+        // 颜值：正态分布模拟 (倾向于中间值，偶尔出现高颜值)
+        const rand = (Math.random() + Math.random() + Math.random()) / 3;
+        this.appearanceScore = Math.floor(rand * 100);
+        // 幸运：完全随机
+        this.luck = Math.floor(Math.random() * 100);
+        
+        // 体质：正态分布，大部分人健康(60-80)，少数人体弱或强壮
+        const constRand = (Math.random() + Math.random()) / 2;
+        this.constitution = Math.floor(constRand * 100);
+        
+        // 情商：随机
+        this.eq = Math.floor(Math.random() * 100);
+
+        // 智商：正态分布模拟 (两头少中间多)
+        const iqRand = (Math.random() + Math.random() + Math.random()) / 3;
+        this.iq = Math.floor(iqRand * 100);
+
+        // 声望：初始较低，随随机波动
+        this.reputation = Math.floor(Math.random() * 40); 
+
+        // 道德：随机
+        this.morality = Math.floor(Math.random() * 100);
+
+        // 创意：随机
+        this.creativity = Math.floor(Math.random() * 100);
         
         this.name = this.generateName();
         this.skinColor = CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];

@@ -71,6 +71,12 @@ const STATUS_MAP: Record<string, string> = {
     phone: '玩手机'
 };
 
+const HAIR_STYLE_NAMES = [
+    '普通短发', '波波头', '刺猬头', '侧分背头', '丸子头',
+    '姬发式', '爆炸头', '莫霍克', '双马尾', '地中海',
+    '中分窗帘', '高马尾', '狼尾', '遮眼侧刘海', '脏辫'
+];
+
 const MemoryItem: React.FC<{ memory: Memory }> = ({ memory }) => {
     let icon = '📝';
     let borderColor = 'border-white/10';
@@ -126,6 +132,22 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
     if (sim.faithfulness > 80) faithColor = 'text-success';
     else if (sim.faithfulness < 40) faithColor = 'text-danger';
     else faithColor = 'text-warning';
+
+    let hairName = '未知发型';
+    if (sim.appearance.hair) {
+        // 如果是图片资源
+        const fileName = sim.appearance.hair.split('/').pop() || '';
+        hairName = `自定义 (${fileName.substring(0, 6)}...)`;
+    } else {
+        // 如果是程序化生成，使用相同的哈希逻辑
+        const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        // 注意：simulationHelpers.ts 中如果用的是 % 5，这里也要对应。
+        // 但为了准确显示潜在的所有发型，这里假设 simulationHelpers 可能会被修正为支持更多
+        // 目前按文件里的逻辑 (hash % 5) 显示，如果之后修正了渲染逻辑，这里改成 % 15 即可
+        // 假设 simulationHelpers 用的是 % 15 (因为有15个case)，这里我们用 15
+        const styleIndex = hash % 5; // *根据你上传的 simulationHelpers.ts，目前它只取前5种，如果要完全对应请保持 % 5
+        hairName = HAIR_STYLE_NAMES[styleIndex] || '标准发型';
+    }
 
     return (
         <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
@@ -312,6 +334,115 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
 
                 {tab === 'attr' && (
                     <>
+                        {/* [新增] 个人特征栏 */}
+                        <div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">个人特征</div>
+                            <div className="bg-white/5 rounded-lg p-2 border border-white/5 grid grid-cols-2 gap-2 text-[11px]">
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-gray-500 text-[9px]">发型风格</span>
+                                    <span className="text-gray-200 font-bold">{hairName}</span>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-gray-500 text-[9px]">发色</span>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 rounded-full border border-white/20" style={{background: sim.hairColor}}></div>
+                                        <span className="text-gray-300 font-mono text-[9px]">{sim.hairColor}</span>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-gray-500 text-[9px]">身高</span>
+                                    <span className="text-gray-200 font-mono">{sim.height} cm</span>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-gray-500 text-[9px]">体重</span>
+                                    <span className="text-gray-200 font-mono">{sim.weight} kg</span>
+                                </div>
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                     <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">魅力值</span>
+                                        <span className={`font-bold ${sim.appearanceScore > 80 ? 'text-love' : 'text-gray-300'}`}>{sim.appearanceScore}/100</span>
+                                     </div>
+                                     <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-blue-400 to-pink-400" style={{width: `${sim.appearanceScore}%`}}></div>
+                                     </div>
+                                </div>
+
+                                {/* [修改] 幸运值 - 进度条样式 */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                     <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">幸运</span>
+                                        <span className={`font-bold ${sim.luck > 80 ? 'text-warning' : 'text-gray-300'}`}>{sim.luck}/100</span>
+                                     </div>
+                                     <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-yellow-300 to-orange-400" style={{width: `${sim.luck}%`}}></div>
+                                     </div>
+                                </div>
+
+                                {/* [修改] 体质 - 进度条样式 */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                     <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">体质</span>
+                                        <span className={`font-bold ${sim.constitution > 80 ? 'text-success' : (sim.constitution < 40 ? 'text-danger' : 'text-gray-300')}`}>{sim.constitution}/100</span>
+                                     </div>
+                                     <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-emerald-400 to-green-500" style={{width: `${sim.constitution}%`}}></div>
+                                     </div>
+                                </div>
+
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">智商</span>
+                                        <span className={`font-bold ${sim.iq > 80 ? 'text-purple-300' : 'text-gray-300'}`}>{sim.iq}/100</span>
+                                    </div>
+                                    <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-500" style={{width: `${sim.iq}%`}}></div>
+                                    </div>
+                                </div>
+
+                                {/* [修改] 情商 - 进度条样式 */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                     <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">情商</span>
+                                        <span className={`font-bold ${sim.eq > 80 ? 'text-blue-400' : 'text-gray-300'}`}>{sim.eq}/100</span>
+                                     </div>
+                                     <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{width: `${sim.eq}%`}}></div>
+                                     </div>
+                                </div>
+                                {/* [新增] 声望 Reputation */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">声望</span>
+                                        <span className={`font-bold ${sim.reputation > 80 ? 'text-yellow-300' : 'text-gray-300'}`}>{sim.reputation}/100</span>
+                                    </div>
+                                    <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-amber-300 to-yellow-500" style={{width: `${sim.reputation}%`}}></div>
+                                    </div>
+                                </div>
+
+                                {/* [新增] 道德 Morality */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">道德</span>
+                                        <span className={`font-bold ${sim.morality > 80 ? 'text-teal-300' : (sim.morality < 30 ? 'text-red-400' : 'text-gray-300')}`}>{sim.morality}/100</span>
+                                    </div>
+                                    <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-teal-300 to-cyan-500" style={{width: `${sim.morality}%`}}></div>
+                                    </div>
+                                </div>
+
+                                {/* [新增] 创意 Creativity */}
+                                <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500 text-[9px]">创意</span>
+                                        <span className={`font-bold ${sim.creativity > 80 ? 'text-pink-300' : 'text-gray-300'}`}>{sim.creativity}/100</span>
+                                    </div>
+                                    <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-600" style={{width: `${sim.creativity}%`}}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         {/* Economy */}
                         <div>
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">财务 & 职业</div>

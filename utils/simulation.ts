@@ -151,6 +151,20 @@ export class GameStore {
                 const sim = new Sim(sData.pos.x, sData.pos.y);
                 Object.assign(sim, sData);
                 
+                // [数据修正]
+                if (!sim.height || sim.height < 50) sim.height = 170;
+                if (!sim.weight || sim.weight < 20) sim.weight = 60;
+                if (sim.appearanceScore === undefined) sim.appearanceScore = 50;
+
+                // [新增] 补全 Luck, Constitution, EQ
+                if (sim.luck === undefined) sim.luck = 50;
+                if (sim.constitution === undefined) sim.constitution = 60;
+                if (sim.eq === undefined) sim.eq = 50;
+                if (sim.iq === undefined) sim.iq = 50;
+                if (sim.reputation === undefined) sim.reputation = 20;
+                if (sim.morality === undefined) sim.morality = 50;
+                if (sim.creativity === undefined) sim.creativity = 50;
+
                 sim.interactionTarget = null;
                 sim.target = null;
                 // @ts-ignore
