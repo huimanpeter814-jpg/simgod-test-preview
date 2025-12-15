@@ -10,7 +10,7 @@ export const callGemini = async (prompt: string, systemInstruction: string = "")
         return null;
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const payload = {
         contents: [{
@@ -53,20 +53,28 @@ export const callGemini = async (prompt: string, systemInstruction: string = "")
 /**
  * 批量生成市民日记
  * @param simsData 市民数据列表（包含 ID, 名字, 性格, 当天经历等）
+ * @param globalContext 全局背景 (比如节日、季节)
  * @returns 解析后的字典对象 { [simId]: "日记内容" }
  */
-export const batchGenerateDiaries = async (simsData: any[]): Promise<Record<string, string>> => {
+export const batchGenerateDiaries = async (simsData: any[], globalContext: string = ""): Promise<Record<string, string>> => {
     // 1. 构造系统提示词 (System Instruction)
     // 强制要求 JSON 格式，并设定角色
     const systemPrompt = `
-    你是一个像素风模拟游戏《Simgod》的叙事助手。
-    你的任务是根据提供的市民列表及其当天的经历（events），为每一位市民写一句简短的日记（第一人称）。
-    
+    你是一个像素风模拟游戏《SimGod》的叙事助手。
+    你的任务是根据市民的档案，用【第一人称】写一句像“微博/推特”一样的短日记。
+
+    请参考以下数据来丰富内容：
+    - **Events (经历)**: 如果有具体事件，必须在日记中提及。
+    - **Buffs (状态)**: 这是最重要的心情指标！(例如: "社畜过劳"要写得累，"恋爱脑"要写得甜)。
+    - **LifeGoal (目标)**: 如果今天没事发生，可以感慨一下梦想。
+    - **MBTI (性格)**: F人更感性，T人更逻辑，E人更外向，I人更内敛。
+    - **Global Context**: ${globalContext} (如果是节日，请尽量关联)。
+
     要求：
-    1. **简短**：每条日记不超过 30 个字。
-    2. **风格**：综合市民的MBTI、星座、性取向、职业、岁数、人生目标等等来判断此人的说话风格。如果当天有重要事件（如升职、恋爱、分手），必须在日记中体现。如果没有特殊事件，就写一句符合心情的日常感叹，语气自然生动符合风格，比较口语化。
-    3. **格式**：**必须且只能**返回一个合法的 JSON 对象。Key 是市民的 ID，Value 是日记字符串。
-    4. **严禁**：不要输出 markdown 代码块标记（如 \`\`\`json），直接输出纯 JSON 字符串。
+    1. **拒绝流水账**：不要写“我今天去工作了”，要写更为生动的语气。
+    2. **口语化**：可以使用 1-2 个 Emoji，语气要像真人发朋友圈。
+    3. **字数**：控制在 40 字以内，短小精悍。
+    4. **格式**：**必须**返回纯 JSON 对象 { [id]: "日记内容" }，不要 Markdown。
     `;
 
     // 2. 构造用户输入

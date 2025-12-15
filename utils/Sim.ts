@@ -1018,17 +1018,37 @@ export class Sim {
 
     getDaySummary(monthIndex: number) {
         const timePrefix = `Y${GameStore.time.year} M${GameStore.time.month}`;
-        const recentMemories = this.memories.slice(0, 5).map(m => m.text);
+        
+        // 1. 获取近期记忆 (Events)
+        // 过滤掉一些太琐碎的系统日志，保留生活相关的
+        const recentMemories = this.memories
+            .slice(0, 5) // 取最近5条
+            .map(m => m.text);
 
+        // 2. 获取当前状态 (Buffs) - 这非常关键！
+        // 比如 "恋爱脑, 社畜过劳, 暴富幻觉"
+        const activeBuffs = this.buffs.map(b => b.label).join(', ');
+
+        // 3. 获取伴侣名字 (如果有)
+        let partnerName = "无";
+        const partnerId = Object.keys(this.relationships).find(id => this.relationships[id].isLover);
+        if (partnerId) {
+            const partner = GameStore.sims.find(s => s.id === partnerId);
+            if (partner) partnerName = partner.name;
+        }
+
+        // 4. 返回更丰富的数据包
         return {
             id: this.id,
             name: this.name,
-            gender: this.gender,
             age: this.age,
-            mbti: this.mbti,
+            mbti: this.mbti, // 性格决定语气
             job: this.job.title,
-            mood: this.mood > 80 ? '开心' : (this.mood < 40 ? '难过' : '平静'),
-            events: recentMemories
+            lifeGoal: this.lifeGoal, // 人生目标，AI 可以用来写感慨
+            money: this.money, // 存款，AI 可以写哭穷或炫富
+            buffs: activeBuffs, // 当前状态，决定日记基调
+            partner: partnerName, // 提到伴侣
+            events: recentMemories // 发生的具体事件
         };
     }
 

@@ -269,20 +269,30 @@ export function updateTime() {
 
 async function handleDailyDiaries(monthIndex: number) {
     console.log(`[AI] 开始生成第 ${monthIndex} 月的市民日记...`);
+    
+    // 1. 准备数据
     const allSimsData = GameStore.sims.map(sim => sim.getDaySummary(monthIndex));
+    
+    // 2. 获取环境上下文 (Context)
+    const currentMonth = GameStore.time.month;
+    const holiday = HOLIDAYS[currentMonth];
+    let contextStr = `现在的季节是 ${currentMonth}月。`;
+    if (holiday) {
+        contextStr += ` 本月是【${holiday.name}】(${holiday.type})，全城都在过节！`;
+    }
     const BATCH_SIZE = 20;
     
     for (let i = 0; i < allSimsData.length; i += BATCH_SIZE) {
         const batch = allSimsData.slice(i, i + BATCH_SIZE);
         try {
-            const diariesMap = await batchGenerateDiaries(batch);
+            const diariesMap = await batchGenerateDiaries(batch, contextStr);
             Object.entries(diariesMap).forEach(([simId, diaryContent]) => {
                 const sim = GameStore.sims.find(s => s.id === simId);
                 if (sim) {
                     sim.addDiary(diaryContent);
                 }
             });
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 4000));
         } catch (error) {
             console.error("[AI] 批次生成失败:", error);
         }
