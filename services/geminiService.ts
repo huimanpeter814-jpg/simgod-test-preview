@@ -1,55 +1,63 @@
 // �Ƴ��˶� @google/genai ������������ fetch ֱ�ӵ��� REST API
 // ������ Web �����и��ȶ�������Ҫ Node.js polyfills
 
-export const callGemini = async (prompt: string, systemInstruction: string = ""): Promise<string | null> => {
-    // ʹ�� Vite �ķ�ʽ��ȡ��������
-    const apiKey = import.meta.env.VITE_API_KEY;
 
+// services/geminiService.ts
+
+export const callGemini = async (prompt: string, systemInstruction: string = ""): Promise<string | null> => {
+    const apiKey = import.meta.env.VITE_API_KEY;
+    
+    // ⚠️ 检查 Key 是否为空
     if (!apiKey) {
-        console.warn("Gemini API Key not found. Please set VITE_API_KEY in .env");
+        console.error("❌ 致命错误: .env.local 中未找到 API Key");
         return null;
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 尝试使用 gemini-1.5-flash (这是目前最推荐的)
+    const model = "gemini-2.5-flash"; 
+    const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const url = `${baseUrl}?key=${apiKey}`;
+
+    // 🔍 调试日志：请在浏览器控制台(F12)查看这条打印
+    console.log("🚀 正在请求 Gemini API:", baseUrl); 
+    // 注意：不要在生产环境打印含 Key 的完整 URL，但在调试时可以检查 Key 是否有多余空格
 
     const payload = {
         contents: [{
             parts: [{ text: prompt }]
         }],
-        systemInstruction: systemInstruction ? {
-            parts: [{ text: systemInstruction }]
-        } : undefined
+        ...(systemInstruction && {
+            systemInstruction: {
+                parts: [{ text: systemInstruction }]
+            }
+        })
     };
 
     try {
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error("Gemini API Error:", errorData);
+            const errorText = await response.text();
+            console.error(`❌ API 请求失败 [${response.status}]:`, errorText);
+            
+            if (response.status === 404) {
+                console.error("👉 原因: API未启用 或 模型名称错误。请务必新建一个 Project 并重新生成 Key。");
+            }
             return null;
         }
 
         const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
 
-        // �������ؽ��
-        if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts.length > 0) {
-            return data.candidates[0].content.parts[0].text;
-        }
-
-        return null;
     } catch (error) {
-        console.error("Gemini Network Error:", error);
+        console.error("❌ 网络错误 (请检查代理/VPN):", error);
         return null;
     }
 };
-
 /**
  * 批量生成市民日记
  * @param simsData 市民数据列表（包含 ID, 名字, 性格, 当天经历等）
