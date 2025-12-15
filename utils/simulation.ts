@@ -1,6 +1,6 @@
 import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
-import { PLOTS } from '../data/plots'; // [New]
-import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; // [New]
+import { PLOTS } from '../data/plots'; 
+import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Job, Furniture, RoomDef } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
@@ -325,6 +325,12 @@ function generateFamily(count: number) {
 }
 
 export function initGame() {
+    // [修复] 强制重置游戏状态，确保幂等性（重复调用不会副作用叠加）
+    GameStore.sims = [];
+    GameStore.particles = [];
+    GameStore.logs = []; // 清空之前的日志
+    GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
+
     // [New] 初始化时先构建世界
     GameStore.rebuildWorld();
 

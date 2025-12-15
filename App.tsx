@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import TopUI from './components/TopUI';
 import Sidebar from './components/Sidebar/Sidebar';
@@ -7,8 +7,15 @@ import { loadImages } from './utils/assetLoader';
 import { ASSET_CONFIG } from './constants';
 
 const App: React.FC = () => {
+    // [修复] 使用 ref 追踪初始化状态，防止 React.StrictMode 导致的双重执行
+    const initialized = useRef(false);
+
     useEffect(() => {
-        // [�¹���] Ԥ����������Դ
+        // 如果已经初始化过，直接返回
+        if (initialized.current) return;
+        initialized.current = true;
+
+        // [新功能] 预加载所有资源
         const allAssets = [
             ...ASSET_CONFIG.face,
             ...ASSET_CONFIG.hair,
