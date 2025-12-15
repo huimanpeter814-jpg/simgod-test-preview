@@ -253,9 +253,9 @@ export function drawAvatarHead(ctx: CanvasRenderingContext2D, x: number, y: numb
         ctx.fillRect(x + eyeOffset - eyeSize, y + eyeyOffset, eyeSize, eyeSize); // 右眼
         
         // 腮红 (可爱细节)
-        ctx.fillStyle = 'rgba(255, 100, 100, 0.15)';
-        ctx.fillRect(x - eyeOffset - 2, y + 4, 4, 2);
-        ctx.fillRect(x + eyeOffset - 2, y + 4, 4, 2);
+        ctx.fillStyle = 'rgba(255, 100, 100, 0.31)';
+        ctx.fillRect(x - eyeOffset - 2, y + 6, 4, 2);
+        ctx.fillRect(x + eyeOffset - 2, y + 6, 4, 2);
     }
 
     // 2. 尝试绘制发型图片

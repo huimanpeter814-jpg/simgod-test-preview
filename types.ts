@@ -69,7 +69,9 @@ export interface Relationship {
   friendship: number;
   romance: number;
   isLover: boolean;
+  isSpouse: boolean; // [新增] 是否为配偶
   hasRomance: boolean;
+  kinship?: 'parent' | 'child' | 'sibling' | 'spouse' | 'none'; // [新增] 亲属关系
 }
 
 export interface Job {
@@ -101,14 +103,19 @@ export interface SimAppearance {
 export interface Memory {
     id: string;
     time: string; 
-    type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary';
+    type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary' | 'family'; // [新增] family 类型
     text: string;
     relatedSimId?: string; 
 }
 
+// [新增] 年龄阶段枚举
+export type AgeStage = 'Infant' | 'Toddler' | 'Child' | 'Teen' | 'Adult' | 'MiddleAged' | 'Elder';
+
 export interface SimData {
   id: string;
+  familyId: string; // [新增] 家庭ID
   name: string;
+  surname: string; // [新增] 单独存储姓氏以便子女继承
   pos: Vector2;
   gender: 'M' | 'F';
   height: number;         
@@ -127,9 +134,22 @@ export interface SimData {
   appearance: SimAppearance;
   mbti: string;
   zodiac: Zodiac;
+  
   age: number;
-  // [修复] 添加 ageGroup
-  ageGroup: string;
+  ageStage: AgeStage; // [修改] 使用枚举
+  health: number; // [新增] 健康值 0-100
+  
+  // [新增] 家族树相关ID
+  partnerId: string | null;
+  fatherId: string | null;
+  motherId: string | null;
+  childrenIds: string[];
+
+  // [新增] 怀孕相关
+  isPregnant: boolean;
+  pregnancyTimer: number; // 倒计时
+  partnerForBabyId: string | null; // 孩子父亲/另一个母亲的ID
+
   lifeGoal: string;
   orientation: string;
   faithfulness: number;
@@ -160,7 +180,7 @@ export interface LogEntry {
   id: number;
   time: string;
   text: string;
-  type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money';
+  type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family';
   category: 'sys' | 'chat' | 'rel';
   isAI: boolean;
   simName?: string;

@@ -49,6 +49,17 @@ export const CONFIG = {
 
 export { PALETTES, ROOMS, FURNITURE } from './data/scene';
 
+// [新增] 年龄段定义
+export const AGE_CONFIG = {
+    Infant: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb' },
+    Toddler: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3' },
+    Child: { min: 6, max: 12, label: '儿童', color: '#54a0ff' },
+    Teen: { min: 13, max: 18, label: '青少年', color: '#5f27cd' },
+    Adult: { min: 19, max: 39, label: '成年', color: '#1dd1a1' },
+    MiddleAged: { min: 40, max: 59, label: '中年', color: '#ff9f43' },
+    Elder: { min: 60, max: 120, label: '老年', color: '#8395a7' }
+};
+
 export const ITEMS = [
     { id: 'drink', label: '冰美式', cost: 15, needs: { hunger: 2, fun: 5 }, trigger: 'street' },
     { id: 'book', label: '设计年鉴', cost: 60, needs: { fun: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
@@ -56,13 +67,15 @@ export const ITEMS = [
     { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { fun: 60 }, trigger: 'rich' },
     { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { fun: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
     { id: 'gym_pass', label: '私教课', cost: 100, needs: { energy: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
-    { id: 'medicine', label: '布洛芬', cost: 25, buff: 'well_rested', trigger: 'sad' },
+    { id: 'medicine', label: '急救包', cost: 100, buff: 'healing', trigger: 'sick' }, // [修改] 增加回血道具
     { id: 'game_coin', label: '代币', cost: 5, needs: { fun: 20 }, trigger: 'bored' },
     { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { fun: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
     { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { hunger: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
     { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { fun: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
     { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { fun: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
     { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { hunger: 10, fun: 10 }, rel: true, trigger: 'love' },
+    // [新增] 避孕/助孕道具
+    { id: 'protection', label: '安全措施', cost: 20, trigger: 'safe_sex' },
 ];
 
 export const SKILLS = [
@@ -71,8 +84,6 @@ export const SKILLS = [
     { id: 'gardening', label: '种植' }, { id: 'fishing', label: '钓鱼' }
 ];
 
-// [修改] 职业配置：移除 workDays，所有职业默认每天(每月)工作
-// 部分职业可能有特殊的放假月 (vacationMonths)
 export const JOBS: Job[] = [
     { id: 'unemployed', title: '自由职业', level: 0, salary: 0, startHour: 0, endHour: 0 },
 
@@ -142,21 +153,28 @@ export const BUFFS = {
     crush: { id: 'crush', label: '心动瞬间', type: 'good' as const, duration: 90 },
     sweet_date: { id: 'sweet_date', label: '甜蜜蜜', type: 'good' as const, duration: 180 },
 
-    // [新增] 节日相关 Buff
     festive_joy: { id: 'festive_joy', label: '过节啦!', type: 'good' as const, duration: 300 },
-    social_pressure: { id: 'social_pressure', label: '社交恐惧', type: 'bad' as const, duration: 240 }, // I人过年
+    social_pressure: { id: 'social_pressure', label: '社交恐惧', type: 'bad' as const, duration: 240 },
     shopping_spree: { id: 'shopping_spree', label: '剁手快乐', type: 'good' as const, duration: 180 },
     vacation_chill: { id: 'vacation_chill', label: '悠长假期', type: 'good' as const, duration: 400 },
+
+    // [新增] 家庭相关
+    pregnant: { id: 'pregnant', label: '孕育新生命', type: 'good' as const, duration: 1440 }, // 24小时游戏时间
+    new_parent: { id: 'new_parent', label: '初为人父/母', type: 'good' as const, duration: 600 },
+    married: { id: 'married', label: '新婚燕尔', type: 'good' as const, duration: 600 },
+    divorced: { id: 'divorced', label: '婚姻破裂', type: 'bad' as const, duration: 600 },
+    mourning: { id: 'mourning', label: '哀悼逝者', type: 'bad' as const, duration: 480 },
+    sick: { id: 'sick', label: '身体抱恙', type: 'bad' as const, duration: 240 },
+    healing: { id: 'healing', label: '正在恢复', type: 'good' as const, duration: 120 },
 };
 
-// [重构] 节日系统：Key 为月份 (1-12)
 export const HOLIDAYS: Record<number, { name: string, type: 'traditional' | 'love' | 'shopping' | 'break' | 'party' }> = {
-    2: { name: "春节", type: 'traditional' },      // 2月: 全员放假，家庭/社交
-    5: { name: "恋爱季", type: 'love' },           // 5月(520): 恋爱月
-    7: { name: "夏日祭", type: 'party' },          // 7月: 暑期，派对
-    10: { name: "黄金周", type: 'break' },         // 10月: 旅游/休息
-    11: { name: "购物节", type: 'shopping' },      // 11月: 双11
-    12: { name: "跨年", type: 'party' }            // 12月: 总结，庆祝
+    2: { name: "春节", type: 'traditional' },      
+    5: { name: "恋爱季", type: 'love' },           
+    7: { name: "夏日祭", type: 'party' },          
+    10: { name: "黄金周", type: 'break' },         
+    11: { name: "购物节", type: 'shopping' },      
+    12: { name: "跨年", type: 'party' }            
 };
 
 export const LIFE_GOALS = [
@@ -166,7 +184,7 @@ export const LIFE_GOALS = [
     '环游世界', '猫狗双全', '隐居山林', '极简主义', '海岛庄园主',
     '派对之王', '美食探店', '健身狂魔', '游戏全成就',
     '摸鱼之王', '外星接触', '长生不老', '收集癖', '八卦队长',
-    '统治世界', '只想睡个好觉'
+    '统治世界', '只想睡个好觉', '子孙满堂', '完美家庭'
 ];
 
 export const MBTI_TYPES = [
@@ -221,9 +239,13 @@ export const SOCIAL_TYPES = [
     { id: 'flirt', label: '调情', val: 10, type: 'romance', minVal: 30, maxVal: 100, logType: 'love' },
     { id: 'hug', label: '抱抱', val: 15, type: 'romance', minVal: 50, maxVal: 100, logType: 'love', special: 'hug' },
     { id: 'kiss', label: '亲亲', val: 20, type: 'romance', minVal: 70, maxVal: 100, logType: 'love', special: 'kiss' },
+    { id: 'woohoo', label: '嘿咻', val: 40, type: 'romance', minVal: 80, maxVal: 100, logType: 'love', special: 'woohoo' }, // [新增]
     { id: 'confess', label: '表白', val: 30, type: 'romance', minVal: 40, maxVal: 100, logType: 'love', special: 'confess' },
     { id: 'propose', label: '求婚', val: 50, type: 'romance', minVal: 90, maxVal: 100, logType: 'love', special: 'propose' },
+    { id: 'marriage', label: '结婚', val: 100, type: 'romance', minVal: 95, maxVal: 100, logType: 'rel_event', special: 'marriage' }, // [新增]
+    { id: 'try_baby', label: '备孕', val: 20, type: 'romance', minVal: 90, maxVal: 100, logType: 'family', special: 'try_baby' }, // [新增]
     { id: 'breakup', label: '分手', val: -50, type: 'romance', minVal: -100, maxVal: -60, logType: 'bad', special: 'breakup' },
+    { id: 'divorce', label: '离婚', val: -100, type: 'romance', minVal: -100, maxVal: -80, logType: 'bad', special: 'divorce' }, // [新增]
     { id: 'argue', label: '吵架', val: -15, type: 'friendship', minVal: -100, maxVal: 100, logType: 'bad' }
 ];
 
@@ -233,7 +255,8 @@ export const BASE_DECAY = {
     fun: 0.8,
     social: 0.8,
     bladder: 0.8,
-    hygiene: 0.5
+    hygiene: 0.5,
+    health: 0.0 // 默认不衰减，特殊情况衰减
 };
 
 export const ORIENTATIONS = [

@@ -1,9 +1,8 @@
-import { Sim } from '../Sim';
+import type { Sim } from '../Sim'; // Import type only to avoid circular dependency runtime issues
 import { GameStore } from '../simulation';
 import { SOCIAL_TYPES, BUFFS, ELE_COMP, ROOMS } from '../../constants';
 import { DIALOGUE_TEMPLATES } from '../../data/dialogues';
 
-// 定义社交行为对象的类型
 type SocialType = typeof SOCIAL_TYPES[number];
 
 export const SocialLogic = {
@@ -63,7 +62,7 @@ export const SocialLogic = {
         return Math.max(0, score);
     },
 
-    // [新增] 人生目标契合度计算
+    // 人生目标契合度计算
     getLifeGoalCompatibility(sim: Sim, partner: Sim) {
         if (sim.lifeGoal === partner.lifeGoal) return 25; // 完全一致，知己！
 
@@ -77,6 +76,7 @@ export const SocialLogic = {
             fun: ['派对', '游戏', '环游', '美食']
         };
 
+        // @ts-ignore
         const getGroup = (goal: string) => Object.keys(groups).find(k => groups[k as keyof typeof groups].some(word => goal.includes(word)));
 
         const g1 = getGroup(sim.lifeGoal);
@@ -106,9 +106,13 @@ export const SocialLogic = {
     },
 
     getRelLabel(rel: any) {
+        if (rel.kinship === 'spouse') return '配偶';
+        if (rel.kinship === 'parent') return '父母';
+        if (rel.kinship === 'child') return '子女';
+        if (rel.kinship === 'sibling') return '手足';
+        
         let r = rel.romance || 0;
-        let isLover = rel.isLover;
-        if (isLover) return '恋人';
+        if (rel.isLover) return '恋人';
         if (r > 80) return '爱慕';
         if (r > 60) return '喜欢';
         if (r > 40) return '暧昧';
@@ -119,6 +123,72 @@ export const SocialLogic = {
         if (r > -60) return '嫌弃';
         return '厌恶';
     },
+    // [新增] 设定亲属关系
+    setKinship(sim: Sim, target: Sim, type: 'parent' | 'child' | 'sibling' | 'spouse') {
+        if (!sim.relationships[target.id]) sim.relationships[target.id] = { friendship: 50, romance: 0, isLover: false, isSpouse: false, hasRomance: false };
+        sim.relationships[target.id].kinship = type;
+        sim.relationships[target.id].friendship = 80; // 家人默认高好感
+        if (type === 'spouse') {
+            sim.relationships[target.id].isSpouse = true;
+            sim.relationships[target.id].isLover = true;
+            sim.relationships[target.id].romance = 80;
+        }
+    },
+
+    // [新增] 结婚逻辑
+    marry(sim: Sim, partner: Sim, silent = false) {
+        SocialLogic.setKinship(sim, partner, 'spouse');
+        SocialLogic.setKinship(partner, sim, 'spouse');
+        
+        sim.partnerId = partner.id;
+        partner.partnerId = sim.id;
+        
+        // 改姓 (简单逻辑：随机选一方姓氏或保留)
+        if (Math.random() > 0.5) {
+            sim.surname = partner.surname;
+            sim.name = partner.surname + sim.name.substring(1);
+        } else {
+            partner.surname = sim.surname;
+            partner.name = sim.surname + partner.name.substring(1);
+        }
+        
+        // 统一家庭ID
+        partner.familyId = sim.familyId;
+
+        if (!silent) {
+            sim.addBuff(BUFFS.married);
+            partner.addBuff(BUFFS.married);
+            GameStore.addLog(sim, `与 ${partner.name} 喜结连理！💒`, 'family');
+            sim.addMemory(`与 ${partner.name} 结婚了，这是我人生中最幸福的一天。`, 'family', partner.id);
+            partner.addMemory(`与 ${sim.name} 结婚了，我们将携手共度余生。`, 'family', sim.id);
+        }
+    },
+
+    // [新增] 离婚逻辑
+    divorce(sim: Sim, partner: Sim) {
+        sim.relationships[partner.id].kinship = 'none';
+        sim.relationships[partner.id].isSpouse = false;
+        sim.relationships[partner.id].isLover = false;
+        sim.relationships[partner.id].romance = -50;
+        
+        partner.relationships[sim.id].kinship = 'none';
+        partner.relationships[sim.id].isSpouse = false;
+        partner.relationships[sim.id].isLover = false;
+        partner.relationships[sim.id].romance = -50;
+
+        sim.partnerId = null;
+        partner.partnerId = null;
+        
+        // 分家
+        partner.familyId = partner.id; // 自立门户
+
+        sim.addBuff(BUFFS.divorced);
+        partner.addBuff(BUFFS.divorced);
+        
+        GameStore.addLog(sim, `与 ${partner.name} 离婚了，家庭破碎... 💔`, 'family');
+        sim.addMemory(`与 ${partner.name} 离婚了，一段关系走到了尽头。`, 'bad', partner.id);
+    },
+
 
     checkRelChange(sim: Sim, partner: Sim, oldLabel: string) {
         let newLabel = SocialLogic.getRelLabel(sim.relationships[partner.id] || {});
@@ -142,10 +212,10 @@ export const SocialLogic = {
     },
 
     updateRelationship(sim: Sim, target: Sim, type: string, delta: number) {
-        if (!sim.relationships[target.id]) sim.relationships[target.id] = { friendship: 0, romance: 0, isLover: false, hasRomance: false };
+        if (!sim.relationships[target.id]) sim.relationships[target.id] = { friendship: 0, romance: 0, isLover: false, isSpouse: false, hasRomance: false };
         let rel = sim.relationships[target.id];
         
-        // [修改] 属性修正系数
+        // 属性修正系数
         let modifier = 1.0;
         if (delta > 0) {
             modifier += (sim.eq - 50) * 0.01; // EQ 80 -> +30% 增益
@@ -153,12 +223,23 @@ export const SocialLogic = {
             // 高 EQ 的人更能化解矛盾，扣分更少
             modifier -= (sim.eq - 50) * 0.005; // EQ 80 -> 减少 15% 的扣分
         }
+
         
         if (type === 'romance' && delta > 0) {
             modifier += (sim.appearanceScore - 50) * 0.01;
         }
 
+        // 亲属之间友谊更稳固
+        if (rel.kinship && type === 'friendship' && delta < 0) modifier *= 0.5;
+
         const finalDelta = delta * modifier;
+
+        if (type === 'friendship') {
+            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta));
+        } else if (type === 'romance') {
+            rel.romance = Math.max(-100, Math.min(100, rel.romance + finalDelta));
+            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta * 0.3));
+        }
 
         if (type === 'friendship') {
             rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta));
@@ -167,9 +248,10 @@ export const SocialLogic = {
             // 浪漫互动通常也会轻微影响友谊
             rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta * 0.3));
         }
+
     },
 
-    // [重构] 更加细致的吃醋逻辑
+    //  更加细致的吃醋逻辑
     triggerJealousy(sim: Sim, actor: Sim, target: Sim) {
         // 1. 计算“容忍阈值” (Sensitivity)
         // 基础阈值，值越低越敏感
@@ -246,14 +328,16 @@ export const SocialLogic = {
     },
 
     performSocial(sim: Sim, partner: Sim) {
-        // [新增] 综合计算初始契合度
-        const mbtiComp = SocialLogic.getCompatibility(sim, partner);
+        // 综合计算初始契合度
+        // const mbtiComp = SocialLogic.getCompatibility(sim, partner);
         const goalComp = SocialLogic.getLifeGoalCompatibility(sim, partner); // 人生目标
         const charmDiff = sim.appearanceScore - partner.appearanceScore; // 颜值差距
+        const isIncest = sim.relationships[partner.id]?.kinship && sim.relationships[partner.id]?.kinship !== 'spouse' && sim.relationships[partner.id]?.kinship !== 'none';
+        if (isIncest) return; // 简单跳过
         
         // 基础好感检查
-        if (!sim.relationships[partner.id]) sim.relationships[partner.id] = { friendship: 0, romance: 0, isLover: false, hasRomance: false };
-        if (!partner.relationships[sim.id]) partner.relationships[sim.id] = { friendship: 0, romance: 0, isLover: false, hasRomance: false };
+        if (!sim.relationships[partner.id]) sim.relationships[partner.id] = { friendship: 0, romance: 0, isLover: false, isSpouse: false, hasRomance: false };
+        if (!partner.relationships[sim.id]) partner.relationships[sim.id] = { friendship: 0, romance: 0, isLover: false, isSpouse: false, hasRomance: false };
 
         let rel = sim.relationships[partner.id];
         let oldLabel = SocialLogic.getRelLabel(rel);
@@ -394,12 +478,60 @@ export const SocialLogic = {
                      sim.addMemory(`向 ${partner.name} 求婚被拒，可能太着急了。`, 'bad', partner.id);
                      sim.addBuff(BUFFS.rejected);
                  }
+            } else if (finalType.special === 'marriage') {
+                SocialLogic.marry(sim, partner);
+            }
+            else if (finalType.special === 'divorce') {
+                SocialLogic.divorce(sim, partner);
+            }
+            else if (finalType.special === 'try_baby') {
+                // 生育判定
+                const bothWant = sim.mood > 50 && partner.mood > 50 && sim.money > 500;
+                if (bothWant) {
+                    // 概率 = 体质 + 运气
+                    let prob = (sim.constitution + sim.luck + partner.constitution + partner.luck) / 400;
+                    if (Math.random() < prob) {
+                        // 谁怀孕？女性优先，或者随机
+                        const mother = sim.gender === 'F' ? sim : (partner.gender === 'F' ? partner : (Math.random() > 0.5 ? sim : partner));
+                        mother.isPregnant = true;
+                        mother.pregnancyTimer = 1440; // 24h
+                        mother.partnerForBabyId = (mother === sim) ? partner.id : sim.id;
+                        mother.addBuff(BUFFS.pregnant);
+                        
+                        GameStore.addLog(sim, `与 ${partner.name} 备孕成功！期待新生命的降临 👶`, 'family');
+                        sim.say("我要当爸爸/妈妈了！", 'love');
+                    } else {
+                        sim.say("好像没怀上...", 'normal');
+                    }
+                } else {
+                    sim.say("现在不是时候...", 'bad');
+                }
+            }
+            else if (finalType.special === 'woohoo') {
+                // 嘿咻逻辑
+                const isSafe = Math.random() > 0.3; // 30% 几率不做措施 (或者基于属性)
+                sim.say("WooHoo! 💕", 'love');
+                partner.say("💕", 'love');
+                sim.needs.fun = 100;
+                partner.needs.fun = 100;
+                
+                // 意外怀孕
+                if (!isSafe && Math.random() < 0.2) { // 20% 意外几率
+                     const mother = sim.gender === 'F' ? sim : (partner.gender === 'F' ? partner : null);
+                     if (mother && !mother.isPregnant) {
+                         mother.isPregnant = true;
+                         mother.pregnancyTimer = 1440;
+                         mother.partnerForBabyId = (mother === sim) ? partner.id : sim.id;
+                         mother.addBuff(BUFFS.pregnant);
+                         GameStore.addLog(mother, `意外怀孕了...`, 'family');
+                     }
+                }
             } else {
                 // 普通交互 (调情、拥抱等)
                 let val = finalType.val;
                 
                 // 加上所有属性修正
-                val += mbtiComp * 1.5;
+                // val += mbtiComp * 1.5;
                 val += goalComp * 0.5; // 人生目标加成
 
                 if (finalType.type === 'romance') {

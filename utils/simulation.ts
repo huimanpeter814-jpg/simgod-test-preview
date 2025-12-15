@@ -4,6 +4,7 @@ import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
 import { batchGenerateDiaries } from '../services/geminiService'; 
+import { SocialLogic } from './logic/social';
 
 export { Sim } from './Sim';
 export { drawAvatarHead, minutes, getJobCapacity } from './simulationHelpers';
@@ -12,7 +13,6 @@ export class GameStore {
     static sims: Sim[] = [];
     static particles: { x: number; y: number; life: number }[] = [];
     
-    // [修改] 时间结构：totalDays(总月数), year, month
     static time: GameTime = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
     
     static timeAccumulator: number = 0;
@@ -20,7 +20,6 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // 索引系统
     static furnitureIndex: Map<string, Furniture[]> = new Map();
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
     static pathFinder: PathFinder = new PathFinder(CONFIG.CANVAS_W, CONFIG.CANVAS_H, 20);
@@ -32,6 +31,12 @@ export class GameStore {
 
     static notify() {
         this.listeners.forEach(cb => cb());
+    }
+
+    static removeSim(id: string) {
+        this.sims = this.sims.filter(s => s.id !== id);
+        if (this.selectedSimId === id) this.selectedSimId = null;
+        this.notify();
     }
 
     static initIndex() {
@@ -78,12 +83,11 @@ export class GameStore {
     }
 
     static addLog(sim: Sim | null, text: string, type: any, isAI = false) {
-        // [修改] 日志时间格式
         const timeStr = `Y${this.time.year} M${this.time.month} | ${String(this.time.hour).padStart(2, '0')}:${String(this.time.minute).padStart(2, '0')}`;
         let category: 'sys' | 'chat' | 'rel' = 'chat';
-        if (type === 'sys' || type === 'money') category = 'sys';
+        if (type === 'sys' || type === 'money' || type === 'family') category = 'sys';
         else if (type === 'rel_event' || type === 'jealous') category = 'rel';
-        else if (type === 'love' && (text.includes('表白') || text.includes('分手'))) category = 'rel';
+        else if (type === 'love') category = 'rel';
 
         const entry: LogEntry = {
             id: Math.random(),
@@ -114,7 +118,7 @@ export class GameStore {
         });
 
         const saveData = {
-            version: 2.2, // Version bump
+            version: 2.3, // Bump version
             time: this.time,
             logs: this.logs,
             sims: safeSims
@@ -131,11 +135,9 @@ export class GameStore {
         try {
             const json = localStorage.getItem('pixel_life_save_v1');
             if (!json) return false;
-            
             const data = JSON.parse(json);
-
             // Version check or migration could go here
-            if (data.version < 2.2) {
+            if (!data.version || data.version < 2.3) {
                  console.warn("Save too old, resetting for new time system");
                  return false;
             }
@@ -144,41 +146,25 @@ export class GameStore {
             this.logs = data.logs || [];
             
             this.sims = data.sims.map((sData: any) => {
-                const sim = new Sim(sData.pos.x, sData.pos.y);
+                const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); // Re-hydrate with defaults
                 Object.assign(sim, sData);
                 
-                if (!sim.height || sim.height < 50) sim.height = 170;
-                if (!sim.weight || sim.weight < 20) sim.weight = 60;
-                if (sim.appearanceScore === undefined) sim.appearanceScore = 50;
-                if (sim.luck === undefined) sim.luck = 50;
-                if (sim.constitution === undefined) sim.constitution = 60;
-                if (sim.eq === undefined) sim.eq = 50;
-                if (sim.iq === undefined) sim.iq = 50;
-                if (sim.reputation === undefined) sim.reputation = 20;
-                if (sim.morality === undefined) sim.morality = 50;
-                if (sim.creativity === undefined) sim.creativity = 50;
-
-                sim.interactionTarget = null;
-                sim.target = null;
-                // @ts-ignore
-                sim.path = [];
+                // 确保新字段存在
+                if (!sim.childrenIds) sim.childrenIds = [];
+                if (!sim.health) sim.health = 100;
+                if (!sim.ageStage) sim.ageStage = 'Adult';
                 
-                if (sim.action !== 'sleeping') {
-                    sim.action = 'idle';
-                }
+                // 恢复引用
+                if (sim.interactionTarget) sim.interactionTarget = null;
                 
+                // 恢复职业对象引用
                 const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
                 if (currentJobDefinition) {
                     sim.job = { ...currentJobDefinition };
-                } else {
-                    sim.job = JOBS.find(j => j.id === 'unemployed')!;
                 }
-
-                if (sim.dailyIncome === undefined) sim.dailyIncome = 0;
 
                 return sim;
             });
-            
             this.notify();
             return true;
         } catch (e) {
@@ -195,15 +181,99 @@ export class GameStore {
     }
 }
 
+// 按照家庭生成初始人口
+function generateFamily(count: number) {
+    const familyId = Math.random().toString(36).substring(2, 8);
+    const baseX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
+    const baseY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
+    
+    // 随机姓氏 (家庭共享)
+    const surnames = ['李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
+    '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗',
+    '梁', '宋', '郑', '谢', '韩', '唐', '冯', '于', '董', '萧',
+    '程', '曹', '袁', '邓', '许', '傅', '沈', '曾', '彭', '吕',
+    '苏', '卢', '蒋', '蔡', '贾', '丁', '魏', '薛', '叶', '阎',
+    '欧阳', '上官', '慕容', '司徒', '皇甫'];
+    const familySurname = surnames[Math.floor(Math.random() * surnames.length)];
+
+    const members: Sim[] = [];
+
+    // 1. 生成家长 (1-2人)
+    const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
+    // 同性家庭概率
+    const isSameSex = parentCount === 2 && Math.random() < 0.1; 
+    
+    // [修复] 显式声明类型为 'M' | 'F'，解决 string 类型赋值报错
+    const p1Gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
+    let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
+    if (isSameSex) p2Gender = p1Gender;
+
+    const parent1 = new Sim({ x: baseX, y: baseY, surname: familySurname, familyId, ageStage: 'Adult', gender: p1Gender });
+    members.push(parent1);
+
+    if (parentCount === 2) {
+        const parent2 = new Sim({ x: baseX + 30, y: baseY, surname: familySurname, familyId, ageStage: 'Adult', gender: p2Gender });
+        members.push(parent2);
+        
+        // 设置夫妻关系
+        SocialLogic.marry(parent1, parent2, true); // true = 初始化跳过日志
+    }
+
+    // 2. 生成孩子 (剩余名额)
+    const childCount = count - parentCount;
+    for (let i = 0; i < childCount; i++) {
+        // 随机孩子年龄段
+        const r = Math.random();
+        // 这里不需要显式类型，Sim 构造函数会处理字符串
+        const ageStage = r > 0.6 ? 'Child' : (r > 0.3 ? 'Teen' : 'Toddler');
+        
+        const child = new Sim({ 
+            x: baseX + (i+1)*20, 
+            y: baseY + 20, 
+            surname: familySurname, 
+            familyId, 
+            ageStage,
+            // 确保 fatherId/motherId 是 string | undefined
+            fatherId: p1Gender === 'M' ? parent1.id : (parentCount === 2 && p2Gender === 'M' ? members[1].id : undefined),
+            motherId: p1Gender === 'F' ? parent1.id : (parentCount === 2 && p2Gender === 'F' ? members[1].id : undefined)
+        });
+        
+        // 绑定亲属关系
+        // [修复] 这里的 members 已经是 Sim[] 类型，TS 可以正确推断 p.ageStage
+        members.forEach(p => {
+            if (p.ageStage === 'Adult') {
+                SocialLogic.setKinship(p, child, 'child');
+                SocialLogic.setKinship(child, p, 'parent');
+                p.childrenIds.push(child.id);
+            } else if (p.ageStage !== 'Adult') {
+                // 兄弟姐妹
+                SocialLogic.setKinship(p, child, 'sibling');
+                SocialLogic.setKinship(child, p, 'sibling');
+            }
+        });
+        
+        members.push(child);
+    }
+
+    return members;
+}
+
 export function initGame() {
     GameStore.initIndex();
 
     if (GameStore.loadGame()) {
-        GameStore.addLog(null, "存档读取成功 (时间系统已更新)", "sys");
+        GameStore.addLog(null, "存档读取成功", "sys");
     } else {
-        GameStore.sims.push(new Sim(120, 120));
-        GameStore.sims.push(new Sim(150, 150));
-        GameStore.addLog(null, "新世界已生成。", "sys");
+        // 生成 3-5 个家庭
+        const familyCount = 3 + Math.floor(Math.random() * 3);
+        
+        for (let i = 0; i < familyCount; i++) {
+            const size = 1 + Math.floor(Math.random() * 4); // 1-4人家庭
+            const fam = generateFamily(size);
+            GameStore.sims.push(...fam);
+        }
+        
+        GameStore.addLog(null, `新世界已生成。共 ${familyCount} 个家庭，${GameStore.sims.length} 位市民。`, "sys");
     }
     GameStore.notify();
 }
@@ -217,7 +287,7 @@ export function updateTime() {
         GameStore.timeAccumulator = 0;
         GameStore.time.minute++;
 
-        GameStore.sims.forEach(s => s.update(0, true));
+        GameStore.sims.forEach(s => s.update(1, true));
 
         if (GameStore.time.minute >= 60) {
             GameStore.time.minute = 0;
