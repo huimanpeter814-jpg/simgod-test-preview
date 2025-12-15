@@ -23,10 +23,8 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // [Refactor] 存储烘焙后的世界数据
     static rooms: RoomDef[] = [];
     static furniture: Furniture[] = [];
-    // [新增] 住房单元注册表 (带绝对坐标)
     static housingUnits: (HousingUnit & { x: number, y: number })[] = [];
 
     static furnitureIndex: Map<string, Furniture[]> = new Map();
@@ -48,7 +46,7 @@ export class GameStore {
         this.notify();
     }
 
-    // [New] 重建世界：将地皮数据转化为绝对坐标数据
+    // 重建世界：将地皮数据转化为绝对坐标数据
     static rebuildWorld() {
         this.rooms = [];
         this.furniture = [];
@@ -68,38 +66,63 @@ export class GameStore {
                 return;
             }
 
+            // 临时存储该地皮的 HousingUnits 绝对坐标，供后续家具查找归属
+            const plotUnits: (HousingUnit & { x: number, y: number, maxX: number, maxY: number })[] = [];
+
+            if (template.housingUnits) {
+                template.housingUnits.forEach(u => {
+                    const unitAbs = {
+                        ...u,
+                        id: `${plot.id}_${u.id}`,
+                        x: u.area.x + plot.x,
+                        y: u.area.y + plot.y,
+                        maxX: u.area.x + plot.x + u.area.w,
+                        maxY: u.area.y + plot.y + u.area.h
+                    };
+                    this.housingUnits.push(unitAbs);
+                    plotUnits.push(unitAbs);
+                });
+            }
+
             // 转换房间坐标
             template.rooms.forEach(r => {
+                const absX = r.x + plot.x;
+                const absY = r.y + plot.y;
+                
+                // 检查房间是否属于某个 HousingUnit
+                const ownerUnit = plotUnits.find(u => 
+                    absX >= u.x && absX < u.maxX && 
+                    absY >= u.y && absY < u.maxY
+                );
+
                 this.rooms.push({
                     ...r,
-                    id: `${plot.id}_${r.id}`, // 确保ID唯一
-                    x: r.x + plot.x,
-                    y: r.y + plot.y
+                    id: `${plot.id}_${r.id}`,
+                    x: absX,
+                    y: absY,
+                    homeId: ownerUnit ? ownerUnit.id : undefined // 标记归属
                 });
             });
 
             // 转换家具坐标
             template.furniture.forEach(f => {
+                const absX = f.x + plot.x;
+                const absY = f.y + plot.y;
+
+                // 检查家具是否属于某个 HousingUnit
+                const ownerUnit = plotUnits.find(u => 
+                    absX >= u.x && absX < u.maxX && 
+                    absY >= u.y && absY < u.maxY
+                );
+
                 this.furniture.push({
                     ...f,
                     id: `${plot.id}_${f.id}`,
-                    x: f.x + plot.x,
-                    y: f.y + plot.y
+                    x: absX,
+                    y: absY,
+                    homeId: ownerUnit ? ownerUnit.id : undefined // 标记归属
                 });
             });
-
-            // [新增] 转换住房单元坐标
-            if (template.housingUnits) {
-                template.housingUnits.forEach(u => {
-                    this.housingUnits.push({
-                        ...u,
-                        id: `${plot.id}_${u.id}`,
-                        x: u.area.x + plot.x,
-                        y: u.area.y + plot.y,
-                        // 保留原始宽高
-                    });
-                });
-            }
         });
 
         console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}, Homes: ${this.housingUnits.length}`);
@@ -115,7 +138,6 @@ export class GameStore {
 
         const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole'];
 
-        // 使用生成好的 this.furniture
         this.furniture.forEach(f => {
             if (!this.furnitureIndex.has(f.utility)) {
                 this.furnitureIndex.set(f.utility, []);
@@ -188,7 +210,7 @@ export class GameStore {
         });
 
         const saveData = {
-            version: 2.3, // Bump version
+            version: 2.4, // Bump version
             time: this.time,
             logs: this.logs,
             sims: safeSims
@@ -206,8 +228,7 @@ export class GameStore {
             const json = localStorage.getItem('pixel_life_save_v1');
             if (!json) return false;
             const data = JSON.parse(json);
-            // Version check or migration could go here
-            if (!data.version || data.version < 2.3) {
+            if (!data.version || data.version < 2.4) {
                  console.warn("Save too old, resetting for new time system");
                  return false;
             }
@@ -216,18 +237,14 @@ export class GameStore {
             this.logs = data.logs || [];
             
             this.sims = data.sims.map((sData: any) => {
-                const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); // Re-hydrate with defaults
+                const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); 
                 Object.assign(sim, sData);
-                
-                // 确保新字段存在
                 if (!sim.childrenIds) sim.childrenIds = [];
                 if (!sim.health) sim.health = 100;
                 if (!sim.ageStage) sim.ageStage = 'Adult';
                 
-                // 恢复引用
                 if (sim.interactionTarget) sim.interactionTarget = null;
                 
-                // 恢复职业对象引用
                 const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
                 if (currentJobDefinition) {
                     sim.job = { ...currentJobDefinition };
@@ -250,9 +267,8 @@ export class GameStore {
         }
     }
 
-    // 暴露静态方法供 UI 调用
     static spawnFamily() {
-        const size = 1 + Math.floor(Math.random() * 4); // 1-4人家庭
+        const size = 1 + Math.floor(Math.random() * 4); 
         const fam = generateFamily(size);
         this.sims.push(...fam);
         this.addLog(null, `新家庭搬入城市！共 ${fam.length} 人。`, "sys");
@@ -264,24 +280,54 @@ export class GameStore {
 function generateFamily(count: number) {
     const familyId = Math.random().toString(36).substring(2, 8);
     
-    // [新增] 寻找空闲的住房
+    // [新逻辑] 1. 随机决定家庭阶级 (贫富差距大)
+    const r = Math.random();
+    let wealthClass: 'poor' | 'middle' | 'rich';
+    let baseMoney = 0;
+
+    if (r < 0.2) {
+        wealthClass = 'rich';
+        baseMoney = 10000 + Math.floor(Math.random() * 20000); // 1万 - 3万
+    } else if (r < 0.6) {
+        wealthClass = 'middle';
+        baseMoney = 2000 + Math.floor(Math.random() * 3000); // 2千 - 5千
+    } else {
+        wealthClass = 'poor';
+        baseMoney = 50 + Math.floor(Math.random() * 450); // 50 - 500
+    }
+
+    // [新逻辑] 2. 根据阶级分配住房
+    // 筛选未满员的住房
+    let targetHomeTypes: string[] = [];
+    if (wealthClass === 'rich') targetHomeTypes = ['villa', 'apartment']; // 富人首选别墅，其次公寓
+    else if (wealthClass === 'middle') targetHomeTypes = ['apartment', 'public_housing']; // 中产首选公寓
+    else targetHomeTypes = ['public_housing']; // 穷人住公租房/宿舍
+
+    const availableHomes = GameStore.housingUnits.filter(unit => {
+        const occupants = GameStore.sims.filter(s => s.homeId === unit.id).length;
+        // 匹配类型 且 容量足够
+        return targetHomeTypes.includes(unit.type) && (occupants + count <= unit.capacity);
+    });
+
+    // 排序：优先匹配首选类型 (数组顺序)
+    availableHomes.sort((a, b) => {
+        const idxA = targetHomeTypes.indexOf(a.type);
+        const idxB = targetHomeTypes.indexOf(b.type);
+        return idxA - idxB;
+    });
+
     let homeId: string | null = null;
     let homeX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
     let homeY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
-
-    // 筛选未满员的住房
-    const availableHomes = GameStore.housingUnits.filter(unit => {
-        const occupants = GameStore.sims.filter(s => s.homeId === unit.id).length;
-        return occupants + count <= unit.capacity;
-    });
-
     let homeTypeStr = "露宿街头";
 
     if (availableHomes.length > 0) {
-        // 随机选一个（或者根据家庭经济状况选，这里简化为随机）
-        const home = availableHomes[Math.floor(Math.random() * availableHomes.length)];
+        // 优先选最好的
+        const bestType = availableHomes[0].type;
+        const bestHomes = availableHomes.filter(h => h.type === bestType);
+        const home = bestHomes[Math.floor(Math.random() * bestHomes.length)];
+        
         homeId = home.id;
-        // 出生点设在家附近
         homeX = home.x + home.area.w / 2;
         homeY = home.y + home.area.h / 2;
         homeTypeStr = home.name;
@@ -301,13 +347,21 @@ function generateFamily(count: number) {
     if (isSameSex) p2Gender = p1Gender;
 
     const p1Surname = getSurname();
-    const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId });
+    const parent1 = new Sim({ 
+        x: homeX, y: homeY, 
+        surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId,
+        money: baseMoney // 初始资金由家庭共享(这里赋予户主)
+    });
     members.push(parent1);
 
     let parent2: Sim | null = null;
     if (parentCount === 2) {
         const p2Surname = getSurname(); 
-        parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId });
+        parent2 = new Sim({ 
+            x: homeX + 10, y: homeY + 10, 
+            surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId,
+            money: 0 // 配偶初始没钱 (或者可以给点私房钱)
+        });
         members.push(parent2);
         
         SocialLogic.marry(parent1, parent2, true); 
@@ -330,7 +384,8 @@ function generateFamily(count: number) {
             ageStage,
             homeId, // 孩子跟随家庭住址
             fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
-            motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined)
+            motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined),
+            money: 0
         });
         
         members.forEach(p => {
@@ -347,7 +402,7 @@ function generateFamily(count: number) {
         members.push(child);
     }
 
-    console.log(`Spawned family at ${homeTypeStr} (${homeId})`);
+    console.log(`Spawned family [${wealthClass}] at ${homeTypeStr} (${homeId}). Money: ${baseMoney}`);
     return members;
 }
 
@@ -362,7 +417,7 @@ export function initGame() {
     if (GameStore.loadGame()) {
         GameStore.addLog(null, "存档读取成功", "sys");
     } else {
-        const familyCount = 3 + Math.floor(Math.random() * 3);
+        const familyCount = 4 + Math.floor(Math.random() * 3);
         
         for (let i = 0; i < familyCount; i++) {
             const size = 1 + Math.floor(Math.random() * 4); 
@@ -419,7 +474,6 @@ export function updateTime() {
                 GameStore.sims.forEach(s => {
                     s.dailyExpense = 0;
                     s.dailyIncome = 0; 
-                    // [新增] 支付房租逻辑 (Sim.ts 中处理)
                     s.payRent(); 
                     
                     s.calculateDailyBudget(); 

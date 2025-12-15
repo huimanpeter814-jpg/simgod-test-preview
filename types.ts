@@ -34,27 +34,30 @@ export interface Furniture {
   fill?: boolean;
   borderWidth?: number;
   borderColor?: string;
+  
+  // [新增] 归属权字段，用于标记家具属于哪个家
+  homeId?: string; 
 }
 
 // [新增] 住房单元定义
 export interface HousingUnit {
-    id: string;       // 单元ID (e.g. "apt_b_101")
-    name: string;     // 显示名称
-    capacity: number; // 容量
-    cost: number;     // 房租/房贷
-    type: 'public_housing' | 'apartment' | 'villa'; // 住房类型
-    area: { x: number, y: number, w: number, h: number }; // 相对地皮的坐标范围
+    id: string;       
+    name: string;     
+    capacity: number; 
+    cost: number;     
+    type: 'public_housing' | 'apartment' | 'villa'; 
+    area: { x: number, y: number, w: number, h: number }; 
 }
 
-// [修改] 地皮模板定义
+// 地皮模板定义
 export interface PlotTemplate {
     id: string;
     width: number;
     height: number;
-    type: 'residential' | 'commercial' | 'public' | 'work'; // [新增] 地皮属性
+    type: 'residential' | 'commercial' | 'public' | 'work';
     rooms: any[]; 
     furniture: Furniture[];
-    housingUnits?: HousingUnit[]; // [新增] 该地皮包含的住房单元
+    housingUnits?: HousingUnit[];
 }
 
 export interface WorldPlot {
@@ -74,6 +77,8 @@ export interface RoomDef {
     color: string;
     pixelPattern?: string;
     imagePath?: string;
+    // [新增]
+    homeId?: string;
 }
 
 export interface Needs {
@@ -153,7 +158,7 @@ export type AgeStage = 'Infant' | 'Toddler' | 'Child' | 'Teen' | 'Adult' | 'Midd
 export interface SimData {
   id: string;
   familyId: string; 
-  homeId: string | null; // [新增] 家庭住址 ID
+  homeId: string | null;
   name: string;
   surname: string; 
   pos: Vector2;

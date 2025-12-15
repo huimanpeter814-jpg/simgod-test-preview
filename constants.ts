@@ -19,8 +19,8 @@ export const ASSET_CONFIG = {
 };
 
 export const CONFIG = {
-    CANVAS_W: 3000,
-    CANVAS_H: 1800,
+    CANVAS_W: 3500,
+    CANVAS_H: 2500,
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],
         hair: ['#2b2b2b', '#4a3b32', '#8c6b5d', '#d9c2a3', '#a83f3f', '#3e5f8a'], 
