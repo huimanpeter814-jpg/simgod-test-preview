@@ -150,14 +150,28 @@ export const SchoolLogic = {
         if (!['Child', 'Teen'].includes(sim.ageStage)) return;
 
         const config = sim.ageStage === 'Child' ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
-        
-        // 假期/周末检查
         const currentMonth = GameStore.time.month;
-        if (HOLIDAYS[currentMonth]?.type === 'break') return; // 寒暑假
-        
-        // 简单模拟周末 (每7天里的后2天)
-        const dayOfWeek = GameStore.time.totalDays % 7;
-        if (dayOfWeek >= 6) return; // 周末
+
+       // 1. 寒暑假判定
+        // 设定：1月、2月为寒假；7月、8月为暑假
+        const isWinterBreak = [1, 2].includes(currentMonth);
+        const isSummerBreak = [7, 8].includes(currentMonth);
+
+        if (isWinterBreak) {
+            // (可选) 偶尔触发一句放假感言，避免每一帧都说
+            if (Math.random() < 0.001) sim.say("寒假快乐！❄️", 'act');
+            return;
+        }
+        if (isSummerBreak) {
+            if (Math.random() < 0.001) sim.say("暑假万岁！🍉", 'act');
+            return;
+        }
+
+        // 2. 特殊节假日判定 (读取 constants.ts 配置)
+        // 例如：10月黄金周
+        if (HOLIDAYS[currentMonth]?.type === 'break') {
+            return;
+        }
 
         const hour = GameStore.time.hour + GameStore.time.minute/60;
 
@@ -168,16 +182,65 @@ export const SchoolLogic = {
             if (sim.hasLeftWorkToday) return; // 借用这个flag表示今天已经放学或逃学
 
             // 判定是否逃学 (基于性格和心情)
-            let skipChance = 0.05;
-            if (sim.mbti.includes('P')) skipChance += 0.1;
-            if (sim.mood < 30) skipChance += 0.2;
-            if (sim.ageStage === 'Teen') skipChance += 0.1; // 叛逆期
+            // 1. 基础概率 (极低，好学生默认不去想逃课)
+            let skipProb = 0.01; 
 
-            if (Math.random() < skipChance) {
+            // 2. 性格维度 (MBTI)
+            // Perceiving (P) 随性，增加逃课率；Judging (J) 自律，降低逃课率
+            if (sim.mbti.includes('P')) skipProb += 0.02; 
+            if (sim.mbti.includes('J')) skipProb -= 0.02; 
+
+            // 3. 内在属性 (道德与智商)
+            // 道德感是心中的准绳，影响最大
+            if (sim.morality < 30) skipProb += 0.05;      // 坏孩子: +10%
+            else if (sim.morality > 70) skipProb -= 0.1; // 乖孩子: -5%
+            
+            // 智商高的人通常更理智 (或者更擅长请假，这里简化为不逃课)
+            if (sim.iq > 80) skipProb -= 0.02;
+
+            // 4. 学业表现 (厌学 vs 进取)
+            // 成绩太差会产生厌学心理
+            const grades = sim.schoolPerformance || 60;
+            if (grades < 40) skipProb += 0.05;            // 成绩差破罐破摔: +8%
+            else if (grades > 85) skipProb -= 0.05;       // 优等生保持全勤: -5%
+
+            // 5. 年龄阶段
+            // 青少年更容易叛逆
+            if (sim.ageStage === 'Teen') skipProb += 0.02;
+
+            // 6. 当前状态 (短期诱因 - 决定性因素)
+            // 极度无聊是逃课的最大动力
+            if (sim.needs.fun < 30) skipProb += 0.15;     // 憋坏了: +15%
+            // 精力不足或心情极差
+            if (sim.needs.energy < 20) skipProb += 0.10;  // 起不来床: +10%
+            if (sim.mood < 30) skipProb += 0.03;          // 心情抑郁: +10%
+
+            // 7. 概率边界修正
+            // 即使条件再好，也不会低于 0；即使条件再差，也给予 80% 封顶 (总有不敢的时候)
+            skipProb = Math.max(0, Math.min(0.8, skipProb));
+
+            if (Math.random() < skipProb) {
                 sim.hasLeftWorkToday = true;
-                sim.say("今天不想上学...", 'bad');
-                GameStore.addLog(sim, "决定逃学去玩！", 'bad');
-                DecisionLogic.findObject(sim, 'fun');
+                
+                // 根据主要诱因生成更具体的对话
+                if (sim.needs.fun < 30) {
+                    sim.say("学校太无聊了，去玩吧！🎮", 'bad');
+                    GameStore.addLog(sim, "因忍受不了枯燥，决定逃学去玩！", 'bad');
+                    DecisionLogic.findObject(sim, 'fun'); // 明确去找乐子
+                } else if (sim.needs.energy < 20) {
+                    sim.say("太困了...再睡会 💤", 'bad');
+                    GameStore.addLog(sim, "因精力不足，决定在宿舍补觉逃课。", 'bad');
+                    // 留在原地或回家睡觉
+                    if (sim.homeId) DecisionLogic.findObject(sim, 'energy');
+                } else if (sim.morality < 30) {
+                    sim.say("切，谁稀罕上学...", 'bad');
+                    GameStore.addLog(sim, "作为不良少年，逃课是家常便饭。", 'bad');
+                    DecisionLogic.wander(sim); // 到处闲逛
+                } else {
+                    sim.say("今天不想上学...", 'bad');
+                    GameStore.addLog(sim, "心情不好，决定翘课。", 'bad');
+                    DecisionLogic.wander(sim);
+                }
                 return;
             }
 
