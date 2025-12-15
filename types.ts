@@ -12,8 +12,8 @@ export interface Furniture {
   color: string;
   label: string;
   utility: string;
-  dir?: string;        // [修改] 改为可选属性 (?)
-  multiUser?: boolean; // [修改] 改为可选属性 (?)
+  dir?: string;
+  multiUser?: boolean;
   gender?: string;
   reserved?: string;
   cost?: number;
@@ -36,21 +36,32 @@ export interface Furniture {
   borderColor?: string;
 }
 
-// [新增] 地皮模板定义
+// [新增] 住房单元定义
+export interface HousingUnit {
+    id: string;       // 单元ID (e.g. "apt_b_101")
+    name: string;     // 显示名称
+    capacity: number; // 容量
+    cost: number;     // 房租/房贷
+    type: 'public_housing' | 'apartment' | 'villa'; // 住房类型
+    area: { x: number, y: number, w: number, h: number }; // 相对地皮的坐标范围
+}
+
+// [修改] 地皮模板定义
 export interface PlotTemplate {
     id: string;
     width: number;
     height: number;
-    rooms: any[]; // 相对坐标的房间定义
-    furniture: Furniture[]; // 相对坐标的家具定义
+    type: 'residential' | 'commercial' | 'public' | 'work'; // [新增] 地皮属性
+    rooms: any[]; 
+    furniture: Furniture[];
+    housingUnits?: HousingUnit[]; // [新增] 该地皮包含的住房单元
 }
 
-// [新增] 世界地皮实例定义
 export interface WorldPlot {
-    id: string;       // 实例ID (例如: "cbd_north")
-    templateId: string; // 使用哪个模板 (例如: "tech_hub")
-    x: number;        // 世界绝对坐标 X
-    y: number;        // 世界绝对坐标 Y
+    id: string;
+    templateId: string;
+    x: number;
+    y: number;
 }
 
 export interface RoomDef {
@@ -142,6 +153,7 @@ export type AgeStage = 'Infant' | 'Toddler' | 'Child' | 'Teen' | 'Adult' | 'Midd
 export interface SimData {
   id: string;
   familyId: string; 
+  homeId: string | null; // [新增] 家庭住址 ID
   name: string;
   surname: string; 
   pos: Vector2;

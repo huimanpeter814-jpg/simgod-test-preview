@@ -18,11 +18,13 @@ interface SimInitConfig {
     fatherId?: string;
     motherId?: string;
     orientation?: string;
+    homeId?: string | null; // [新增]
 }
 
 export class Sim {
     id: string;
     familyId: string;
+    homeId: string | null = null; // [新增]
     pos: Vector2;
     prevPos: Vector2; 
     target: Vector2 | null = null;
@@ -80,7 +82,7 @@ export class Sim {
     money: number;
     dailyBudget: number;
     workPerformance: number;
-    job: Job; // 初始化问题修复
+    job: Job; 
     dailyExpense: number;
     dailyIncome: number; 
     isSideHustle: boolean = false;
@@ -102,11 +104,12 @@ export class Sim {
     commuteTimer: number = 0;
 
     constructor(config: SimInitConfig = {}) {
-        // [修复] 立即初始化 job，满足 TypeScript 严格属性初始化检查
         this.job = JOBS.find(j => j.id === 'unemployed')!;
 
         this.id = Math.random().toString(36).substring(2, 11);
-        this.familyId = config.familyId || this.id; // 默认自己一个家
+        this.familyId = config.familyId || this.id;
+        this.homeId = config.homeId || null; // [新增]
+
         this.pos = {
             x: config.x ?? (50 + Math.random() * (CONFIG.CANVAS_W - 100)),
             y: config.y ?? (50 + Math.random() * (CONFIG.CANVAS_H - 100))
@@ -122,19 +125,19 @@ export class Sim {
         const stageConfig = AGE_CONFIG[this.ageStage];
         this.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
 
-        // 根据年龄段生成身高体重
+        // 根据年龄段生成身高体重 (省略重复代码)
         if (this.ageStage === 'Infant') {
-            this.height = 50 + Math.random() * 25; // 50-75cm
-            this.weight = 3 + Math.random() * 7;   // 3-10kg
+            this.height = 50 + Math.random() * 25; 
+            this.weight = 3 + Math.random() * 7;   
         } else if (this.ageStage === 'Toddler') {
-            this.height = 80 + Math.random() * 20; // 80-100cm
-            this.weight = 10 + Math.random() * 6;  // 10-16kg
+            this.height = 80 + Math.random() * 20; 
+            this.weight = 10 + Math.random() * 6;  
         } else if (this.ageStage === 'Child') {
-            this.height = 110 + Math.random() * 30; // 110-140cm
-            this.weight = 20 + Math.random() * 15;  // 20-35kg
+            this.height = 110 + Math.random() * 30;
+            this.weight = 20 + Math.random() * 15; 
         } else if (this.ageStage === 'Teen') {
-            this.height = 150 + Math.random() * 25; // 150-175cm
-            this.weight = 40 + Math.random() * 25;  // 40-65kg
+            this.height = 150 + Math.random() * 25; 
+            this.weight = 40 + Math.random() * 25;  
         } else {
             const baseHeight = this.gender === 'M' ? 175 : 163;
             this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
@@ -142,22 +145,17 @@ export class Sim {
             this.weight = Math.floor((this.height / 100) * (this.height / 100) * bmi);
         }
         
-        // 保留两位小数
         this.height = Math.floor(this.height);
         this.weight = Math.floor(this.weight);
         
         const rand = (Math.random() + Math.random() + Math.random()) / 3;
         this.appearanceScore = Math.floor(rand * 100);
         this.luck = Math.floor(Math.random() * 100);
-        
         const constRand = (Math.random() + Math.random()) / 2;
         this.constitution = Math.floor(constRand * 100);
-        
         this.eq = Math.floor(Math.random() * 100);
-
         const iqRand = (Math.random() + Math.random() + Math.random()) / 3;
         this.iq = Math.floor(iqRand * 100);
-
         this.reputation = Math.floor(Math.random() * 40); 
         this.morality = Math.floor(Math.random() * 100);
         this.creativity = Math.floor(Math.random() * 100);
@@ -179,11 +177,10 @@ export class Sim {
         this.mbti = MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
         this.zodiac = ZODIACS[Math.floor(Math.random() * ZODIACS.length)];
         
-        this.health = 90 + Math.random() * 10; // 初始健康
+        this.health = 90 + Math.random() * 10; 
 
         this.lifeGoal = LIFE_GOALS[Math.floor(Math.random() * LIFE_GOALS.length)];
 
-        // 家庭关系ID
         this.partnerId = config.partnerId || null;
         this.fatherId = config.fatherId || null;
         this.motherId = config.motherId || null;
@@ -203,9 +200,7 @@ export class Sim {
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
-        // 初始金钱
         this.money = 1000 + Math.floor(Math.random() * 2000);
-        // 青少年及以下没有财务能力
         if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
             this.money = 0; 
         }
@@ -218,11 +213,9 @@ export class Sim {
 
         this.applyTraits();
 
-        // 职业分配：只有成年人有工作
         if (['Adult', 'MiddleAged'].includes(this.ageStage)) {
             this.assignJob();
         } else {
-            // 已在顶部初始化，此处再次确认以防万一
             this.job = JOBS.find(j => j.id === 'unemployed')!;
         }
         
@@ -244,6 +237,51 @@ export class Sim {
         CareerLogic.assignJob(this);
     }
 
+    // [新增] 支付房租/房贷
+    payRent() {
+        if (!this.homeId) return; // 没房不交钱
+        // 只有成年人交钱 (如果家里有多个成年人，每个人都交一份，简化逻辑，或者可以设为户主交)
+        // 这里简化为：所有有收入的住户平摊房租
+        if (this.ageStage === 'Infant' || this.ageStage === 'Toddler' || this.ageStage === 'Child') return;
+
+        const home = GameStore.housingUnits.find(u => u.id === this.homeId);
+        if (!home) return;
+
+        // 查找同住的成年人
+        const adultRoommates = GameStore.sims.filter(s => s.homeId === this.homeId && !['Infant', 'Toddler', 'Child'].includes(s.ageStage));
+        const share = Math.ceil(home.cost / (adultRoommates.length || 1));
+
+        if (this.money >= share) {
+            this.money -= share;
+            this.dailyExpense += share;
+            // 记录日志 (稍微降低频率，或者每月第一天记录)
+            // GameStore.addLog(this, `支付了房租/房贷 -$${share}`, 'money');
+        } else {
+            this.addBuff(BUFFS.broke);
+            this.say("房租要交不起了...", 'bad');
+        }
+    }
+
+    // [新增] 获取家的坐标中心
+    getHomeLocation(): Vector2 | null {
+        if (!this.homeId) return null;
+        const home = GameStore.housingUnits.find(u => u.id === this.homeId);
+        if (!home) return null;
+        return { x: home.x + home.area.w / 2, y: home.y + home.area.h / 2 };
+    }
+
+    // [新增] 检查是否在家范围内
+    isAtHome(): boolean {
+        if (!this.homeId) return false;
+        const home = GameStore.housingUnits.find(u => u.id === this.homeId);
+        if (!home) return false;
+        return (
+            this.pos.x >= home.x && this.pos.x <= home.x + home.area.w &&
+            this.pos.y >= home.y && this.pos.y <= home.y + home.area.h
+        );
+    }
+
+    // ... (AddMemory, ApplyTraits, etc. - keep existing)
     addMemory(text: string, type: Memory['type'], relatedSimId?: string) {
         const timeStr = `Y${GameStore.time.year} M${GameStore.time.month} | ${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
         const newMemory: Memory = {
@@ -289,26 +327,22 @@ export class Sim {
     }
 
     applyMonthlyEffects(month: number, holiday?: { name: string, type: string }) {
-        // [新增] 衰老逻辑：每月增长 0.1 岁
         this.age += 0.1;
         this.checkAgeStage();
 
         if (!holiday) return;
 
-        // 1. 春节 (Traditional)
         if (holiday.type === 'traditional') {
             if (this.mbti.includes('E') || Object.keys(this.relationships).length > 5) {
                 this.addBuff(BUFFS.festive_joy);
                 this.say("过年啦！热闹热闹！🧨", 'act');
             } else if (this.mbti.includes('I')) {
-                this.addBuff(BUFFS.social_pressure); // I人社恐
+                this.addBuff(BUFFS.social_pressure); 
                 this.say("亲戚好多...我想静静...", 'bad');
             } else {
                 this.addBuff(BUFFS.vacation_chill);
             }
         }
-        
-        // 2. 恋爱季 (Love)
         else if (holiday.type === 'love') {
             const hasLover = Object.values(this.relationships).some((r: Relationship) => r.isLover);
             if (hasLover) {
@@ -319,26 +353,21 @@ export class Sim {
                     this.addBuff(BUFFS.lonely);
                     this.say("又是一个人过节...", 'bad');
                 } else {
-                    this.addBuff(BUFFS.playful); // 单身贵族
+                    this.addBuff(BUFFS.playful); 
                     this.say("单身万岁！🍺", 'act');
                 }
             }
         }
-
-        // 3. 购物节 (Shopping)
         else if (holiday.type === 'shopping') {
             this.addBuff(BUFFS.shopping_spree);
             if (this.money > 2000) {
                 this.say("买买买！清空购物车！🛒", 'money');
-                // 提高预算
                 this.dailyBudget += 500;
             } else {
                 this.addBuff(BUFFS.broke);
                 this.say("想买但没钱... 💸", 'bad');
             }
         }
-
-        // 4. 黄金周/假期 (Break)
         else if (holiday.type === 'break') {
             this.addBuff(BUFFS.vacation_chill);
             this.say("终于放长假了！🌴", 'act');
@@ -349,7 +378,6 @@ export class Sim {
     checkAgeStage() {
         const currentStageConf = AGE_CONFIG[this.ageStage];
         if (this.age > currentStageConf.max) {
-            // 晋升下一阶段
             const stages: AgeStage[] = ['Infant', 'Toddler', 'Child', 'Teen', 'Adult', 'MiddleAged', 'Elder'];
             const idx = stages.indexOf(this.ageStage);
             if (idx < stages.length - 1) {
@@ -357,13 +385,11 @@ export class Sim {
                 this.say(`我长大了！变成 ${AGE_CONFIG[this.ageStage].label} 了`, 'sys');
                 this.addMemory(`在这个月，我成长为了 ${AGE_CONFIG[this.ageStage].label}。`, 'life');
                 
-                // [新增] 长大时长个子
                 if (this.ageStage === 'Toddler') { this.height += 30; this.weight += 7; }
                 else if (this.ageStage === 'Child') { this.height += 30; this.weight += 15; }
                 else if (this.ageStage === 'Teen') { this.height += 30; this.weight += 20; }
                 else if (this.ageStage === 'Adult') { this.height += 5; this.weight += 5; }
 
-                // 成年后找工作
                 if (this.ageStage === 'Adult' && this.job.id === 'unemployed') {
                     this.assignJob();
                     this.say("该找份工作养活自己了！", 'sys');
@@ -372,21 +398,14 @@ export class Sim {
         }
     }
 
-    // 死亡检定
     checkDeath(dt: number) {
-        // 1. 健康值归零死亡
         if (this.health <= 0) {
             this.die("健康耗尽");
             return;
         }
-
-        // 2. 老年自然死亡概率
         if (this.ageStage === 'Elder') {
-            // 基础概率极低，随年龄增加
             let deathProb = 0.00001 * (this.age - 60) * dt; 
-            // 体质好死亡率低
             deathProb *= (1.5 - this.constitution / 100);
-            // 运气好死亡率低
             deathProb *= (1.5 - this.luck / 100);
 
             if (Math.random() < deathProb) {
@@ -397,29 +416,20 @@ export class Sim {
 
     die(cause: string) {
         GameStore.addLog(this, `[讣告] ${this.name} 因 ${cause} 离世了，享年 ${Math.floor(this.age)} 岁。`, 'bad');
-        
-        // 通知亲友
         GameStore.sims.forEach(s => {
             if (s.id === this.id) return;
             const rel = s.relationships[this.id];
-            
-            // 如果是家人或好友
             if ((rel && rel.friendship > 60) || this.familyId === s.familyId) {
                 s.addBuff(BUFFS.mourning);
                 s.addMemory(`${this.name} 离开了我们... R.I.P.`, 'family');
                 s.say("R.I.P...", 'bad');
             }
-            
-            // 移除关系
             delete s.relationships[this.id];
         });
-
-        // 从游戏中移除
         GameStore.removeSim(this.id);
     }
 
     calculateDailyBudget() {
-        // 小孩没预算
         if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
             this.dailyBudget = 0;
             return;
@@ -438,7 +448,7 @@ export class Sim {
 
         let propensity = 0.2;
         if (this.hasBuff('rich_feel')) propensity = 0.5;
-        if (this.hasBuff('shopping_spree')) propensity = 0.8; // 购物节加成
+        if (this.hasBuff('shopping_spree')) propensity = 0.8; 
         if (this.hasBuff('stressed')) propensity = 0.4;
 
         this.dailyBudget = Math.floor(disposable * propensity);
@@ -448,8 +458,6 @@ export class Sim {
         if (this.action !== 'wandering' && this.action !== 'idle') {
             return;
         }
-
-        // 没财务能力的不用检查
         if (this.money <= 0) return;
 
         if (this.money < 100) {
@@ -495,10 +503,9 @@ export class Sim {
                 if (this.lifeGoal.includes('健身') && item.attribute === 'constitution') score += 50;
             }
 
-            // 购物狂欢节逻辑
             if (this.hasBuff('shopping_spree')) {
-                score += 50; // 什么都想买
-                if (item.cost > 100) score += 30; // 越贵越想买
+                score += 50; 
+                if (item.cost > 100) score += 30; 
             }
 
             if (item.trigger === 'rich_hungry' && this.money > 5000) score += 50;
@@ -604,13 +611,11 @@ export class Sim {
 
         if (minuteChanged) {
             this.updateBuffs(1);
-            // [新增] 怀孕逻辑
             if (this.isPregnant) {
-                this.pregnancyTimer -= 1; // 减去 1 分钟
+                this.pregnancyTimer -= 1; 
                 if (this.pregnancyTimer <= 0) {
                     this.giveBirth();
                 } else if (this.pregnancyTimer % 60 === 0) {
-                    // 偶尔吐槽
                     if(Math.random() > 0.8) this.say("宝宝踢我了...", 'act');
                 }
             }
@@ -618,30 +623,63 @@ export class Sim {
 
         this.checkSchedule();
         this.updateMood();
-        this.checkDeath(dt); // 每帧检查死亡
+        this.checkDeath(dt); 
 
-        // 需求耗尽扣除健康值
         if (this.needs.energy <= 0 || this.needs.hunger <= 0) {
-            // 每分钟扣除健康值
-            this.health -= 0.05 * f * 10; // 加速扣血
+            this.health -= 0.05 * f * 10; 
             if (Math.random() > 0.95) this.say("感觉快不行了...", 'bad');
         } else if (this.health < 100 && this.needs.energy > 80 && this.needs.hunger > 80) {
-            // 缓慢恢复
             this.health += 0.01 * f;
         }
 
-        // 幼儿无法独自生存，需要跟随父母或者在家里
+        // [修改] 幼儿逻辑：必须呆在家里，或者跟随父母
         if (['Infant', 'Toddler'].includes(this.ageStage)) {
-            // 简化的幼儿逻辑：如果饿了就哭，否则乱跑
-            if (this.needs.hunger < 40) {
-                this.say("哇哇哇！！！", 'bad');
-                // 应该触发父母来喂食 (此处简化为自动扣父母钱回血，或者等待父母交互)
-                const father = GameStore.sims.find(s => s.id === this.fatherId);
-                const mother = GameStore.sims.find(s => s.id === this.motherId);
-                const parent = father || mother;
-                if(parent && parent.money > 10) {
-                    parent.money -= 5;
-                    this.needs.hunger += 20;
+            // 1. 如果有家，强制回家
+            if (this.homeId && !this.isAtHome()) {
+                // 如果还没目标或目标不是家，就设置回家的路
+                if (!this.target || this.action !== 'moving_home') {
+                    const homePos = this.getHomeLocation();
+                    if (homePos) {
+                        this.target = homePos;
+                        this.action = 'moving_home';
+                        // 瞬移回去或者快速跑回去 (这里正常走)
+                        this.path = []; 
+                    }
+                }
+            } 
+            // 2. 如果在家，就在家随机走动
+            else if (this.homeId && this.isAtHome()) {
+                if (!this.target && Math.random() > 0.95) {
+                    // 随机找个家里的点
+                    const home = GameStore.housingUnits.find(u => u.id === this.homeId);
+                    if (home) {
+                        const tx = home.x + Math.random() * home.area.w;
+                        const ty = home.y + Math.random() * home.area.h;
+                        this.target = { x: tx, y: ty };
+                        this.action = 'playing_home';
+                    }
+                }
+                // 需求满足逻辑
+                if (this.needs.hunger < 40) {
+                    this.say("饿饿饿...", 'bad');
+                    // 模拟父母喂食
+                    const father = GameStore.sims.find(s => s.id === this.fatherId && s.homeId === this.homeId);
+                    const mother = GameStore.sims.find(s => s.id === this.motherId && s.homeId === this.homeId);
+                    if ((father && father.isAtHome()) || (mother && mother.isAtHome())) {
+                        this.needs.hunger += 30;
+                        this.say("好次！", 'love');
+                    }
+                }
+            }
+            // 3. 如果没家 (流浪儿)，跟随父母
+            else {
+                const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
+                if (parent) {
+                    const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
+                    if (dist > 50) {
+                        this.target = { x: parent.pos.x, y: parent.pos.y };
+                        this.action = 'following';
+                    }
                 }
             }
         }
@@ -726,16 +764,8 @@ export class Sim {
             if (this.actionTimer <= 0) this.finishAction();
         } 
         else if (!this.target) {
-            // 婴儿行为树
-            if (['Infant', 'Toddler', 'Child'].includes(this.ageStage)) {
-                if (this.action !== 'sleeping' && this.needs.energy < 30) {
-                    DecisionLogic.findObject(this, 'energy');
-                } else if (this.needs.fun < 50) {
-                    DecisionLogic.findObject(this, 'play');
-                } else {
-                    DecisionLogic.wander(this);
-                }
-            } else if (this.job.id !== 'unemployed') {
+            // [修改] 成年人行为决策
+            if (this.job.id !== 'unemployed') {
                 if (this.action !== 'commuting' && this.action !== 'working') {
                      if (this.action === 'moving') this.action = 'idle';
                      DecisionLogic.decideAction(this);
@@ -756,7 +786,11 @@ export class Sim {
                 this.path = []; 
                 this.currentPathIndex = 0;
                 this.commuteTimer = 0; 
-                this.startInteraction();
+                if (this.action !== 'moving_home') {
+                    this.startInteraction();
+                } else {
+                    this.action = 'idle'; // 到家了
+                }
             } else {
                 if (this.path.length === 0) {
                     this.path = GameStore.pathFinder.findPath(this.pos.x, this.pos.y, this.target.x, this.target.y);
@@ -773,10 +807,10 @@ export class Sim {
                     const distToNext = Math.sqrt(dx * dx + dy * dy);
                     
                     let speedMod = 1.0;
-                    if (this.ageStage === 'Infant') speedMod = 0.3; // 婴儿爬得慢
+                    if (this.ageStage === 'Infant') speedMod = 0.3; 
                     if (this.ageStage === 'Toddler') speedMod = 0.5;
                     if (this.ageStage === 'Elder') speedMod = 0.7;
-                    if (this.isPregnant) speedMod = 0.6; // 孕妇走得慢
+                    if (this.isPregnant) speedMod = 0.6; 
 
                     const moveStep = this.speed * speedMod * (dt * 0.1);
 
@@ -788,29 +822,27 @@ export class Sim {
                         this.pos.x += Math.cos(angle) * moveStep;
                         this.pos.y += Math.sin(angle) * moveStep;
                     }
-                    if (this.action !== 'commuting') this.action = 'moving';
+                    if (this.action !== 'commuting' && this.action !== 'moving_home') this.action = 'moving';
                 } else {
                     this.pos = { ...this.target };
                     this.target = null;
                     this.path = [];
-                    this.startInteraction();
+                    if (this.action !== 'moving_home') this.startInteraction();
+                    else this.action = 'idle';
                 }
             }
         }
         if (this.bubble.timer > 0) this.bubble.timer -= dt;
     }
 
-    // 分娩逻辑
     giveBirth() {
         this.isPregnant = false;
         this.pregnancyTimer = 0;
         this.removeBuff('pregnant');
         this.addBuff(BUFFS.new_parent);
 
-        // 随机性别 - [修复] 显式声明类型
         const gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
         
-        // 孩子跟谁姓？随机
         let babySurname = this.surname;
         if (this.partnerForBabyId) {
             const partner = GameStore.sims.find(s => s.id === this.partnerForBabyId);
@@ -819,26 +851,24 @@ export class Sim {
             }
         }
 
-        // 创建婴儿 Sim
         const baby = new Sim({
             x: this.pos.x + 20,
             y: this.pos.y + 20,
-            surname: babySurname, // 随机继承姓氏
+            surname: babySurname, 
             familyId: this.familyId,
             ageStage: 'Infant',
             gender: gender,
-            motherId: this.id, // 这里假设当前 Sim 是"母亲"（承载者）
+            motherId: this.id, 
             fatherId: this.partnerForBabyId || undefined,
+            homeId: this.homeId, // [新增] 继承家庭住址
         });
 
-        // 继承父母基因 (简单版：肤色、发色)
         if (Math.random() > 0.5) baby.skinColor = this.skinColor;
         baby.hairColor = this.hairColor;
 
         GameStore.sims.push(baby);
         this.childrenIds.push(baby.id);
 
-        // 如果有伴侣，更新伴侣关系
         if (this.partnerForBabyId) {
             const partner = GameStore.sims.find(s => s.id === this.partnerForBabyId);
             if (partner) {
@@ -846,13 +876,11 @@ export class Sim {
                 partner.addBuff(BUFFS.new_parent);
                 partner.addMemory(`我们有孩子了！取名叫 ${baby.name}`, 'family', baby.id);
                 
-                // 建立父/母子关系
                 SocialLogic.setKinship(partner, baby, 'child');
                 SocialLogic.setKinship(baby, partner, 'parent');
             }
         }
 
-        // 建立母子关系
         SocialLogic.setKinship(this, baby, 'child');
         SocialLogic.setKinship(baby, this, 'parent');
 
@@ -938,7 +966,6 @@ export class Sim {
             let obj = this.interactionTarget as Furniture;
 
             if (obj.cost) {
-                // 如果没钱，就不买
                 if (this.money < obj.cost) {
                     this.say("太贵了...", 'bad');
                     this.reset();
@@ -1008,7 +1035,7 @@ export class Sim {
         this.actionTimer = 0;
         this.isSideHustle = false;
         this.commuteTimer = 0;
-        this.path = []; // Clear Path
+        this.path = []; 
     }
 
     finishAction() {
@@ -1052,18 +1079,12 @@ export class Sim {
 
     getDaySummary(monthIndex: number) {
         const timePrefix = `Y${GameStore.time.year} M${GameStore.time.month}`;
-        
-        // 1. 获取近期记忆 (Events)
-        // 过滤掉一些太琐碎的系统日志，保留生活相关的
         const recentMemories = this.memories
-            .slice(0, 5) // 取最近5条
+            .slice(0, 5) 
             .map(m => m.text);
 
-        // 2. 获取当前状态 (Buffs) - 这非常关键！
-        // 比如 "恋爱脑, 社畜过劳, 暴富幻觉"
         const activeBuffs = this.buffs.map(b => b.label).join(', ');
 
-        // 3. 获取伴侣名字 (如果有)
         let partnerName = "无";
         const partnerId = Object.keys(this.relationships).find(id => this.relationships[id].isLover);
         if (partnerId) {
@@ -1071,18 +1092,17 @@ export class Sim {
             if (partner) partnerName = partner.name;
         }
 
-        // 4. 返回更丰富的数据包
         return {
             id: this.id,
             name: this.name,
             age: this.age,
-            mbti: this.mbti, // 性格决定语气
+            mbti: this.mbti, 
             job: this.job.title,
-            lifeGoal: this.lifeGoal, // 人生目标，AI 可以用来写感慨
-            money: this.money, // 存款，AI 可以写哭穷或炫富
-            buffs: activeBuffs, // 当前状态，决定日记基调
-            partner: partnerName, // 提到伴侣
-            events: recentMemories // 发生的具体事件
+            lifeGoal: this.lifeGoal, 
+            money: this.money, 
+            buffs: activeBuffs, 
+            partner: partnerName, 
+            events: recentMemories 
         };
     }
 

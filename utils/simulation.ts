@@ -1,7 +1,7 @@
 import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
@@ -26,6 +26,8 @@ export class GameStore {
     // [Refactor] 存储烘焙后的世界数据
     static rooms: RoomDef[] = [];
     static furniture: Furniture[] = [];
+    // [新增] 住房单元注册表 (带绝对坐标)
+    static housingUnits: (HousingUnit & { x: number, y: number })[] = [];
 
     static furnitureIndex: Map<string, Furniture[]> = new Map();
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
@@ -50,6 +52,7 @@ export class GameStore {
     static rebuildWorld() {
         this.rooms = [];
         this.furniture = [];
+        this.housingUnits = [];
         
         // 1. 添加基础设施 (道路)
         // @ts-ignore
@@ -84,9 +87,22 @@ export class GameStore {
                     y: f.y + plot.y
                 });
             });
+
+            // [新增] 转换住房单元坐标
+            if (template.housingUnits) {
+                template.housingUnits.forEach(u => {
+                    this.housingUnits.push({
+                        ...u,
+                        id: `${plot.id}_${u.id}`,
+                        x: u.area.x + plot.x,
+                        y: u.area.y + plot.y,
+                        // 保留原始宽高
+                    });
+                });
+            }
         });
 
-        console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}`);
+        console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}, Homes: ${this.housingUnits.length}`);
         
         // 3. 重建索引
         this.initIndex();
@@ -247,72 +263,82 @@ export class GameStore {
 // 按照家庭生成初始人口
 function generateFamily(count: number) {
     const familyId = Math.random().toString(36).substring(2, 8);
-    const baseX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
-    const baseY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
     
-    // 父母各自的姓氏 (不再强制家庭共享)
+    // [新增] 寻找空闲的住房
+    let homeId: string | null = null;
+    let homeX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
+    let homeY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
+
+    // 筛选未满员的住房
+    const availableHomes = GameStore.housingUnits.filter(unit => {
+        const occupants = GameStore.sims.filter(s => s.homeId === unit.id).length;
+        return occupants + count <= unit.capacity;
+    });
+
+    let homeTypeStr = "露宿街头";
+
+    if (availableHomes.length > 0) {
+        // 随机选一个（或者根据家庭经济状况选，这里简化为随机）
+        const home = availableHomes[Math.floor(Math.random() * availableHomes.length)];
+        homeId = home.id;
+        // 出生点设在家附近
+        homeX = home.x + home.area.w / 2;
+        homeY = home.y + home.area.h / 2;
+        homeTypeStr = home.name;
+    }
+
+    // 父母各自的姓氏
     const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
 
     const members: Sim[] = [];
 
     // 1. 生成家长 (1-2人)
     const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
-    // 同性家庭概率
     const isSameSex = parentCount === 2 && Math.random() < 0.1; 
     
-    // [修复] 显式声明类型为 'M' | 'F'，解决 string 类型赋值报错
     const p1Gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
     let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
     if (isSameSex) p2Gender = p1Gender;
 
     const p1Surname = getSurname();
-    const parent1 = new Sim({ x: baseX, y: baseY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender });
+    const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId });
     members.push(parent1);
 
     let parent2: Sim | null = null;
     if (parentCount === 2) {
-        const p2Surname = getSurname(); // 配偶可以不同姓
-        parent2 = new Sim({ x: baseX + 30, y: baseY, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender });
+        const p2Surname = getSurname(); 
+        parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId });
         members.push(parent2);
         
-        // 设置夫妻关系
-        SocialLogic.marry(parent1, parent2, true); // true = 初始化跳过日志
+        SocialLogic.marry(parent1, parent2, true); 
     }
 
-    // 2. 生成孩子 (剩余名额)
+    // 2. 生成孩子
     const childCount = count - parentCount;
     for (let i = 0; i < childCount; i++) {
-        // 随机孩子年龄段
         const r = Math.random();
-        // 这里不需要显式类型，Sim 构造函数会处理字符串
         const ageStage = r > 0.6 ? 'Child' : (r > 0.3 ? 'Teen' : 'Toddler');
         
-        // 孩子跟谁姓？随机
         let childSurname = p1Surname;
-        if (parent2 && Math.random() > 0.5) {
-            childSurname = parent2.surname;
-        }
+        if (parent2 && Math.random() > 0.5) childSurname = parent2.surname;
 
         const child = new Sim({ 
-            x: baseX + (i+1)*20, 
-            y: baseY + 20, 
+            x: homeX + (i+1)*15, 
+            y: homeY + 15, 
             surname: childSurname, 
             familyId, 
             ageStage,
-            // 确保 fatherId/motherId 是 string | undefined
+            homeId, // 孩子跟随家庭住址
             fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
             motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined)
         });
         
-        // 绑定亲属关系
-        // [修复] 这里的 members 已经是 Sim[] 类型，TS 可以正确推断 p.ageStage
         members.forEach(p => {
             if (p.ageStage === 'Adult') {
                 SocialLogic.setKinship(p, child, 'child');
                 SocialLogic.setKinship(child, p, 'parent');
                 p.childrenIds.push(child.id);
             } else {
-                // 兄弟姐妹
                 SocialLogic.setKinship(p, child, 'sibling');
                 SocialLogic.setKinship(child, p, 'sibling');
             }
@@ -321,27 +347,25 @@ function generateFamily(count: number) {
         members.push(child);
     }
 
+    console.log(`Spawned family at ${homeTypeStr} (${homeId})`);
     return members;
 }
 
 export function initGame() {
-    // [修复] 强制重置游戏状态，确保幂等性（重复调用不会副作用叠加）
     GameStore.sims = [];
     GameStore.particles = [];
-    GameStore.logs = []; // 清空之前的日志
+    GameStore.logs = []; 
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
-    // [New] 初始化时先构建世界
     GameStore.rebuildWorld();
 
     if (GameStore.loadGame()) {
         GameStore.addLog(null, "存档读取成功", "sys");
     } else {
-        // 生成 3-5 个家庭
         const familyCount = 3 + Math.floor(Math.random() * 3);
         
         for (let i = 0; i < familyCount; i++) {
-            const size = 1 + Math.floor(Math.random() * 4); // 1-4人家庭
+            const size = 1 + Math.floor(Math.random() * 4); 
             const fam = generateFamily(size);
             GameStore.sims.push(...fam);
         }
@@ -371,10 +395,9 @@ export function updateTime() {
             if (GameStore.time.hour >= 24) {
                 GameStore.time.hour = 0;
 
-                const currentSimMonth = GameStore.time.totalDays; // 使用 totalDays 作为历史记录的 ID
+                const currentSimMonth = GameStore.time.totalDays; 
                 handleDailyDiaries(currentSimMonth);
 
-                // [修改] 时间推进逻辑：1天 = 1月
                 GameStore.time.totalDays++;
                 GameStore.time.month++;
                 if (GameStore.time.month > 12) {
@@ -396,9 +419,10 @@ export function updateTime() {
                 GameStore.sims.forEach(s => {
                     s.dailyExpense = 0;
                     s.dailyIncome = 0; 
-                    s.calculateDailyBudget(); 
+                    // [新增] 支付房租逻辑 (Sim.ts 中处理)
+                    s.payRent(); 
                     
-                    // [修改] 触发每月(每日)的节日Buff逻辑
+                    s.calculateDailyBudget(); 
                     s.applyMonthlyEffects(currentMonth, holiday);
                 });
                 
@@ -413,10 +437,8 @@ export function updateTime() {
 async function handleDailyDiaries(monthIndex: number) {
     console.log(`[AI] 开始生成第 ${monthIndex} 月的市民日记...`);
     
-    // 1. 准备数据
     const allSimsData = GameStore.sims.map(sim => sim.getDaySummary(monthIndex));
     
-    // 2. 获取环境上下文 (Context)
     const currentMonth = GameStore.time.month;
     const holiday = HOLIDAYS[currentMonth];
     let contextStr = `现在的季节是 ${currentMonth}月。`;

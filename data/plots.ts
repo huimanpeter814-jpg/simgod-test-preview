@@ -1,6 +1,6 @@
-import { PlotTemplate, Furniture, RoomDef } from '../types';
+import { PlotTemplate, Furniture } from '../types';
 
-// 调色板引用（为了保持风格一致，这里简单复制常用的）
+// 调色板引用
 const PALETTE = {
     shadow_dark: '#1e222e',
     highlight_light: '#f8f9fa',
@@ -43,13 +43,13 @@ const createGrid = (baseId: string, startX: number, startY: number, cols: number
 };
 
 // ==========================================
-// 1. CBD 科技与金融区 (Tech & Finance)
-// 原坐标偏移: (20, 20) -> (0, 0)
+// 1. CBD 科技与金融区 (Work)
 // ==========================================
 const PLOT_CBD: PlotTemplate = {
     id: 'cbd_template',
     width: 1460,
     height: 400,
+    type: 'work',
     rooms: [
         { id: 'cbd_plaza_ground', x: 560, y: 0, w: 900, h: 360, label: '', color: '#f0f5ff', pixelPattern: 'grid' },
         { id: 'office_tower_a', x: 0, y: 0, w: 460, h: 360, label: '科技大厦', color: '#d4e0f0', pixelPattern: 'windows' },
@@ -98,13 +98,17 @@ const PLOT_CBD: PlotTemplate = {
 };
 
 // ==========================================
-// 2. 宿舍/公寓区 (North East)
-// 原坐标偏移: (1480, 20) -> (0, 0)
+// 2. 宿舍/公寓区 (Residential - Public Housing)
 // ==========================================
 const PLOT_DORM: PlotTemplate = {
     id: 'dorm_template',
     width: 900,
     height: 360,
+    type: 'residential',
+    housingUnits: [
+        { id: 'unit_n1', name: '人才公寓 N1', capacity: 6, cost: 20, type: 'public_housing', area: { x: 20, y: 20, w: 350, h: 320 } },
+        { id: 'unit_n2', name: '人才公寓 N2', capacity: 6, cost: 20, type: 'public_housing', area: { x: 390, y: 20, w: 350, h: 320 } }
+    ],
     rooms: [
         { id: 'talent_ground_n', x: 0, y: 0, w: 900, h: 360, label: '', color: '#f0f2f8', pixelPattern: 'simple' },
         { id: 'talent_apt_n1', x: 20, y: 20, w: 350, h: 320, label: '人才公寓 N1', color: PALETTE.build_brick_white, pixelPattern: 'brick' },
@@ -127,17 +131,22 @@ const PLOT_DORM: PlotTemplate = {
 };
 
 // ==========================================
-// 3. 居住区 (West)
-// 原坐标偏移: (20, 480) -> (0, 0)
+// 3. 混合居住区 (Residential - Mixed)
 // ==========================================
 const PLOT_RESIDENTIAL: PlotTemplate = {
     id: 'res_template',
     width: 480,
     height: 1320,
+    type: 'residential',
+    housingUnits: [
+        { id: 'unit_block_a', name: '人才公寓 A', capacity: 6, cost: 20, type: 'public_housing', area: { x: 20, y: 20, w: 440, h: 300 } },
+        { id: 'unit_block_b', name: '幸福家园 B', capacity: 4, cost: 80, type: 'apartment', area: { x: 20, y: 340, w: 440, h: 300 } }, // 4户公寓
+        { id: 'unit_block_c', name: '青年旅社', capacity: 8, cost: 15, type: 'public_housing', area: { x: 20, y: 660, w: 440, h: 300 } },
+    ],
     rooms: [
         { id: 'res_ground', x: 0, y: 0, w: 480, h: 1320, label: '', color: '#f0f2f8', pixelPattern: 'simple' },
         { id: 'res_block_a', x: 20, y: 20, w: 440, h: 300, label: '人才公寓 A座', color: PALETTE.build_brick_white, pixelPattern: 'brick' },
-        { id: 'res_block_b', x: 20, y: 340, w: 440, h: 300, label: '幸福家园 B座', color: PALETTE.build_brick_red, pixelPattern: 'brick_red' },
+        { id: 'res_block_b', x: 20, y: 340, w: 440, h: 300, label: '幸福公寓 (4户)', color: PALETTE.build_brick_red, pixelPattern: 'brick_red' },
         { id: 'res_block_c', x: 20, y: 660, w: 440, h: 300, label: '青年旅社', color: '#dce4f0', pixelPattern: 'concrete' },
         { id: 'community_center', x: 20, y: 980, w: 440, h: 320, label: '市民活动中心', color: '#8a7cff', pixelPattern: 'community' },
     ],
@@ -149,12 +158,21 @@ const PLOT_RESIDENTIAL: PlotTemplate = {
         ...createRow('dorm_toilet', 390, 50, 4, 0, 60, { w: 34, h: 34, color: '#5a8fff', label: '马桶', utility: 'bladder', pixelPattern: 'toilet' }),
         ...createRow('dorm_shower', 330, 70, 4, 0, 50, { w: 34, h: 44, color: '#81ecec', label: '公共淋浴', utility: 'hygiene', pixelPattern: 'shower_stall' }),
 
-        // Block B
-        ...createGrid('apt_kitchen', 40, 360, 2, 2, 200, 140, { w: 108, h: 34, color: '#5a6572', label: '整体厨房', utility: 'cook', pixelPattern: 'kitchen' }),
-        ...createGrid('apt_fridge', 140, 360, 2, 2, 200, 140, { w: 34, h: 34, color: '#ffffff', label: '冰箱', utility: 'hunger', pixelPattern: 'fridge' }),
-        ...createGrid('apt_table', 60, 410, 2, 2, 200, 140, { w: 64, h: 64, color: '#ffd166', label: '餐桌', utility: 'hunger', pixelPattern: 'table_kitchen' }),
+        // Block B (幸福公寓) - 4户配置 (每象限一户)
+        // Top Left
+        { id: 'apt_bed_1', x: 40, y: 360, w: 54, h: 84, color: '#ff9ff3', label: '双人床', utility: 'energy', pixelPattern: 'bed_king' },
+        { id: 'apt_kitchen_1', x: 110, y: 360, w: 64, h: 34, color: '#5a6572', label: '小厨房', utility: 'cook', pixelPattern: 'kitchen' },
+        // Top Right
+        { id: 'apt_bed_2', x: 260, y: 360, w: 54, h: 84, color: '#54a0ff', label: '双人床', utility: 'energy', pixelPattern: 'bed_king' },
+        { id: 'apt_kitchen_2', x: 330, y: 360, w: 64, h: 34, color: '#5a6572', label: '小厨房', utility: 'cook', pixelPattern: 'kitchen' },
+        // Bottom Left
+        { id: 'apt_bed_3', x: 40, y: 500, w: 54, h: 84, color: '#1dd1a1', label: '双人床', utility: 'energy', pixelPattern: 'bed_king' },
+        { id: 'apt_kitchen_3', x: 110, y: 550, w: 64, h: 34, color: '#5a6572', label: '小厨房', utility: 'cook', pixelPattern: 'kitchen' },
+        // Bottom Right
+        { id: 'apt_bed_4', x: 260, y: 500, w: 54, h: 84, color: '#feca57', label: '双人床', utility: 'energy', pixelPattern: 'bed_king' },
+        { id: 'apt_kitchen_4', x: 330, y: 550, w: 64, h: 34, color: '#5a6572', label: '小厨房', utility: 'cook', pixelPattern: 'kitchen' },
 
-        // Youth Apt (Block C)
+        // Block C (Youth Apt)
         ...createGrid('lazy_sofa', 40, 720, 4, 3, 90, 80, { w: 54, h: 44, color: '#7158e2', label: '懒人沙发', utility: 'comfort', pixelPattern: 'sofa_lazy' }),
         { id: 'pizza_box', x: 60, y: 730, w: 24, h: 24, color: '#ff9c8a', label: '披萨盒', utility: 'hunger', pixelPattern: 'pizza_box' },
         { id: 'gaming_tv_wall', x: 230, y: 670, w: 158, h: 12, color: '#1a1e2c', label: '电视墙', utility: 'play', pixelPattern: 'tv_wall' },
@@ -168,15 +186,15 @@ const PLOT_RESIDENTIAL: PlotTemplate = {
 };
 
 // ==========================================
-// 4. 中央公园 (Center)
-// 原坐标偏移: (600, 480) -> (0, 0)
+// 4. 中央公园 (Public)
 // ==========================================
 const PLOT_PARK: PlotTemplate = {
     id: 'park_template',
     width: 1000,
     height: 670,
+    type: 'public',
     rooms: [
-        { id: 'park_base', x: 0, y: 0, w: 1000, h: 670, label: '', color: PALETTE.ground_grass_light, pixelPattern: 'grass' }, // 修正底色为 light grass 以匹配视觉
+        { id: 'park_base', x: 0, y: 0, w: 1000, h: 670, label: '', color: PALETTE.ground_grass_light, pixelPattern: 'grass' },
         { id: 'park_lawn_main', x: 50, y: 50, w: 900, h: 570, label: '中央公园绿地', color: PALETTE.ground_grass_light, pixelPattern: 'grass_dense' },
         { id: 'park_lake_border', x: 240, y: 160, w: 520, h: 320, label: '', color: '#8a7cff', pixelPattern: 'wave' },
         { id: 'park_lake', x: 250, y: 170, w: 500, h: 300, label: '镜湖', color: PALETTE.ground_water, pixelPattern: 'water' },
@@ -222,13 +240,13 @@ const PLOT_PARK: PlotTemplate = {
 };
 
 // ==========================================
-// 5. 商业娱乐区 (South)
-// 原坐标偏移: (580, 1250) -> (0, 0)
+// 5. 商业娱乐区 (Commercial)
 // ==========================================
 const PLOT_COMMERCIAL: PlotTemplate = {
     id: 'commercial_template',
     width: 1020,
     height: 550,
+    type: 'commercial',
     rooms: [
         { id: 'commercial_pave', x: 0, y: 0, w: 1020, h: 550, label: '', color: '#9ca6b4', pixelPattern: 'pave_fancy' },
         { id: 'mall_main', x: 20, y: 0, w: 600, h: 530, label: '大型商场', color: '#ffd93d', pixelPattern: 'mall' },
@@ -263,13 +281,13 @@ const PLOT_COMMERCIAL: PlotTemplate = {
 };
 
 // ==========================================
-// 6. 公共服务区 (East)
-// 原坐标偏移: (1680, 480) -> (0, 0)
+// 6. 公共服务区 (Public)
 // ==========================================
 const PLOT_SERVICE: PlotTemplate = {
     id: 'service_template',
     width: 720,
-    height: 720, // 截取上半部分
+    height: 720,
+    type: 'public',
     rooms: [
         { id: 'public_ground', x: 0, y: 0, w: 720, h: 720, label: '', color: '#fff9e8', pixelPattern: 'public' },
         { id: 'hospital_main', x: 20, y: 20, w: 680, h: 320, label: '餐厅', color: '#7ce8ff', pixelPattern: 'hospital' },
@@ -291,13 +309,13 @@ const PLOT_SERVICE: PlotTemplate = {
 };
 
 // ==========================================
-// 7. 休闲与夜生活 (South East)
-// 原坐标偏移: (1680, 1250) -> (0, 0)
+// 7. 休闲与夜生活 (Public/Commercial)
 // ==========================================
 const PLOT_NIGHTLIFE: PlotTemplate = {
     id: 'nightlife_template',
     width: 720,
     height: 530,
+    type: 'public',
     rooms: [
         { id: 'gym_complex', x: 320, y: 0, w: 380, h: 530, label: '健身房', color: '#a8b4c8', pixelPattern: 'gym' },
         { id: 'arcade_zone', x: 0, y: 0, w: 300, h: 250, label: '赛博电玩城', color: '#5a6572', pixelPattern: 'arcade' },
@@ -328,14 +346,13 @@ const PLOT_NIGHTLIFE: PlotTemplate = {
 };
 
 // ==========================================
-// 8. 远东新区 (Far East)
-// 原坐标偏移: (2450, 50) -> (0, 0)
-// 包含: Art Gallery (Top) & Netcafe (Bottom)
+// 8. 远东新区 (Public/Commercial)
 // ==========================================
 const PLOT_FAREAST: PlotTemplate = {
     id: 'fareast_template',
     width: 400,
     height: 1750, 
+    type: 'public',
     rooms: [
         { id: 'art_gallery_ground', x: 0, y: 0, w: 400, h: 500, label: '美术馆', color: '#f7f1e3', pixelPattern: 'simple' },
         { id: 'netcafe_ground', x: 0, y: 1200, w: 400, h: 530, label: '星际网咖', color: '#1e272e', pixelPattern: 'simple' },
@@ -367,6 +384,29 @@ const PLOT_FAREAST: PlotTemplate = {
     ]
 };
 
+// [新增] 独栋别墅 (Villa - Residential)
+// ==========================================
+const PLOT_VILLA: PlotTemplate = {
+    id: 'villa_template',
+    width: 600,
+    height: 500,
+    type: 'residential',
+    housingUnits: [
+        { id: 'unit_villa', name: '豪华独栋', capacity: 6, cost: 200, type: 'villa', area: { x: 20, y: 20, w: 560, h: 460 } }
+    ],
+    rooms: [
+        { id: 'villa_ground', x: 0, y: 0, w: 600, h: 500, label: '', color: '#55efc4', pixelPattern: 'grass_dense' },
+        { id: 'villa_main', x: 100, y: 50, w: 400, h: 350, label: '豪华别墅', color: '#fff', pixelPattern: 'brick_red' },
+        { id: 'villa_pool', x: 100, y: 410, w: 200, h: 80, label: '私家泳池', color: '#74b9ff', pixelPattern: 'water' }
+    ],
+    furniture: [
+        { id: 'villa_bed_master', x: 130, y: 80, w: 80, h: 100, color: '#fab1a0', label: 'King Size Bed', utility: 'energy', pixelPattern: 'bed_king' },
+        { id: 'villa_sofa', x: 130, y: 200, w: 100, h: 50, color: '#a29bfe', label: '真皮沙发', utility: 'comfort', pixelPattern: 'sofa_vip' },
+        { id: 'villa_piano', x: 350, y: 200, w: 80, h: 100, color: '#2d3436', label: '钢琴', utility: 'play', pixelPattern: 'piano' },
+        { id: 'villa_kitchen', x: 350, y: 80, w: 100, h: 50, color: '#dfe6e9', label: '整体厨房', utility: 'cook', pixelPattern: 'kitchen' },
+    ]
+};
+
 // 汇总导出
 export const PLOTS: Record<string, PlotTemplate> = {
     'cbd': PLOT_CBD,
@@ -376,5 +416,6 @@ export const PLOTS: Record<string, PlotTemplate> = {
     'commercial': PLOT_COMMERCIAL,
     'service': PLOT_SERVICE,
     'nightlife': PLOT_NIGHTLIFE,
-    'fareast': PLOT_FAREAST
+    'fareast': PLOT_FAREAST,
+    'villa': PLOT_VILLA // [新增]
 };
