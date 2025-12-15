@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameStore } from '../utils/simulation';
+import { HOLIDAYS } from '../constants';
 
 const TopUI: React.FC = () => {
   const [time, setTime] = useState({ ...GameStore.time });
@@ -19,21 +20,20 @@ const TopUI: React.FC = () => {
     GameStore.notify(); 
   };
 
-  const getWeekdayStr = (d: number) => {
-      return ['日', '一', '二', '三', '四', '五', '六'][d % 7];
-  };
+  const holiday = HOLIDAYS[time.month];
 
   return (
     <div className="absolute top-4 left-0 right-0 flex justify-between px-6 z-30 pointer-events-none">
       {/* Time & Speed Control */}
       <div className="flex gap-4 items-center">
         <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-6 pointer-events-auto shadow-lg">
-            <div className="flex flex-col items-end leading-none gap-1">
+            <div className="flex flex-col items-end leading-none gap-1 min-w-[80px]">
                 <div className="font-pixel text-[10px] text-gray-400">
-                    DAY {time.day}
+                    YEAR {time.year}
                 </div>
-                <div className="font-bold text-xs text-white">
-                    {time.month}月{time.date}日 (周{getWeekdayStr(time.weekday)})
+                <div className="font-bold text-xs text-white flex items-center gap-2">
+                    <span>{time.month} 月</span>
+                    {holiday && <span className="text-[10px] bg-red-500/20 text-red-300 px-1 rounded border border-red-500/30">{holiday.name}</span>}
                 </div>
             </div>
             

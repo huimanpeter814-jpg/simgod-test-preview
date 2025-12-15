@@ -139,15 +139,15 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
         const fileName = sim.appearance.hair.split('/').pop() || '';
         hairName = `自定义 (${fileName.substring(0, 6)}...)`;
     } else {
-        // 如果是程序化生成，使用相同的哈希逻辑
         const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        // 注意：simulationHelpers.ts 中如果用的是 % 5，这里也要对应。
-        // 但为了准确显示潜在的所有发型，这里假设 simulationHelpers 可能会被修正为支持更多
-        // 目前按文件里的逻辑 (hash % 5) 显示，如果之后修正了渲染逻辑，这里改成 % 15 即可
-        // 假设 simulationHelpers 用的是 % 15 (因为有15个case)，这里我们用 15
-        const styleIndex = hash % 5; // *根据你上传的 simulationHelpers.ts，目前它只取前5种，如果要完全对应请保持 % 5
+        const styleIndex = hash % 5; 
         hairName = HAIR_STYLE_NAMES[styleIndex] || '标准发型';
     }
+
+    // [新增] 年龄段样式
+    let ageColor = 'text-sky-200 bg-sky-500/20 border-sky-500/30';
+    if (sim.ageGroup === 'Adult') ageColor = 'text-blue-200 bg-blue-500/20 border-blue-500/30';
+    if (sim.ageGroup === 'Elder') ageColor = 'text-gray-300 bg-gray-500/20 border-gray-500/30';
 
     return (
         <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
@@ -172,9 +172,9 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                     </div>
                     
                     <div className="flex flex-wrap gap-1 mt-2">
-                        {/* 基础信息 (添加颜色) */}
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-500/30" title="年龄">
-                            {sim.age}岁
+                        {/* [修改] 基础信息 - 增加年龄段显示 */}
+                        <span className={`text-[10px] px-2 py-0.5 rounded border ${ageColor}`} title="年龄">
+                            {sim.age}岁 ({sim.ageGroup})
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30" title="星座">
                             {sim.zodiac.name}
@@ -183,7 +183,6 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                             {ORIENTATIONS.find(o => o.type === sim.orientation)?.label}
                         </span>
                         
-                        {/* 情感状态标签 (有颜色区分) */}
                         <span 
                             className={`text-[10px] px-2 py-0.5 rounded border ${partner ? 'bg-love/10 border-love/30 text-love' : 'bg-white/5 border-white/10 text-gray-400'}`} 
                             title="情感状态"
@@ -284,7 +283,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">人际关系</div>
-                                {/* [移到此处] 专一度显示 */}
+                                {/* 专一度显示 */}
                                 <div className={`text-[10px] font-mono ${faithColor} flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5`}>
                                    <span>❤️ 专一: {Math.floor(sim.faithfulness)}</span>
                                 </div>
@@ -334,7 +333,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
 
                 {tab === 'attr' && (
                     <>
-                        {/* [新增] 个人特征栏 */}
+                        {/* 个人特征栏 */}
                         <div>
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">个人特征</div>
                             <div className="bg-white/5 rounded-lg p-2 border border-white/5 grid grid-cols-2 gap-2 text-[11px]">
@@ -367,7 +366,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                      </div>
                                 </div>
 
-                                {/* [修改] 幸运值 - 进度条样式 */}
+                                {/* 幸运值 - 进度条样式 */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                      <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">幸运</span>
@@ -378,7 +377,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                      </div>
                                 </div>
 
-                                {/* [修改] 体质 - 进度条样式 */}
+                                {/* 体质 - 进度条样式 */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                      <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">体质</span>
@@ -399,7 +398,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                     </div>
                                 </div>
 
-                                {/* [修改] 情商 - 进度条样式 */}
+                                {/* 情商 - 进度条样式 */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                      <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">情商</span>
@@ -409,7 +408,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                         <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{width: `${sim.eq}%`}}></div>
                                      </div>
                                 </div>
-                                {/* [新增] 声望 Reputation */}
+                                {/* 声望 Reputation */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">声望</span>
@@ -420,7 +419,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                     </div>
                                 </div>
 
-                                {/* [新增] 道德 Morality */}
+                                {/* 道德 Morality */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">道德</span>
@@ -431,7 +430,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                     </div>
                                 </div>
 
-                                {/* [新增] 创意 Creativity */}
+                                {/* 创意 Creativity */}
                                 <div className="flex flex-col gap-0.5 col-span-2 mt-1 pt-1 border-t border-white/5">
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-500 text-[9px]">创意</span>

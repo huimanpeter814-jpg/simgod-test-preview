@@ -231,7 +231,7 @@ const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
                 </div>
                 
                 <div className="p-3 border-t border-white/10 text-center">
-                    <p className="text-[9px] text-gray-600">点击数字查看具体名单 · Pixel Life Observer</p>
+                    <p className="text-[9px] text-gray-600">点击数字查看具体名单 · SimGod</p>
                 </div>
             </div>
         </div>

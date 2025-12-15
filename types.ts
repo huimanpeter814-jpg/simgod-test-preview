@@ -79,7 +79,7 @@ export interface Job {
   salary: number;
   startHour: number;
   endHour: number;
-  workDays: number[]; 
+  vacationMonths?: number[]; 
   companyType?: string; 
 }
 
@@ -100,10 +100,10 @@ export interface SimAppearance {
 
 export interface Memory {
     id: string;
-    time: string; // 记录发生的时间字符串
+    time: string; 
     type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary';
     text: string;
-    relatedSimId?: string; // 如果是社交事件，记录对方ID
+    relatedSimId?: string; 
 }
 
 export interface SimData {
@@ -111,16 +111,16 @@ export interface SimData {
   name: string;
   pos: Vector2;
   gender: 'M' | 'F';
-  height: number;         // cm
-  weight: number;         // kg
-  appearanceScore: number;// 0-100 (颜值)
-  luck: number;         // 幸运值 (0-100)
-  constitution: number; // 体质 (0-100)
-  eq: number;           // 情商 (0-100)
-  iq: number;           // 智商 (0-100)
-  reputation: number;   // 声望 (0-100)
-  morality: number;     // 道德 (0-100)
-  creativity: number;   // 创意/脑洞 (0-100) - 区别于 creativity 技能
+  height: number;         
+  weight: number;         
+  appearanceScore: number;
+  luck: number;         
+  constitution: number; 
+  eq: number;           
+  iq: number;           
+  reputation: number;   
+  morality: number;     
+  creativity: number;   
   skinColor: string;
   hairColor: string;
   clothesColor: string;
@@ -128,6 +128,8 @@ export interface SimData {
   mbti: string;
   zodiac: Zodiac;
   age: number;
+  // [修复] 添加 ageGroup
+  ageGroup: string;
   lifeGoal: string;
   orientation: string;
   faithfulness: number;
@@ -146,7 +148,6 @@ export interface SimData {
   buffs: Buff[];
   mood: number;
 
-  // [新增] 市民的记忆列表
   memories: Memory[];
 
   action: string;
@@ -166,11 +167,10 @@ export interface LogEntry {
 }
 
 export interface GameTime {
-  day: number;
+  totalDays: number; 
+  year: number;      
+  month: number;     
   hour: number;
   minute: number;
   speed: number;
-  weekday: number;
-  month: number;
-  date: number;
 }

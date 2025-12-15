@@ -1,6 +1,6 @@
 ﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, HOLIDAYS } from '../constants';
-import { Vector2, Job, Buff, SimAppearance, Furniture, Memory  } from '../types';
-import { GameStore } from './simulation'; // 需要引入 GameStore 来访问 pathFinder
+import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship } from '../types';
+import { GameStore } from './simulation'; 
 import { minutes, getJobCapacity } from './simulationHelpers';
 import { SocialLogic } from './logic/social';
 import { DecisionLogic } from './logic/decision';
@@ -33,18 +33,20 @@ export class Sim {
 
     height: number;
     weight: number;
-    appearanceScore: number; // 魅力/颜值
+    appearanceScore: number;
     luck: number;
-    constitution: number;    // 体质
-    eq: number;              // 情商
-    iq: number;              // 智商
-    reputation: number;      // 声望
-    morality: number;        // 道德
-    creativity: number;      // 创意
+    constitution: number;    
+    eq: number;              
+    iq: number;              
+    reputation: number;      
+    morality: number;        
+    creativity: number;      
 
     needs: any;
     skills: any;
-    relationships: any;
+    // [修复] 明确类型，避免 Object.values 推断为 unknown[]
+    relationships: Record<string, Relationship> = {};
+    
     buffs: Buff[];
     mood: number;
     
@@ -84,38 +86,26 @@ export class Sim {
 
         this.gender = Math.random() > 0.5 ? 'M' : 'F';
 
-        // 身高：男性平均较高，女性平均较矮，但这只是概率
         const baseHeight = this.gender === 'M' ? 175 : 163;
-        this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); // ±10cm波动
+        this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
         
-        // 体重：简单关联身高
-        const bmi = 18 + Math.random() * 8; // BMI 18-26
+        const bmi = 18 + Math.random() * 8; 
         this.weight = Math.floor((this.height / 100) * (this.height / 100) * bmi);
         
-        // 颜值：正态分布模拟 (倾向于中间值，偶尔出现高颜值)
         const rand = (Math.random() + Math.random() + Math.random()) / 3;
         this.appearanceScore = Math.floor(rand * 100);
-        // 幸运：完全随机
         this.luck = Math.floor(Math.random() * 100);
         
-        // 体质：正态分布，大部分人健康(60-80)，少数人体弱或强壮
         const constRand = (Math.random() + Math.random()) / 2;
         this.constitution = Math.floor(constRand * 100);
         
-        // 情商：随机
         this.eq = Math.floor(Math.random() * 100);
 
-        // 智商：正态分布模拟 (两头少中间多)
         const iqRand = (Math.random() + Math.random() + Math.random()) / 3;
         this.iq = Math.floor(iqRand * 100);
 
-        // 声望：初始较低，随随机波动
         this.reputation = Math.floor(Math.random() * 40); 
-
-        // 道德：随机
         this.morality = Math.floor(Math.random() * 100);
-
-        // 创意：随机
         this.creativity = Math.floor(Math.random() * 100);
         
         this.name = this.generateName();
@@ -196,8 +186,16 @@ export class Sim {
         }
     }
 
+    // [新增] ageGroup Getter，修复 Inspector 报错
+    get ageGroup(): string {
+        if (this.age < 25) return '青年';
+        if (this.age < 45) return '壮年';
+        if (this.age < 65) return '中年';
+        return '老年';
+    }
+
     addMemory(text: string, type: Memory['type'], relatedSimId?: string) {
-        const timeStr = `Day ${GameStore.time.day} ${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
+        const timeStr = `Y${GameStore.time.year} M${GameStore.time.month} | ${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
         const newMemory: Memory = {
             id: Math.random().toString(36).substring(2, 9),
             time: timeStr,
@@ -242,6 +240,62 @@ export class Sim {
         if (this.lifeGoal.includes('富翁') || this.lifeGoal.includes('大亨')) { this.metabolism.fun *= 1.2; }
     }
 
+    applyMonthlyEffects(month: number, holiday?: { name: string, type: string }) {
+        if (!holiday) return;
+
+        // 1. 春节 (Traditional)
+        if (holiday.type === 'traditional') {
+            // [修复] 使用 Object.keys().length 而不是直接 .length
+            if (this.mbti.includes('E') || Object.keys(this.relationships).length > 5) {
+                this.addBuff(BUFFS.festive_joy);
+                this.say("过年啦！热闹热闹！🧨", 'act');
+            } else if (this.mbti.includes('I')) {
+                this.addBuff(BUFFS.social_pressure); // I人社恐
+                this.say("亲戚好多...我想静静...", 'bad');
+            } else {
+                this.addBuff(BUFFS.vacation_chill);
+            }
+        }
+        
+        // 2. 恋爱季 (Love)
+        else if (holiday.type === 'love') {
+            // [修复] 显式类型声明 (r: Relationship) 避免 unknown 错误
+            const hasLover = Object.values(this.relationships).some((r: Relationship) => r.isLover);
+            if (hasLover) {
+                this.addBuff(BUFFS.sweet_date);
+                this.say("这个月要好好陪TA ❤️", 'love');
+            } else {
+                if (this.faithfulness > 60 || this.age > 28) {
+                    this.addBuff(BUFFS.lonely);
+                    this.say("又是一个人过节...", 'bad');
+                } else {
+                    this.addBuff(BUFFS.playful); // 单身贵族
+                    this.say("单身万岁！🍺", 'act');
+                }
+            }
+        }
+
+        // 3. 购物节 (Shopping)
+        else if (holiday.type === 'shopping') {
+            this.addBuff(BUFFS.shopping_spree);
+            if (this.money > 2000) {
+                this.say("买买买！清空购物车！🛒", 'money');
+                // 提高预算
+                this.dailyBudget += 500;
+            } else {
+                this.addBuff(BUFFS.broke);
+                this.say("想买但没钱... 💸", 'bad');
+            }
+        }
+
+        // 4. 黄金周/假期 (Break)
+        else if (holiday.type === 'break') {
+            this.addBuff(BUFFS.vacation_chill);
+            this.say("终于放长假了！🌴", 'act');
+            this.needs.fun = Math.max(50, this.needs.fun);
+        }
+    }
+
     calculateDailyBudget() {
         let safetyPercent = 0.2;
         const isEarth = this.zodiac.element === 'earth';
@@ -256,6 +310,7 @@ export class Sim {
 
         let propensity = 0.2;
         if (this.hasBuff('rich_feel')) propensity = 0.5;
+        if (this.hasBuff('shopping_spree')) propensity = 0.8; // 购物节加成
         if (this.hasBuff('stressed')) propensity = 0.4;
 
         this.dailyBudget = Math.floor(disposable * propensity);
@@ -295,29 +350,30 @@ export class Sim {
                 if (this.zodiac.element === 'fire' && item.skill === 'athletics') score += 20;
             }
 
-            // [新增] 属性提升道具的购买欲望逻辑
             if (item.attribute) {
-                // 如果市民认为自己该属性较弱，或者该属性对其职业/目标重要，就会购买
-                // 1. 弥补短板 (Shortcoming)
                 const currentVal = (this as any)[item.attribute] || 0;
                 if (currentVal < 40) score += 30;
 
-                // 2. 职业需求 (Career Need)
                 if (item.attribute === 'iq' && this.job.companyType === 'internet') score += 40;
                 if (item.attribute === 'creativity' && this.job.companyType === 'design') score += 40;
                 if ((item.attribute === 'appearanceScore' || item.attribute === 'eq') && this.job.companyType === 'business') score += 40;
                 if (item.attribute === 'constitution' && this.job.companyType === 'restaurant') score += 30;
 
-                // 3. 人生目标 (Life Goal)
                 if (this.lifeGoal.includes('万人迷') && item.attribute === 'appearanceScore') score += 50;
                 if (this.lifeGoal.includes('大牛') && item.attribute === 'iq') score += 50;
                 if (this.lifeGoal.includes('健身') && item.attribute === 'constitution') score += 50;
             }
 
+            // [修改] 购物狂欢节逻辑
+            if (this.hasBuff('shopping_spree')) {
+                score += 50; // 什么都想买
+                if (item.cost > 100) score += 30; // 越贵越想买
+            }
+
             if (item.trigger === 'rich_hungry' && this.money > 5000) score += 50;
             if (item.trigger === 'addicted' && this.mbti.includes('P') && this.needs.fun < 30) score += 100;
             if (item.trigger === 'love' && this.hasBuff('in_love')) score += 80;
-            if (item.trigger === 'beauty' && this.appearanceScore < 50) score += 30; // 爱美之心
+            if (item.trigger === 'beauty' && this.appearanceScore < 50) score += 30; 
 
             score += Math.random() * 20;
 
@@ -328,7 +384,6 @@ export class Sim {
         });
 
         if (bestItem) {
-            // [优化] 所有类型的物品购买统一入口
             this.buyItem(bestItem);
         }
         
@@ -374,7 +429,6 @@ export class Sim {
             this.say("📚 涨知识", 'act');
         }
 
-        // [新增] 处理属性提升
         if (item.attribute) {
             let val = item.attrVal || 2;
             const current = (this as any)[item.attribute] || 0;
@@ -402,7 +456,6 @@ export class Sim {
             if (loverId) {
                 const lover = GameStore.sims.find(s => s.id === loverId);
                 if (lover) {
-                    // [修改] 礼物增加更多好感，尤其是对于拜金/现实的市民（如果有这个属性的话，目前用 money 近似判断）
                     let relBonus = 15;
                     if (lover.lifeGoal.includes('富翁')) relBonus += 10;
                     
@@ -500,8 +553,6 @@ export class Sim {
                 this.say("带薪如厕 🚽", 'act');
             }
 
-            // [新增] 体质影响工作耐力
-            // 体质越低，精力消耗越快。体质 50 为基准。
             const fatigueFactor = 1 + (50 - this.constitution) * 0.01;
             this.needs.energy -= 0.01 * f * Math.max(0.5, fatigueFactor);
 
@@ -548,12 +599,7 @@ export class Sim {
             if (this.actionTimer <= 0) this.finishAction();
         } 
         else if (!this.target) {
-            const currentHour = GameStore.time.hour;
-            const isWorkDay = this.job.workDays.includes(GameStore.time.weekday);
-            const isWorkTime = this.job.id !== 'unemployed' && isWorkDay && 
-                               currentHour >= this.job.startHour && currentHour < this.job.endHour;
-
-            if (isWorkTime) {
+            if (this.job.id !== 'unemployed') {
                 if (this.action !== 'commuting' && this.action !== 'working') {
                      if (this.action === 'moving') this.action = 'idle';
                      DecisionLogic.decideAction(this);
@@ -566,37 +612,25 @@ export class Sim {
             }
         }
 
-        // [核心修改] 移动逻辑：如果设定了目标，则寻路
-        // 这里的逻辑是：DecisionLogic 设定了 this.target
-        // 我们需要检测到 this.target 变化，然后生成 path
-        // 为了简化，我们在 update 中每帧检查
-        
         if (this.target) {
             const distToTarget = Math.sqrt(Math.pow(this.target.x - this.pos.x, 2) + Math.pow(this.target.y - this.pos.y, 2));
             
-            // 1. 如果离目标很近，直接结束移动
             if (distToTarget <= 10) {
                 this.pos = { ...this.target }; 
                 this.target = null;
-                this.path = []; // 清空路径
+                this.path = []; 
                 this.currentPathIndex = 0;
                 this.commuteTimer = 0; 
                 this.startInteraction();
             } else {
-                // 2. 如果有目标但没有路径，或者路径的目标不匹配（这里简化，假设 target 一旦设定就不变直到到达或重置）
-                // 实际上 target 变化时会先 reset() 清空 path
                 if (this.path.length === 0) {
-                    // 生成路径
                     this.path = GameStore.pathFinder.findPath(this.pos.x, this.pos.y, this.target.x, this.target.y);
                     this.currentPathIndex = 0;
-                    
-                    // 如果寻路失败（比如目标完全不可达），降级为直线移动
                     if (this.path.length === 0) {
                         this.path.push({ x: this.target.x, y: this.target.y });
                     }
                 }
 
-                // 3. 沿着路径移动
                 if (this.currentPathIndex < this.path.length) {
                     const nextNode = this.path[this.currentPathIndex];
                     const dx = nextNode.x - this.pos.x;
@@ -606,7 +640,6 @@ export class Sim {
                     let speedMod = 1.0;
                     if (this.mood > 90) speedMod = 1.3;
                     if (this.mood < 30) speedMod = 0.7;
-                    // [新增] 体质影响移动速度
                     speedMod += (this.constitution - 50) * 0.005;
                     
                     const moveStep = this.speed * speedMod * (dt * 0.1);
@@ -624,7 +657,6 @@ export class Sim {
                         this.action = 'moving';
                     }
                 } else {
-                    // 路径走完了，但可能因为 float 精度还没完全重合 target，强制完成
                     this.pos = { ...this.target };
                     this.target = null;
                     this.path = [];
@@ -639,10 +671,14 @@ export class Sim {
     checkSchedule() {
         if (this.job.id === 'unemployed') return;
 
-        const isHoliday = HOLIDAYS.some(h => h.month === GameStore.time.month && h.day === GameStore.time.date);
-        const isWorkDay = this.job.workDays.includes(GameStore.time.weekday);
+        const currentMonth = GameStore.time.month;
+        const holiday = HOLIDAYS[currentMonth];
+        
+        const isVacationMonth = this.job.vacationMonths?.includes(currentMonth);
 
-        if (isHoliday || !isWorkDay) return;
+        const isPublicHoliday = holiday && (holiday.type === 'traditional' || holiday.type === 'break');
+
+        if (isPublicHoliday || isVacationMonth) return;
 
         const currentHour = GameStore.time.hour;
         const isWorkTime = currentHour >= this.job.startHour && currentHour < this.job.endHour;
@@ -734,7 +770,6 @@ export class Sim {
                 this.say(`下班! +$${this.job.salary}`, 'money');
                 this.addBuff(BUFFS.stressed);
 
-                // [新增] 工作表现计算，受属性加成
                 let dailyPerf = 5; 
                 if (this.job.companyType === 'internet') {
                     if (this.iq > 70) dailyPerf += 5;
@@ -750,7 +785,6 @@ export class Sim {
                     if (this.skills.cooking > 50) dailyPerf += 3;
                 }
 
-                // 心情好表现好
                 if (this.mood > 80) dailyPerf += 2;
 
                 this.workPerformance += dailyPerf;
@@ -883,8 +917,7 @@ export class Sim {
                 GameStore.addLog(this, `消费: ${obj.label} -$${obj.cost}`, 'money');
                 this.say(`买! -${obj.cost}`, 'money');
                 
-                // [新增] 直接消费时也触发购买效果 (属性提升)
-                const itemDef = ITEMS.find(i => i.label === obj.label); // 简单通过 label 匹配，最好用 id
+                const itemDef = ITEMS.find(i => i.label === obj.label);
                 if(itemDef && itemDef.attribute) {
                      this.buyItem(itemDef);
                 }
@@ -983,12 +1016,9 @@ export class Sim {
         this.bubble.type = type;
     }
 
-    getDaySummary(dayNumber: number) {
-        const dayPrefix = `Day ${dayNumber} `;
-        
-        const todaysEvents = this.memories
-            .filter(m => m.time.startsWith(dayPrefix))
-            .map(m => m.text);
+    getDaySummary(monthIndex: number) {
+        const timePrefix = `Y${GameStore.time.year} M${GameStore.time.month}`;
+        const recentMemories = this.memories.slice(0, 5).map(m => m.text);
 
         return {
             id: this.id,
@@ -998,7 +1028,7 @@ export class Sim {
             mbti: this.mbti,
             job: this.job.title,
             mood: this.mood > 80 ? '开心' : (this.mood < 40 ? '难过' : '平静'),
-            events: todaysEvents.slice(0, 5) 
+            events: recentMemories
         };
     }
 
@@ -1006,7 +1036,7 @@ export class Sim {
         this.addMemory(`📔 [日记] ${content}`, 'life'); 
         
         if (Math.random() > 0.7) {
-            this.say("写完了今天的日记...", 'sys');
+            this.say("写完了月度总结...", 'sys');
         }
     }
 }
