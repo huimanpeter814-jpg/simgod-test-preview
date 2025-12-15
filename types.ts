@@ -101,7 +101,7 @@ export interface SimAppearance {
 export interface Memory {
     id: string;
     time: string; // 记录发生的时间字符串
-    type: 'job' | 'social' | 'life' | 'achievement' | 'bad';
+    type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary';
     text: string;
     relatedSimId?: string; // 如果是社交事件，记录对方ID
 }

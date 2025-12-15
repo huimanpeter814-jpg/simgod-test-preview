@@ -1,8 +1,9 @@
-import { PALETTES, HOLIDAYS, BUFFS, JOBS, FURNITURE, CONFIG } from '../constants'; // 确保导入 CONFIG
+import { PALETTES, HOLIDAYS, BUFFS, JOBS, FURNITURE, CONFIG } from '../constants'; 
 import { LogEntry, GameTime, Job, Furniture } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
-import { PathFinder } from './pathfinding'; // [新增]
+import { PathFinder } from './pathfinding'; 
+import { batchGenerateDiaries } from '../services/geminiService'; 
 
 export { Sim } from './Sim';
 export { drawAvatarHead, minutes, getJobCapacity } from './simulationHelpers';
@@ -234,6 +235,14 @@ export function updateTime() {
 
             if (GameStore.time.hour >= 24) {
                 GameStore.time.hour = 0;
+
+                // === 在这里插入 AI 日记逻辑 ===
+                // 此时 day 即将 +1，我们生成的是“刚过去的这一天”的日记，所以传入 GameStore.time.day
+                const targetDay = GameStore.time.day; 
+                
+                // 异步触发，不要阻塞游戏主循环
+                handleDailyDiaries(targetDay);
+
                 GameStore.time.day++;
                 
                 GameStore.time.date++;
@@ -268,6 +277,46 @@ export function updateTime() {
         
         GameStore.notify();
     }
+}
+
+// === 新增：处理日记生成的独立函数 ===
+async function handleDailyDiaries(day: number) {
+    console.log(`[AI] 开始生成 Day ${day} 的市民日记...`);
+    
+    // 1. 准备数据
+    const allSimsData = GameStore.sims.map(sim => sim.getDaySummary(day));
+    
+    // 2. 分批处理 (Batching)
+    // 建议每批 20 人，这样 100 人只需要 5 次请求，既不会超时也不会超限
+    const BATCH_SIZE = 20;
+    
+    for (let i = 0; i < allSimsData.length; i += BATCH_SIZE) {
+        const batch = allSimsData.slice(i, i + BATCH_SIZE);
+        
+        try {
+            console.log(`[AI] 发送批次 ${i/BATCH_SIZE + 1}... (${batch.length}人)`);
+            
+            // 调用 API
+            const diariesMap = await batchGenerateDiaries(batch);
+            
+            // 3. 分发结果
+            Object.entries(diariesMap).forEach(([simId, diaryContent]) => {
+                const sim = GameStore.sims.find(s => s.id === simId);
+                if (sim) {
+                    sim.addDiary(diaryContent);
+                }
+            });
+            
+            // 简单延时，防止瞬间并发太高（虽然是串行 await，但加个 1秒 间隔对免费版更友好）
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+        } catch (error) {
+            console.error("[AI] 批次生成失败:", error);
+        }
+    }
+    
+    // 4. 完成通知
+    GameStore.addLog(null, `Day ${day} 的市民日记已生成完毕。`, 'sys', true);
 }
 
 export function getActivePalette() {

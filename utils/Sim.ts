@@ -912,4 +912,45 @@ export class Sim {
         this.bubble.timer = 150;
         this.bubble.type = type;
     }
+
+    /**
+     * 获取昨日（刚过去的这一天）的摘要数据，用于 AI 生成
+     * @param dayNumber 需要获取哪一天的摘要（通常是昨天）
+     */
+    getDaySummary(dayNumber: number) {
+        // 筛选出指定日期的记忆
+        // 记忆格式示例: "Day 5 18:30"
+        const dayPrefix = `Day ${dayNumber} `;
+        
+        // 提取当天的重要事件（过滤掉一些琐碎的，比如普通的 sys 日志，这里假设 memories 存的都是相对重要的）
+        const todaysEvents = this.memories
+            .filter(m => m.time.startsWith(dayPrefix))
+            .map(m => m.text);
+
+        return {
+            id: this.id,
+            name: this.name,
+            gender: this.gender,
+            age: this.age,
+            mbti: this.mbti,
+            job: this.job.title,
+            mood: this.mood > 80 ? '开心' : (this.mood < 40 ? '难过' : '平静'),
+            // 如果今天没发生大事，传入空数组，AI 会自己发挥
+            events: todaysEvents.slice(0, 5) // 限制条数，防止 token 爆炸
+        };
+    }
+
+    /**
+     * 写入 AI 生成的日记
+     */
+    addDiary(content: string) {
+        // 存入记忆列表，使用特殊类型 'diary' (需要在 types.ts 里补充定义，或者暂时用 'life')
+        // 这里我们为了醒目，可以加个 emoji 前缀
+        this.addMemory(`📔 [日记] ${content}`, 'life'); 
+        
+        // 也可以选择在这里弹个气泡显示一下
+        if (Math.random() > 0.7) {
+            this.say("写完了今天的日记...", 'sys');
+        }
+    }
 }
