@@ -90,7 +90,6 @@ export const SocialLogic = {
 
     checkRelChange(sim: Sim, partner: Sim, oldLabel: string) {
         let newLabel = SocialLogic.getRelLabel(sim.relationships[partner.id] || {});
-        // [修改] 增加友谊相关的记忆触发
         const newFriendship = sim.relationships[partner.id]?.friendship || 0;
         
         if (oldLabel !== newLabel) {
@@ -105,8 +104,6 @@ export const SocialLogic = {
         }
 
         // 成为好朋友判定 (假设友谊度 60 为界)
-        const oldFriendship = partner.relationships[sim.id]?.friendship || 0; // 近似判断，这里简化处理
-        // 实际上应该存之前的 friendship 数值，但这里简单起见，利用 hasBuff 或者记忆去重
         if (newFriendship > 60 && !sim.memories.some(m => m.type === 'social' && m.relatedSimId === partner.id && m.text.includes('好朋友'))) {
              sim.addMemory(`和 ${partner.name} 成为了好朋友。`, 'social', partner.id);
         }
@@ -115,11 +112,28 @@ export const SocialLogic = {
     updateRelationship(sim: Sim, target: Sim, type: string, delta: number) {
         if (!sim.relationships[target.id]) sim.relationships[target.id] = { friendship: 0, romance: 0, isLover: false, hasRomance: false };
         let rel = sim.relationships[target.id];
+        
+        // [新增] 属性对关系增减的修正
+        // 高情商(EQ)会让所有正向社交效果更好，负向效果减弱
+        let modifier = 1.0;
+        if (delta > 0) {
+            modifier += (sim.eq - 50) * 0.01; // EQ 80 -> +30%
+        } else {
+            modifier -= (sim.eq - 50) * 0.005; // EQ 80 -> -15% bad effect
+        }
+        
+        // 高魅力(Appearance)对浪漫关系加成极大
+        if (type === 'romance' && delta > 0) {
+            modifier += (sim.appearanceScore - 50) * 0.015; // 魅力 80 -> +45% romance
+        }
+
+        const finalDelta = delta * modifier;
+
         if (type === 'friendship') {
-            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + delta));
+            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta));
         } else if (type === 'romance') {
-            rel.romance = Math.max(-100, Math.min(100, rel.romance + delta));
-            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + delta * 0.3));
+            rel.romance = Math.max(-100, Math.min(100, rel.romance + finalDelta));
+            rel.friendship = Math.max(-100, Math.min(100, rel.friendship + finalDelta * 0.3));
         }
     },
 
@@ -206,6 +220,12 @@ export const SocialLogic = {
         let success = true;
         if (finalType.type === 'romance') {
             if (partner.faithfulness > 70 && SocialLogic.hasOtherPartner(partner, sim)) success = false;
+            
+            // [新增] 颜值差距影响搭讪/表白成功率
+            // 如果发起方颜值远低于对方，成功率降低
+            const charmDiff = sim.appearanceScore - partner.appearanceScore;
+            if (charmDiff < -30) success = Math.random() > 0.6; // 颜值差距过大，较难成功
+
             if (finalType.minVal > partner.relationships[sim.id].romance + 15) success = false;
             if (finalType.special === 'breakup') success = true;
         }
@@ -239,7 +259,6 @@ export const SocialLogic = {
                 sim.addMemory(`和 ${partner.name} 分手了，往事随风。`, 'bad', partner.id);
                 partner.addMemory(`被 ${sim.name} 甩了... 💔`, 'bad', sim.id);
             } else if (finalType.special === 'propose') {
-                // [新增] 求婚逻辑 (假设成功率很高，只要 romance 够高)
                  if (partner.relationships[sim.id].romance > 90) {
                      GameStore.addLog(sim, `向 ${partner.name} 求婚成功！💍`, 'rel_event');
                      sim.addMemory(`向 ${partner.name} 求婚成功！我们将共度余生。`, 'life', partner.id);

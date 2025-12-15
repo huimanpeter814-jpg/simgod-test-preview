@@ -50,18 +50,17 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '购物 🛍️', duration: 15,
         onStart: (sim, obj) => {
             // 检查钱够不够
-            const cost = obj.cost || 50; // 默认价格
+            const cost = obj.cost || 50; 
             if (sim.money < cost) {
                 sim.say("太贵了...", 'bad');
                 return false;
             }
-            // 扣钱逻辑移到 Sim.ts 的 startInteraction 统一处理，或者在这里处理
-            // 这里返回 true 让 Sim 进入 using 状态
             return true;
         },
         onFinish: (sim, obj) => {
+            // 这里主要处理动作结束后的反馈，具体的扣钱和属性逻辑移到了 Sim.ts 的 buyItem
+            // 或者通过 startInteraction 里的 auto buy 逻辑触发
             sim.say("买买买! ✨", 'act');
-            // 增加一点心情
             sim.needs.fun += 20;
         }
     },
@@ -71,6 +70,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.skills.athletics += 0.08 * f;
             sim.needs.energy -= getRate(120);
             sim.needs.hygiene -= getRate(240);
+            // [新增] 跑步提升体质
+            sim.constitution = Math.min(100, sim.constitution + 0.05 * f);
         }
     },
     'stretch': {
@@ -79,6 +80,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.skills.athletics += 0.05 * f;
             sim.needs.energy -= getRate(120);
             sim.needs.hygiene -= getRate(240);
+            // [新增] 瑜伽提升体质
+            sim.constitution = Math.min(100, sim.constitution + 0.03 * f);
         }
     },
     'lift': {
@@ -87,6 +90,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.skills.athletics += 0.1 * f; // 力量训练技能涨得快
             sim.needs.energy -= getRate(300); // 但更累
             sim.needs.hygiene -= getRate(300);
+            // [新增] 举铁大幅提升体质
+            sim.constitution = Math.min(100, sim.constitution + 0.08 * f);
         }
     },
     'gardening': {
@@ -104,7 +109,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs.fun += getRate(120);
         },
         onFinish: (sim) => {
-            // 钓鱼结束有概率获得收益
             if (Math.random() > 0.6) {
                 const earned = 15 + sim.skills.fishing * 2;
                 sim.earnMoney(earned, 'sell_fish');
@@ -115,7 +119,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'cooking': {
         verb: '烹饪', duration: 90,
         onStart: (sim) => { 
-            // 如果是在后厨工作，设置为 working 状态，否则为 using
             if (sim.interactionTarget?.utility === 'work') {
                 sim.action = 'working';
             } else {
@@ -132,7 +135,18 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onStart: (sim) => { sim.addBuff(BUFFS.art_inspired); return true; },
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs.fun += getRate(RESTORE_TIMES.art);
+            // [新增] 看展提升创意和技能
             sim.skills.creativity += 0.03 * f;
+            sim.creativity = Math.min(100, sim.creativity + 0.05 * f);
+        }
+    },
+    'paint': {
+        verb: '绘画 🖌️', duration: 90,
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.skills.creativity += 0.08 * f;
+            // [新增] 绘画提升创意
+            sim.creativity = Math.min(100, sim.creativity + 0.08 * f);
+            sim.needs.fun += getRate(120);
         }
     },
     'play': {
@@ -148,8 +162,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '跳舞 💃', duration: 30,
         onUpdate: (sim, obj, f, getRate) => {
             sim.skills.dancing += 0.1 * f;
+            // [新增] 跳舞提升魅力和体质
+            sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.02 * f);
+            sim.constitution = Math.min(100, sim.constitution + 0.02 * f);
             sim.needs.fun += getRate(60);
-            sim.needs.energy -= getRate(200); // 消耗体力
+            sim.needs.energy -= getRate(200); 
         }
     },
 
@@ -159,33 +176,38 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         getDuration: (sim) => sim.isSideHustle ? 180 : 480,
         getVerb: (sim) => sim.isSideHustle ? '接单赚外快 💻' : '工作 💻',
         
-        // [关键修复] 必须显式设置 action 为 'working'
-        // 如果这里不设置，Sim 默认会变成 'using'，
-        // checkSchedule 就会认为还没开始工作，从而再次强制该市民去上班。
         onStart: (sim, obj) => {
             if (sim.isSideHustle) {
                 sim.action = 'using'; 
             } else {
-                sim.action = 'working'; // <--- 确保这一行存在
+                sim.action = 'working'; 
             }
             return true;
-    },
+        },
 
-    onFinish: (sim, obj) => {
-        // 赚外快结算逻辑
-        if (sim.isSideHustle && obj.label.includes('电脑')) {
-            const skillUsed = sim.skills.coding > sim.skills.creativity ? 'coding' : 'writing';
-            let skillVal = sim.skills.logic; 
-            if (skillUsed === 'writing') skillVal = sim.skills.creativity;
-            const earned = 50 + skillVal * 5; 
-            sim.skills.logic += 0.5;
-            sim.skills.creativity += 0.5;
-            sim.earnMoney(earned, 'side_hustle_pc');
+        onUpdate: (sim, obj, f, getRate) => {
+            // [新增] 工作中缓慢提升智商或创意
+            if (sim.skills.logic > sim.skills.creativity) {
+                sim.iq = Math.min(100, sim.iq + 0.01 * f);
+            } else {
+                sim.creativity = Math.min(100, sim.creativity + 0.01 * f);
+            }
+        },
+
+        onFinish: (sim, obj) => {
+            if (sim.isSideHustle && obj.label.includes('电脑')) {
+                const skillUsed = sim.skills.coding > sim.skills.creativity ? 'coding' : 'writing';
+                let skillVal = sim.skills.logic; 
+                if (skillUsed === 'writing') skillVal = sim.skills.creativity;
+                const earned = 50 + skillVal * 5; 
+                sim.skills.logic += 0.5;
+                sim.skills.creativity += 0.5;
+                // [新增] 兼职成功提升智商
+                sim.iq = Math.min(100, sim.iq + 0.2);
+                sim.earnMoney(earned, 'side_hustle_pc');
+            }
         }
-        // 正式工作的结算在 checkSchedule 的 else 分支处理，这里不需要写
-    }
-},
-
+    },
 
     'cinema_': { // 前缀匹配
         verb: '看电影 🎬', duration: 120,
@@ -193,6 +215,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onUpdate: (sim, obj, f, getRate) => {
              sim.needs.fun += getRate(120);
              sim.needs.energy -= getRate(600);
+             // [新增] 看电影略微提升情商(共情)
+             sim.eq = Math.min(100, sim.eq + 0.02 * f);
         }
     },
     // Generic Needs
@@ -221,11 +245,13 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'shower': {
         verb: '洗澡 🚿', duration: 20,
-        onStart: (sim) => { sim.action = 'using'; return true; }, // 显示正在使用
+        onStart: (sim) => { sim.action = 'using'; return true; }, 
         onUpdate: (sim, obj, f, getRate) => {
-            sim.needs.hygiene += getRate(20); // 20分钟充满
-            sim.needs.energy += getRate(400); // 稍微恢复一点精力
+            sim.needs.hygiene += getRate(20); 
+            sim.needs.energy += getRate(400); 
             sim.needs.comfort = 100;
+            // [新增] 洗澡略微恢复魅力（变干净了）
+            if (sim.appearanceScore < 80) sim.appearanceScore += 0.05 * f;
         }
     },
     'hunger': {
@@ -238,13 +264,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         duration: 60,
         getVerb: () => '小憩 💤',
         onStart: (sim) => { 
-            sim.action = 'using'; // 保持 using 状态（坐着），而不是 sleeping（躺着）
+            sim.action = 'using'; 
             return true; 
         },
         onUpdate: (sim, obj, f, getRate) => {
-            // 关键：使用 energy_nap (60分钟) 的速率来恢复 energy
             sim.needs.energy += getRate(RESTORE_TIMES.energy_nap);
-            // 顺便拉满舒适度
             if (sim.needs.comfort !== undefined) sim.needs.comfort = 100;
             sim.needs.fun += getRate(60);
         }
@@ -257,9 +281,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
              return true;
         },
         onUpdate: (sim, obj, f, getRate) => {
-            sim.needs.hunger += getRate(40); // 慢慢吃
+            sim.needs.hunger += getRate(40); 
             sim.needs.fun += getRate(100);
-            sim.needs.social += getRate(200); // 餐厅有人气
+            sim.needs.social += getRate(200); 
         },
         onFinish: (sim) => {
             sim.addBuff(BUFFS.good_meal);
@@ -269,11 +293,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '享用美食 🌭', 
         duration: 15,
         onStart: (sim, obj) => {
-            const cost = 20; // 定义一个默认食物价格
+            const cost = 20; 
             if (sim.money >= cost) { 
                 sim.money -= cost; 
-                sim.needs.hunger += 40; // 恢复饥饿
-                sim.needs.fun += 10;    // 稍微增加快乐
+                sim.needs.hunger += 40; 
+                sim.needs.fun += 10;    
                 return true; 
             }
             sim.say("买不起吃的...", 'bad'); 
@@ -287,12 +311,18 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
              if (obj.label.includes('马桶') || obj.label.includes('公厕')) return "方便";
              if (obj.label.includes('淋浴')) return "洗澡";
              if (obj.label.includes('电脑')) return "上网 ⌨️";
+             if (obj.label.includes('试妆') || obj.label.includes('镜')) return "照镜子 🪞";
              return "使用";
         },
         onUpdate: (sim, obj, f, getRate) => {
             const u = obj.utility;
             const t = RESTORE_TIMES[u] || RESTORE_TIMES.default;
             if (sim.needs[u] !== undefined) sim.needs[u] += getRate(t);
+
+            // [新增] 照镜子提升魅力
+            if (obj.label.includes('试妆') || obj.label.includes('镜')) {
+                sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.1 * f);
+            }
         }
     }
 };

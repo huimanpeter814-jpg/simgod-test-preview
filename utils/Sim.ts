@@ -33,14 +33,14 @@ export class Sim {
 
     height: number;
     weight: number;
-    appearanceScore: number;
+    appearanceScore: number; // 魅力/颜值
     luck: number;
-    constitution: number;
-    eq: number;
-    iq: number;
-    reputation: number;
-    morality: number;
-    creativity: number;
+    constitution: number;    // 体质
+    eq: number;              // 情商
+    iq: number;              // 智商
+    reputation: number;      // 声望
+    morality: number;        // 道德
+    creativity: number;      // 创意
 
     needs: any;
     skills: any;
@@ -294,9 +294,30 @@ export class Sim {
                 if (this.mbti.includes('N') && item.skill === 'logic') score += 20;
                 if (this.zodiac.element === 'fire' && item.skill === 'athletics') score += 20;
             }
+
+            // [新增] 属性提升道具的购买欲望逻辑
+            if (item.attribute) {
+                // 如果市民认为自己该属性较弱，或者该属性对其职业/目标重要，就会购买
+                // 1. 弥补短板 (Shortcoming)
+                const currentVal = (this as any)[item.attribute] || 0;
+                if (currentVal < 40) score += 30;
+
+                // 2. 职业需求 (Career Need)
+                if (item.attribute === 'iq' && this.job.companyType === 'internet') score += 40;
+                if (item.attribute === 'creativity' && this.job.companyType === 'design') score += 40;
+                if ((item.attribute === 'appearanceScore' || item.attribute === 'eq') && this.job.companyType === 'business') score += 40;
+                if (item.attribute === 'constitution' && this.job.companyType === 'restaurant') score += 30;
+
+                // 3. 人生目标 (Life Goal)
+                if (this.lifeGoal.includes('万人迷') && item.attribute === 'appearanceScore') score += 50;
+                if (this.lifeGoal.includes('大牛') && item.attribute === 'iq') score += 50;
+                if (this.lifeGoal.includes('健身') && item.attribute === 'constitution') score += 50;
+            }
+
             if (item.trigger === 'rich_hungry' && this.money > 5000) score += 50;
             if (item.trigger === 'addicted' && this.mbti.includes('P') && this.needs.fun < 30) score += 100;
             if (item.trigger === 'love' && this.hasBuff('in_love')) score += 80;
+            if (item.trigger === 'beauty' && this.appearanceScore < 50) score += 30; // 爱美之心
 
             score += Math.random() * 20;
 
@@ -307,9 +328,8 @@ export class Sim {
         });
 
         if (bestItem) {
-            if (['drink', 'book', 'museum_ticket'].includes(bestItem.id)) {
-                this.buyItem(bestItem);
-            }
+            // [优化] 所有类型的物品购买统一入口
+            this.buyItem(bestItem);
         }
         
         this.checkCareerSatisfaction();
@@ -352,6 +372,20 @@ export class Sim {
             let val = item.skillVal || 5;
             this.skills[item.skill] = Math.min(100, this.skills[item.skill] + val);
             this.say("📚 涨知识", 'act');
+        }
+
+        // [新增] 处理属性提升
+        if (item.attribute) {
+            let val = item.attrVal || 2;
+            const current = (this as any)[item.attribute] || 0;
+            (this as any)[item.attribute] = Math.min(100, current + val);
+            
+            let emoji = '✨';
+            if (item.attribute === 'appearanceScore') emoji = '💅';
+            if (item.attribute === 'constitution') emoji = '💪';
+            if (item.attribute === 'iq') emoji = '🧠';
+            
+            this.say(`${emoji} 提升!`, 'act');
         }
 
         if (item.buff) this.addBuff(BUFFS[item.buff as keyof typeof BUFFS]);
@@ -462,6 +496,11 @@ export class Sim {
                 this.say("带薪如厕 🚽", 'act');
             }
 
+            // [新增] 体质影响工作耐力
+            // 体质越低，精力消耗越快。体质 50 为基准。
+            const fatigueFactor = 1 + (50 - this.constitution) * 0.01;
+            this.needs.energy -= 0.01 * f * Math.max(0.5, fatigueFactor);
+
             if (this.needs.energy < 15) {
                 this.leaveWorkEarly();
             }
@@ -563,6 +602,8 @@ export class Sim {
                     let speedMod = 1.0;
                     if (this.mood > 90) speedMod = 1.3;
                     if (this.mood < 30) speedMod = 0.7;
+                    // [新增] 体质影响移动速度
+                    speedMod += (this.constitution - 50) * 0.005;
                     
                     const moveStep = this.speed * speedMod * (dt * 0.1);
 
@@ -689,8 +730,27 @@ export class Sim {
                 this.say(`下班! +$${this.job.salary}`, 'money');
                 this.addBuff(BUFFS.stressed);
 
+                // [新增] 工作表现计算，受属性加成
                 let dailyPerf = 5; 
-                if (this.job.companyType === 'internet' && this.skills.logic > 50) dailyPerf += 5;
+                if (this.job.companyType === 'internet') {
+                    if (this.iq > 70) dailyPerf += 5;
+                    if (this.skills.logic > 50) dailyPerf += 3;
+                } else if (this.job.companyType === 'design') {
+                    if (this.creativity > 70) dailyPerf += 5;
+                    if (this.skills.creativity > 50) dailyPerf += 3;
+                } else if (this.job.companyType === 'business') {
+                    if (this.eq > 70) dailyPerf += 5;
+                    if (this.appearanceScore > 70) dailyPerf += 3;
+                } else if (this.job.companyType === 'restaurant') {
+                    if (this.constitution > 70) dailyPerf += 5;
+                    if (this.skills.cooking > 50) dailyPerf += 3;
+                }
+
+                // 心情好表现好
+                if (this.mood > 80) dailyPerf += 2;
+
+                this.workPerformance += dailyPerf;
+
                 if (this.workPerformance > 500 && this.job.level < 4) {
                     this.promote();
                     this.workPerformance = 100;
@@ -818,6 +878,12 @@ export class Sim {
                 
                 GameStore.addLog(this, `消费: ${obj.label} -$${obj.cost}`, 'money');
                 this.say(`买! -${obj.cost}`, 'money');
+                
+                // [新增] 直接消费时也触发购买效果 (属性提升)
+                const itemDef = ITEMS.find(i => i.label === obj.label); // 简单通过 label 匹配，最好用 id
+                if(itemDef && itemDef.attribute) {
+                     this.buyItem(itemDef);
+                }
             }
 
             let handler: InteractionHandler | null = null;
@@ -913,16 +979,9 @@ export class Sim {
         this.bubble.type = type;
     }
 
-    /**
-     * 获取昨日（刚过去的这一天）的摘要数据，用于 AI 生成
-     * @param dayNumber 需要获取哪一天的摘要（通常是昨天）
-     */
     getDaySummary(dayNumber: number) {
-        // 筛选出指定日期的记忆
-        // 记忆格式示例: "Day 5 18:30"
         const dayPrefix = `Day ${dayNumber} `;
         
-        // 提取当天的重要事件（过滤掉一些琐碎的，比如普通的 sys 日志，这里假设 memories 存的都是相对重要的）
         const todaysEvents = this.memories
             .filter(m => m.time.startsWith(dayPrefix))
             .map(m => m.text);
@@ -935,20 +994,13 @@ export class Sim {
             mbti: this.mbti,
             job: this.job.title,
             mood: this.mood > 80 ? '开心' : (this.mood < 40 ? '难过' : '平静'),
-            // 如果今天没发生大事，传入空数组，AI 会自己发挥
-            events: todaysEvents.slice(0, 5) // 限制条数，防止 token 爆炸
+            events: todaysEvents.slice(0, 5) 
         };
     }
 
-    /**
-     * 写入 AI 生成的日记
-     */
     addDiary(content: string) {
-        // 存入记忆列表，使用特殊类型 'diary' (需要在 types.ts 里补充定义，或者暂时用 'life')
-        // 这里我们为了醒目，可以加个 emoji 前缀
         this.addMemory(`📔 [日记] ${content}`, 'life'); 
         
-        // 也可以选择在这里弹个气泡显示一下
         if (Math.random() > 0.7) {
             this.say("写完了今天的日记...", 'sys');
         }

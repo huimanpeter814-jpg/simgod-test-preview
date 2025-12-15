@@ -68,15 +68,23 @@ export const CONFIG = {
 // 这里直接导出，保持对外接口不变，但数据源已迁移至 data/scene.ts
 export { PALETTES, ROOMS, FURNITURE } from './data/scene';
 
+// [修改] 物品增加属性加成字段 (attribute, attrVal)
 export const ITEMS = [
     { id: 'drink', label: '冰美式', cost: 15, needs: { hunger: 2, fun: 5 }, trigger: 'street' },
-    { id: 'book', label: '设计年鉴', cost: 60, needs: { fun: 10 }, skill: 'logic', skillVal: 5, trigger: 'smart' },
+    { id: 'book', label: '设计年鉴', cost: 60, needs: { fun: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
     { id: 'cinema_2d', label: '文艺片票', cost: 30, needs: { fun: 40 }, trigger: 'bored' },
     { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { fun: 60 }, trigger: 'rich' },
-    { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { fun: 50 }, trigger: 'smart' },
-    { id: 'gym_pass', label: '私教课', cost: 100, needs: { energy: -20 }, skill: 'athletics', skillVal: 5, trigger: 'active' },
+    { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { fun: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
+    { id: 'gym_pass', label: '私教课', cost: 100, needs: { energy: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
     { id: 'medicine', label: '布洛芬', cost: 25, buff: 'well_rested', trigger: 'sad' },
     { id: 'game_coin', label: '代币', cost: 5, needs: { fun: 20 }, trigger: 'bored' },
+    
+    // [新增] 属性提升道具
+    { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { fun: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
+    { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { hunger: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
+    { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { fun: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { fun: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
+    { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { hunger: 10, fun: 10 }, rel: true, trigger: 'love' },
 ];
 
 export const SKILLS = [
@@ -88,19 +96,19 @@ export const SKILLS = [
 export const JOBS: Job[] = [
     { id: 'unemployed', title: '自由职业', level: 0, salary: 0, startHour: 0, endHour: 0, workDays: [] },
 
-    // Internet Co
+    // Internet Co (Depend on IQ & Logic)
     { id: 'dev_intern', title: '初级码农', level: 1, salary: 400, startHour: 10, endHour: 19, companyType: 'internet', workDays: [1, 2, 3, 4, 5] },
     { id: 'developer', title: '全栈开发', level: 2, salary: 800, startHour: 10, endHour: 20, companyType: 'internet', workDays: [1, 2, 3, 4, 5] },
     { id: 'senior_dev', title: '架构师', level: 3, salary: 1500, startHour: 10, endHour: 18, companyType: 'internet', workDays: [1, 2, 3, 4, 5] },
     { id: 'cto', title: '合伙人', level: 4, salary: 3000, startHour: 11, endHour: 16, companyType: 'internet', workDays: [1, 2, 3, 4, 5] },
 
-    // Design Co
+    // Design Co (Depend on Creativity & Art)
     { id: 'design_intern', title: '绘图员', level: 1, salary: 300, startHour: 9, endHour: 18, companyType: 'design', workDays: [1, 2, 3, 4, 5] },
     { id: 'designer', title: '视觉设计', level: 2, salary: 600, startHour: 10, endHour: 19, companyType: 'design', workDays: [1, 2, 3, 4, 5] },
     { id: 'senior_designer', title: '主美', level: 3, salary: 1000, startHour: 10, endHour: 18, companyType: 'design', workDays: [1, 2, 3, 4, 5] },
     { id: 'art_director', title: '创意总监', level: 4, salary: 2000, startHour: 11, endHour: 16, companyType: 'design', workDays: [1, 2, 3, 4] },
 
-    // Business Co
+    // Business Co (Depend on EQ & Charm)
     { id: 'biz_intern', title: '行政专员', level: 1, salary: 250, startHour: 9, endHour: 17, companyType: 'business', workDays: [1, 2, 3, 4, 5] },
     { id: 'clerk_biz', title: '客户经理', level: 2, salary: 500, startHour: 9, endHour: 17, companyType: 'business', workDays: [1, 2, 3, 4, 5, 6] },
     { id: 'biz_supervisor', title: '运营总监', level: 3, salary: 1000, startHour: 9, endHour: 17, companyType: 'business', workDays: [1, 2, 3, 4, 5] },
@@ -116,7 +124,7 @@ export const JOBS: Job[] = [
     { id: 'cinema_trainee', title: '检票员', level: 1, salary: 220, startHour: 10, endHour: 18, companyType: 'store', workDays: [1, 2, 3, 4, 5, 6] },
     { id: 'cinema_staff', title: '售票员', level: 2, salary: 380, startHour: 10, endHour: 19, companyType: 'store', workDays: [1, 2, 3, 4, 5, 6, 7] },
 
-    // Services (Restaurant)
+    // Services (Restaurant) (Depend on Constitution & Cooking)
     { id: 'kitchen_helper', title: '打杂', level: 1, salary: 200, startHour: 10, endHour: 20, companyType: 'restaurant', workDays: [1, 2, 3, 4, 5, 6, 7] },
     { id: 'waiter', title: '服务员', level: 2, salary: 350, startHour: 11, endHour: 20, companyType: 'restaurant', workDays: [1, 2, 3, 4, 5, 6, 7] },
     { id: 'cook', title: '厨师', level: 3, salary: 600, startHour: 10, endHour: 20, companyType: 'restaurant', workDays: [1, 2, 3, 4, 5, 6] },
