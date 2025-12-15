@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { CONFIG, ROOMS, FURNITURE } from '../constants';
+import { CONFIG } from '../constants';
 import { GameStore, gameLoopStep, getActivePalette } from '../utils/simulation';
 import { getAsset } from '../utils/assetLoader';
 import { drawAvatarHead, drawPixelProp } from '../utils/render/pixelArt';
@@ -86,8 +86,8 @@ const GameCanvas: React.FC = () => {
         ctx.fillStyle = p.bg;
         ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
 
-        // 2. 绘制房间/区域
-        ROOMS.forEach((r: any) => {
+        // 2. 绘制房间/区域 (读取 GameStore)
+        GameStore.rooms.forEach((r: any) => {
             // 外部阴影
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h);
@@ -127,8 +127,8 @@ const GameCanvas: React.FC = () => {
             }
         });
 
-        // 3. 绘制家具
-        FURNITURE.forEach((f: any) => {
+        // 3. 绘制家具 (读取 GameStore)
+        GameStore.furniture.forEach((f: any) => {
             if (f.pixelPattern !== 'zebra') {
                 ctx.fillStyle = p.furniture_shadow || 'rgba(0,0,0,0.2)';
                 ctx.fillRect(f.x + 4, f.y + 4, f.w, f.h);

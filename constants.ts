@@ -18,23 +18,6 @@ export const ASSET_CONFIG = {
     pants: getPathsFromGlob(pantsFiles)
 };
 
-const PALETTE = {
-    ground_concrete: '#e3e4e8', 
-    ground_asphalt: '#3d404b',
-    ground_grass_light: '#9bc5a2', 
-    ground_grass_dark: '#7fb088',
-    ground_water: '#89ccd9',    
-    ground_wood: '#dcc6aa',     
-    build_glass: '#d4e4ed',     
-    build_brick: '#e8d3c5',     
-    build_dark: '#2c3e50',      
-    accent_red: '#e07b7b',      
-    accent_blue: '#7dafd9',     
-    accent_yellow: '#ebd388',   
-    accent_purple: '#bcaad6',   
-    accent_green: '#8ec7b6',    
-};
-
 export const CONFIG = {
     CANVAS_W: 3000,
     CANVAS_H: 1800,
@@ -47,7 +30,8 @@ export const CONFIG = {
     }
 };
 
-export { PALETTES, ROOMS, FURNITURE } from './data/scene';
+export { PALETTES } from './data/scene';
+// [Removed] ROOMS, FURNITURE export from here
 
 // [新增] 年龄段定义
 export const AGE_CONFIG = {

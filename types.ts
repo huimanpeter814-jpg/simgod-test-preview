@@ -12,9 +12,9 @@ export interface Furniture {
   color: string;
   label: string;
   utility: string;
-  dir: string;
-  multiUser: boolean;
-  gender: string;
+  dir?: string;        // [修改] 改为可选属性 (?)
+  multiUser?: boolean; // [修改] 改为可选属性 (?)
+  gender?: string;
   reserved?: string;
   cost?: number;
   tier?: string;
@@ -34,6 +34,35 @@ export interface Furniture {
   fill?: boolean;
   borderWidth?: number;
   borderColor?: string;
+}
+
+// [新增] 地皮模板定义
+export interface PlotTemplate {
+    id: string;
+    width: number;
+    height: number;
+    rooms: any[]; // 相对坐标的房间定义
+    furniture: Furniture[]; // 相对坐标的家具定义
+}
+
+// [新增] 世界地皮实例定义
+export interface WorldPlot {
+    id: string;       // 实例ID (例如: "cbd_north")
+    templateId: string; // 使用哪个模板 (例如: "tech_hub")
+    x: number;        // 世界绝对坐标 X
+    y: number;        // 世界绝对坐标 Y
+}
+
+export interface RoomDef {
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    label: string;
+    color: string;
+    pixelPattern?: string;
+    imagePath?: string;
 }
 
 export interface Needs {
@@ -69,9 +98,9 @@ export interface Relationship {
   friendship: number;
   romance: number;
   isLover: boolean;
-  isSpouse: boolean; // [新增] 是否为配偶
+  isSpouse: boolean; 
   hasRomance: boolean;
-  kinship?: 'parent' | 'child' | 'sibling' | 'spouse' | 'none'; // [新增] 亲属关系
+  kinship?: 'parent' | 'child' | 'sibling' | 'spouse' | 'none';
 }
 
 export interface Job {
@@ -103,19 +132,18 @@ export interface SimAppearance {
 export interface Memory {
     id: string;
     time: string; 
-    type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary' | 'family'; // [新增] family 类型
+    type: 'job' | 'social' | 'life' | 'achievement' | 'bad' | 'diary' | 'family'; 
     text: string;
     relatedSimId?: string; 
 }
 
-// [新增] 年龄阶段枚举
 export type AgeStage = 'Infant' | 'Toddler' | 'Child' | 'Teen' | 'Adult' | 'MiddleAged' | 'Elder';
 
 export interface SimData {
   id: string;
-  familyId: string; // [新增] 家庭ID
+  familyId: string; 
   name: string;
-  surname: string; // [新增] 单独存储姓氏以便子女继承
+  surname: string; 
   pos: Vector2;
   gender: 'M' | 'F';
   height: number;         
@@ -136,19 +164,17 @@ export interface SimData {
   zodiac: Zodiac;
   
   age: number;
-  ageStage: AgeStage; // [修改] 使用枚举
-  health: number; // [新增] 健康值 0-100
+  ageStage: AgeStage; 
+  health: number; 
   
-  // [新增] 家族树相关ID
   partnerId: string | null;
   fatherId: string | null;
   motherId: string | null;
   childrenIds: string[];
 
-  // [新增] 怀孕相关
   isPregnant: boolean;
-  pregnancyTimer: number; // 倒计时
-  partnerForBabyId: string | null; // 孩子父亲/另一个母亲的ID
+  pregnancyTimer: number; 
+  partnerForBabyId: string | null; 
 
   lifeGoal: string;
   orientation: string;

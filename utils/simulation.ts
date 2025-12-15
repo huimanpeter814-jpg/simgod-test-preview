@@ -1,5 +1,7 @@
-import { PALETTES, HOLIDAYS, BUFFS, JOBS, FURNITURE, CONFIG, SURNAMES } from '../constants'; 
-import { LogEntry, GameTime, Job, Furniture } from '../types';
+import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
+import { PLOTS } from '../data/plots'; // [New]
+import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; // [New]
+import { LogEntry, GameTime, Job, Furniture, RoomDef } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
@@ -21,6 +23,10 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
+    // [Refactor] 存储烘焙后的世界数据
+    static rooms: RoomDef[] = [];
+    static furniture: Furniture[] = [];
+
     static furnitureIndex: Map<string, Furniture[]> = new Map();
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
     static pathFinder: PathFinder = new PathFinder(CONFIG.CANVAS_W, CONFIG.CANVAS_H, 20);
@@ -40,6 +46,52 @@ export class GameStore {
         this.notify();
     }
 
+    // [New] 重建世界：将地皮数据转化为绝对坐标数据
+    static rebuildWorld() {
+        this.rooms = [];
+        this.furniture = [];
+        
+        // 1. 添加基础设施 (道路)
+        // @ts-ignore
+        this.rooms.push(...ROADS);
+        // @ts-ignore
+        this.furniture.push(...STREET_PROPS);
+
+        // 2. 遍历地皮配置
+        WORLD_LAYOUT.forEach(plot => {
+            const template = PLOTS[plot.templateId];
+            if (!template) {
+                console.error(`Plot template not found: ${plot.templateId}`);
+                return;
+            }
+
+            // 转换房间坐标
+            template.rooms.forEach(r => {
+                this.rooms.push({
+                    ...r,
+                    id: `${plot.id}_${r.id}`, // 确保ID唯一
+                    x: r.x + plot.x,
+                    y: r.y + plot.y
+                });
+            });
+
+            // 转换家具坐标
+            template.furniture.forEach(f => {
+                this.furniture.push({
+                    ...f,
+                    id: `${plot.id}_${f.id}`,
+                    x: f.x + plot.x,
+                    y: f.y + plot.y
+                });
+            });
+        });
+
+        console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}`);
+        
+        // 3. 重建索引
+        this.initIndex();
+    }
+
     static initIndex() {
         this.furnitureIndex.clear();
         this.worldGrid.clear();
@@ -47,7 +99,8 @@ export class GameStore {
 
         const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole'];
 
-        FURNITURE.forEach(f => {
+        // 使用生成好的 this.furniture
+        this.furniture.forEach(f => {
             if (!this.furnitureIndex.has(f.utility)) {
                 this.furnitureIndex.set(f.utility, []);
             }
@@ -272,7 +325,8 @@ function generateFamily(count: number) {
 }
 
 export function initGame() {
-    GameStore.initIndex();
+    // [New] 初始化时先构建世界
+    GameStore.rebuildWorld();
 
     if (GameStore.loadGame()) {
         GameStore.addLog(null, "存档读取成功", "sys");

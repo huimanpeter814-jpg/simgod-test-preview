@@ -1,6 +1,6 @@
 import type { Sim } from '../Sim'; // Import type only to avoid circular dependency runtime issues
 import { GameStore } from '../simulation';
-import { SOCIAL_TYPES, BUFFS, ELE_COMP, ROOMS } from '../../constants';
+import { SOCIAL_TYPES, BUFFS, ELE_COMP } from '../../constants'; // [修复] 移除 ROOMS
 import { DIALOGUE_TEMPLATES } from '../../data/dialogues';
 
 type SocialType = typeof SOCIAL_TYPES[number];
@@ -8,7 +8,9 @@ type SocialType = typeof SOCIAL_TYPES[number];
 export const SocialLogic = {
     // 获取当前地点名称
     getCurrentPlaceName(sim: Sim) {
-        const room = ROOMS.find(r => 
+        // [修复] 使用 GameStore.rooms 替代静态 ROOMS
+        // GameStore.rooms 包含了所有地皮(Plot)拼接后的世界房间数据
+        const room = GameStore.rooms.find(r => 
             sim.pos.x >= r.x && sim.pos.x <= r.x + r.w &&
             sim.pos.y >= r.y && sim.pos.y <= r.y + r.h
         );

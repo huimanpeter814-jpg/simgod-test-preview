@@ -1,9 +1,8 @@
-import { Sim } from '../Sim';
+import type { Sim } from '../Sim'; // [修复] 使用 import type 打破循环依赖
 import { GameStore } from '../simulation';
-import { CONFIG, FURNITURE } from '../../constants';
+import { CONFIG } from '../../constants'; // [修复] 确保 CONFIG 被导入
 import { minutes } from '../simulationHelpers';
 import { Furniture } from '../../types';
-
 
 export const DecisionLogic = {
     decideAction(sim: Sim) {
@@ -121,8 +120,9 @@ export const DecisionLogic = {
         let options: { type: string; target: Furniture }[] = [];
 
         // 1. Coding/Writing (Need PC)
+        // [Refactor] Use GameStore.furniture instead of global constant
         if (sim.skills.logic > 5 || sim.skills.creativity > 5) {
-            let pcs = FURNITURE.filter(f => f.label.includes('电脑') && (!f.reserved || f.reserved === sim.id));
+            let pcs = GameStore.furniture.filter(f => f.label.includes('电脑') && (!f.reserved || f.reserved === sim.id));
             if (pcs.length > 0) {
                 const netCafePcs = pcs.filter(p => p.label.includes('网吧'));
                 const homePcs = pcs.filter(p => !p.label.includes('网吧'));
@@ -279,6 +279,7 @@ export const DecisionLogic = {
     },
 
     wander(sim: Sim) {
+        // [关键] 这里使用 CONFIG
         let minX = 50, maxX = CONFIG.CANVAS_W - 100;
         let minY = 100, maxY = CONFIG.CANVAS_H - 100;
         
