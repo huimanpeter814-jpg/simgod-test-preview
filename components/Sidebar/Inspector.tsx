@@ -128,6 +128,29 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
     // 年龄段配置
     const ageInfo = AGE_CONFIG[sim.ageStage];
 
+    // [新增] 关系状态显示逻辑
+    let relStatus = '单身';
+    let relStatusClass = 'bg-white/5 border-white/10 text-gray-400';
+    
+    if (partner) {
+        // 检查是否是夫妻
+        const rel = sim.relationships[partner.id];
+        if (rel && rel.isSpouse) {
+            relStatus = '已婚';
+            relStatusClass = 'bg-love/10 border-love/30 text-love font-bold';
+        } else {
+            relStatus = '恋爱中';
+            relStatusClass = 'bg-pink-500/10 border-pink-500/30 text-pink-300';
+        }
+    }
+
+    // [新增] 职业显示逻辑
+    let jobTitle = sim.job.title;
+    if (sim.ageStage === 'Infant') jobTitle = '吃奶';
+    else if (sim.ageStage === 'Toddler') jobTitle = '幼儿园';
+    else if (sim.ageStage === 'Child') jobTitle = '小学生';
+    else if (sim.ageStage === 'Teen') jobTitle = '中学生';
+
     return (
         <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
             {/* Header */}
@@ -165,10 +188,10 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         </span>
                         
                         <span 
-                            className={`text-[10px] px-2 py-0.5 rounded border ${partner ? 'bg-love/10 border-love/30 text-love' : 'bg-white/5 border-white/10 text-gray-400'}`} 
+                            className={`text-[10px] px-2 py-0.5 rounded border ${relStatusClass}`} 
                             title="情感状态"
                         >
-                            {partner ? `恋爱中` : '单身'}
+                            {relStatus}
                         </span>
 
                         <span className="text-[10px] px-2 py-0.5 rounded bg-accent/20 text-accent font-bold border border-accent/20" title="MBTI">{sim.mbti}</span>
@@ -185,7 +208,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         </span>
                         
                         <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30" title="职业">
-                            {sim.job.title}
+                            {jobTitle}
                         </span>
 
                         <span className="text-[10px] px-2 py-0.5 rounded bg-warning/10 text-warning border border-warning/20" title="人生目标">
@@ -482,7 +505,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                 </div>
                                 <div className="bg-white/5 p-2 rounded border border-white/5">
                                     <div className="text-[10px] text-gray-400">当前职位</div>
-                                    <div className="text-xs font-bold text-gray-200">{sim.job.title} <span className="text-[9px] opacity-50">Lv.{sim.job.level}</span></div>
+                                    <div className="text-xs font-bold text-gray-200">{jobTitle} {sim.job.id !== 'unemployed' && <span className="text-[9px] opacity-50">Lv.{sim.job.level}</span>}</div>
                                 </div>
                                 <div className="bg-white/5 p-2 rounded border border-white/5">
                                     <div className="text-[10px] text-gray-400">今日预算</div>

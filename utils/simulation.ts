@@ -1,4 +1,4 @@
-import { PALETTES, HOLIDAYS, BUFFS, JOBS, FURNITURE, CONFIG } from '../constants'; 
+import { PALETTES, HOLIDAYS, BUFFS, JOBS, FURNITURE, CONFIG, SURNAMES } from '../constants'; 
 import { LogEntry, GameTime, Job, Furniture } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
@@ -179,6 +179,15 @@ export class GameStore {
             location.reload();
         }
     }
+
+    // 暴露静态方法供 UI 调用
+    static spawnFamily() {
+        const size = 1 + Math.floor(Math.random() * 4); // 1-4人家庭
+        const fam = generateFamily(size);
+        this.sims.push(...fam);
+        this.addLog(null, `新家庭搬入城市！共 ${fam.length} 人。`, "sys");
+        this.notify();
+    }
 }
 
 // 按照家庭生成初始人口
@@ -187,14 +196,8 @@ function generateFamily(count: number) {
     const baseX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
     const baseY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
     
-    // 随机姓氏 (家庭共享)
-    const surnames = ['李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
-    '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗',
-    '梁', '宋', '郑', '谢', '韩', '唐', '冯', '于', '董', '萧',
-    '程', '曹', '袁', '邓', '许', '傅', '沈', '曾', '彭', '吕',
-    '苏', '卢', '蒋', '蔡', '贾', '丁', '魏', '薛', '叶', '阎',
-    '欧阳', '上官', '慕容', '司徒', '皇甫'];
-    const familySurname = surnames[Math.floor(Math.random() * surnames.length)];
+    // 父母各自的姓氏 (不再强制家庭共享)
+    const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
 
     const members: Sim[] = [];
 
@@ -208,11 +211,14 @@ function generateFamily(count: number) {
     let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
     if (isSameSex) p2Gender = p1Gender;
 
-    const parent1 = new Sim({ x: baseX, y: baseY, surname: familySurname, familyId, ageStage: 'Adult', gender: p1Gender });
+    const p1Surname = getSurname();
+    const parent1 = new Sim({ x: baseX, y: baseY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender });
     members.push(parent1);
 
+    let parent2: Sim | null = null;
     if (parentCount === 2) {
-        const parent2 = new Sim({ x: baseX + 30, y: baseY, surname: familySurname, familyId, ageStage: 'Adult', gender: p2Gender });
+        const p2Surname = getSurname(); // 配偶可以不同姓
+        parent2 = new Sim({ x: baseX + 30, y: baseY, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender });
         members.push(parent2);
         
         // 设置夫妻关系
@@ -227,15 +233,21 @@ function generateFamily(count: number) {
         // 这里不需要显式类型，Sim 构造函数会处理字符串
         const ageStage = r > 0.6 ? 'Child' : (r > 0.3 ? 'Teen' : 'Toddler');
         
+        // 孩子跟谁姓？随机
+        let childSurname = p1Surname;
+        if (parent2 && Math.random() > 0.5) {
+            childSurname = parent2.surname;
+        }
+
         const child = new Sim({ 
             x: baseX + (i+1)*20, 
             y: baseY + 20, 
-            surname: familySurname, 
+            surname: childSurname, 
             familyId, 
             ageStage,
             // 确保 fatherId/motherId 是 string | undefined
-            fatherId: p1Gender === 'M' ? parent1.id : (parentCount === 2 && p2Gender === 'M' ? members[1].id : undefined),
-            motherId: p1Gender === 'F' ? parent1.id : (parentCount === 2 && p2Gender === 'F' ? members[1].id : undefined)
+            fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
+            motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined)
         });
         
         // 绑定亲属关系

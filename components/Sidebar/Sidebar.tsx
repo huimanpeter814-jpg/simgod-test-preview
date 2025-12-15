@@ -23,9 +23,8 @@ const GameOverlay: React.FC = () => {
         return unsub;
     }, []);
 
-    const handleSpawn = () => {
-        GameStore.sims.push(new Sim(450, 350));
-        GameStore.notify();
+    const handleSpawnFamily = () => {
+        GameStore.spawnFamily();
     };
 
     return (
@@ -70,7 +69,7 @@ const GameOverlay: React.FC = () => {
 
                 {/* Spawn Button */}
                 <button
-                    onClick={handleSpawn}
+                    onClick={handleSpawnFamily}
                     className="
                         group flex items-center gap-3 
                         bg-[#00b894] hover:bg-[#55efc4] text-[#121212] 
@@ -79,14 +78,14 @@ const GameOverlay: React.FC = () => {
                         border-2 border-[#fff]/20 hover:border-white
                         transition-all duration-300 transform hover:scale-105 active:scale-95
                     "
-                    title="add random new sim"
+                    title="Add a new family to the town"
                 >
                     <div className="bg-black/20 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-black group-hover:rotate-90 transition-transform duration-300">
                         +
                     </div>
                     <div className="flex flex-col items-start">
                         <span className="font-pixel text-xs font-bold opacity-80">SYSTEM</span>
-                        <span className="font-inter text-lg font-black tracking-wide leading-none">ADD SIM</span>
+                        <span className="font-inter text-lg font-black tracking-wide leading-none">ADD FAMILY</span>
                     </div>
                 </button>
             </div>

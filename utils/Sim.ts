@@ -116,11 +116,34 @@ export class Sim {
 
         this.gender = config.gender || (Math.random() > 0.5 ? 'M' : 'F');
 
-        const baseHeight = this.gender === 'M' ? 175 : 163;
-        this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
+        // 年龄初始化逻辑
+        this.ageStage = config.ageStage || 'Adult';
+        const stageConfig = AGE_CONFIG[this.ageStage];
+        this.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
+
+        // 根据年龄段生成身高体重
+        if (this.ageStage === 'Infant') {
+            this.height = 50 + Math.random() * 25; // 50-75cm
+            this.weight = 3 + Math.random() * 7;   // 3-10kg
+        } else if (this.ageStage === 'Toddler') {
+            this.height = 80 + Math.random() * 20; // 80-100cm
+            this.weight = 10 + Math.random() * 6;  // 10-16kg
+        } else if (this.ageStage === 'Child') {
+            this.height = 110 + Math.random() * 30; // 110-140cm
+            this.weight = 20 + Math.random() * 15;  // 20-35kg
+        } else if (this.ageStage === 'Teen') {
+            this.height = 150 + Math.random() * 25; // 150-175cm
+            this.weight = 40 + Math.random() * 25;  // 40-65kg
+        } else {
+            const baseHeight = this.gender === 'M' ? 175 : 163;
+            this.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
+            const bmi = 18 + Math.random() * 8; 
+            this.weight = Math.floor((this.height / 100) * (this.height / 100) * bmi);
+        }
         
-        const bmi = 18 + Math.random() * 8; 
-        this.weight = Math.floor((this.height / 100) * (this.height / 100) * bmi);
+        // 保留两位小数
+        this.height = Math.floor(this.height);
+        this.weight = Math.floor(this.weight);
         
         const rand = (Math.random() + Math.random() + Math.random()) / 3;
         this.appearanceScore = Math.floor(rand * 100);
@@ -155,11 +178,6 @@ export class Sim {
         this.mbti = MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
         this.zodiac = ZODIACS[Math.floor(Math.random() * ZODIACS.length)];
         
-        // 年龄初始化逻辑
-        this.ageStage = config.ageStage || 'Adult';
-        const stageConfig = AGE_CONFIG[this.ageStage];
-        this.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
-        
         this.health = 90 + Math.random() * 10; // 初始健康
 
         this.lifeGoal = LIFE_GOALS[Math.floor(Math.random() * LIFE_GOALS.length)];
@@ -184,9 +202,11 @@ export class Sim {
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
+        // 初始金钱
         this.money = 1000 + Math.floor(Math.random() * 2000);
-        if (this.ageStage === 'Infant' || this.ageStage === 'Child' || this.ageStage === 'Toddler') {
-            this.money = 0; // 孩子没钱
+        // 青少年及以下没有财务能力
+        if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
+            this.money = 0; 
         }
 
         this.metabolism = {};
@@ -354,6 +374,12 @@ export class Sim {
                 this.say(`我长大了！变成 ${AGE_CONFIG[this.ageStage].label} 了`, 'sys');
                 this.addMemory(`在这个月，我成长为了 ${AGE_CONFIG[this.ageStage].label}。`, 'life');
                 
+                // [新增] 长大时长个子
+                if (this.ageStage === 'Toddler') { this.height += 30; this.weight += 7; }
+                else if (this.ageStage === 'Child') { this.height += 30; this.weight += 15; }
+                else if (this.ageStage === 'Teen') { this.height += 30; this.weight += 20; }
+                else if (this.ageStage === 'Adult') { this.height += 5; this.weight += 5; }
+
                 // 成年后找工作
                 if (this.ageStage === 'Adult' && this.job.id === 'unemployed') {
                     this.assignJob();
@@ -410,6 +436,12 @@ export class Sim {
     }
 
     calculateDailyBudget() {
+        // 小孩没预算
+        if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
+            this.dailyBudget = 0;
+            return;
+        }
+
         let safetyPercent = 0.2;
         const isEarth = this.zodiac.element === 'earth';
         const isFire = this.zodiac.element === 'fire';
@@ -433,6 +465,9 @@ export class Sim {
         if (this.action !== 'wandering' && this.action !== 'idle') {
             return;
         }
+
+        // 没财务能力的不用检查
+        if (this.money <= 0) return;
 
         if (this.money < 100) {
             if (!this.hasBuff('broke') && !this.hasBuff('anxious')) {
@@ -833,15 +868,24 @@ export class Sim {
         // 随机性别 - [修复] 显式声明类型
         const gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
         
+        // 孩子跟谁姓？随机
+        let babySurname = this.surname;
+        if (this.partnerForBabyId) {
+            const partner = GameStore.sims.find(s => s.id === this.partnerForBabyId);
+            if (partner && Math.random() > 0.5) {
+                babySurname = partner.surname;
+            }
+        }
+
         // 创建婴儿 Sim
         const baby = new Sim({
             x: this.pos.x + 20,
             y: this.pos.y + 20,
-            surname: this.surname,
+            surname: babySurname, // 随机继承姓氏
             familyId: this.familyId,
             ageStage: 'Infant',
             gender: gender,
-            motherId: this.id,
+            motherId: this.id, // 这里假设当前 Sim 是"母亲"（承载者）
             fatherId: this.partnerForBabyId || undefined,
         });
 
@@ -1116,6 +1160,7 @@ export class Sim {
             let obj = this.interactionTarget as Furniture;
 
             if (obj.cost) {
+                // 如果没钱，就不买
                 if (this.money < obj.cost) {
                     this.say("太贵了...", 'bad');
                     this.reset();

@@ -143,15 +143,7 @@ export const SocialLogic = {
         sim.partnerId = partner.id;
         partner.partnerId = sim.id;
         
-        // 改姓 (简单逻辑：随机选一方姓氏或保留)
-        if (Math.random() > 0.5) {
-            sim.surname = partner.surname;
-            sim.name = partner.surname + sim.name.substring(1);
-        } else {
-            partner.surname = sim.surname;
-            partner.name = sim.surname + partner.name.substring(1);
-        }
-        
+        // 移除强制改姓逻辑，夫妻可以不同姓
         // 统一家庭ID
         partner.familyId = sim.familyId;
 
@@ -327,6 +319,29 @@ export const SocialLogic = {
         }
     },
 
+    // 确定怀孕方：综合判断体质、健康、运气
+    determinePregnantSim(simA: Sim, simB: Sim): Sim | null {
+        // 评分函数：体质权重40%，健康权重40%，运气20%
+        const getScore = (s: Sim) => s.constitution * 0.4 + s.health * 0.4 + s.luck * 0.2;
+        
+        const scoreA = getScore(simA);
+        const scoreB = getScore(simB);
+        
+        // 如果双方健康值都太低，可能怀不上
+        if (simA.health < 40 && simB.health < 40) return null;
+
+        // 概率倾向于分数高的一方，但也保留随机性
+        const totalScore = scoreA + scoreB;
+        if (totalScore === 0) return Math.random() > 0.5 ? simA : simB;
+
+        const chanceA = scoreA / totalScore;
+        
+        // 如果是异性，通常生物学女性更容易怀，但为了满足"男性也能怀孕"的需求，这里纯粹看属性
+        // 但我们可以给女性一个微小的基础加成，或者完全平等
+        // 这里完全按照属性决定
+        return Math.random() < chanceA ? simA : simB;
+    },
+
     performSocial(sim: Sim, partner: Sim) {
         // 综合计算初始契合度
         // const mbtiComp = SocialLogic.getCompatibility(sim, partner);
@@ -488,18 +503,25 @@ export const SocialLogic = {
                 // 生育判定
                 const bothWant = sim.mood > 50 && partner.mood > 50 && sim.money > 500;
                 if (bothWant) {
-                    // 概率 = 体质 + 运气
+                    // 概率 = 双方健康/运气加成
                     let prob = (sim.constitution + sim.luck + partner.constitution + partner.luck) / 400;
                     if (Math.random() < prob) {
-                        // 谁怀孕？女性优先，或者随机
-                        const mother = sim.gender === 'F' ? sim : (partner.gender === 'F' ? partner : (Math.random() > 0.5 ? sim : partner));
-                        mother.isPregnant = true;
-                        mother.pregnancyTimer = 1440; // 24h
-                        mother.partnerForBabyId = (mother === sim) ? partner.id : sim.id;
-                        mother.addBuff(BUFFS.pregnant);
+                        // [Logic Update] 谁怀孕？根据属性综合判定，男性也可怀孕
+                        const carrier = SocialLogic.determinePregnantSim(sim, partner);
                         
-                        GameStore.addLog(sim, `与 ${partner.name} 备孕成功！期待新生命的降临 👶`, 'family');
-                        sim.say("我要当爸爸/妈妈了！", 'love');
+                        if (carrier) {
+                            carrier.isPregnant = true;
+                            carrier.pregnancyTimer = 1440; // 24h
+                            carrier.partnerForBabyId = (carrier === sim) ? partner.id : sim.id;
+                            carrier.addBuff(BUFFS.pregnant);
+                            
+                            GameStore.addLog(sim, `与 ${partner.name} 备孕成功！期待新生命的降临 👶`, 'family');
+                            carrier.say("我要有宝宝了！", 'love');
+                            if (carrier !== sim) sim.say("我要当爸爸/妈妈了！", 'love');
+                            else partner.say("我要当爸爸/妈妈了！", 'love');
+                        } else {
+                            sim.say("身体状况不太好...", 'bad');
+                        }
                     } else {
                         sim.say("好像没怀上...", 'normal');
                     }
@@ -517,13 +539,15 @@ export const SocialLogic = {
                 
                 // 意外怀孕
                 if (!isSafe && Math.random() < 0.2) { // 20% 意外几率
-                     const mother = sim.gender === 'F' ? sim : (partner.gender === 'F' ? partner : null);
-                     if (mother && !mother.isPregnant) {
-                         mother.isPregnant = true;
-                         mother.pregnancyTimer = 1440;
-                         mother.partnerForBabyId = (mother === sim) ? partner.id : sim.id;
-                         mother.addBuff(BUFFS.pregnant);
-                         GameStore.addLog(mother, `意外怀孕了...`, 'family');
+                     // [Logic Update] 意外怀孕也根据属性判定
+                     const carrier = SocialLogic.determinePregnantSim(sim, partner);
+                     
+                     if (carrier && !carrier.isPregnant) {
+                         carrier.isPregnant = true;
+                         carrier.pregnancyTimer = 1440;
+                         carrier.partnerForBabyId = (carrier === sim) ? partner.id : sim.id;
+                         carrier.addBuff(BUFFS.pregnant);
+                         GameStore.addLog(carrier, `糟糕，意外怀孕了...`, 'family');
                      }
                 }
             } else {
