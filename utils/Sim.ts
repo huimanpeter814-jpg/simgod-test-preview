@@ -20,7 +20,7 @@ interface SimInitConfig {
     motherId?: string;
     orientation?: string;
     homeId?: string | null;
-    money?: number; // 允许外部传入初始资金
+    money?: number; 
 }
 
 export class Sim {
@@ -42,6 +42,7 @@ export class Sim {
     skinColor: string;
     hairColor: string;
     clothesColor: string;
+    pantsColor: string; // [新增]
     appearance: SimAppearance;
 
     mbti: string;
@@ -90,7 +91,7 @@ export class Sim {
     isSideHustle: boolean = false;
     currentShiftStart: number = 0;
 
-    schoolPerformance: number = 60; // 学业表现
+    schoolPerformance: number = 60; 
     
     hasLeftWorkToday: boolean = false;
 
@@ -124,7 +125,6 @@ export class Sim {
 
         this.gender = config.gender || (Math.random() > 0.5 ? 'M' : 'F');
 
-        // 年龄初始化逻辑
         this.ageStage = config.ageStage || 'Adult';
         const stageConfig = AGE_CONFIG[this.ageStage];
         this.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
@@ -169,6 +169,8 @@ export class Sim {
         this.skinColor = CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];
         this.hairColor = CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
         this.clothesColor = CONFIG.COLORS.clothes[Math.floor(Math.random() * CONFIG.COLORS.clothes.length)];
+        // [新增] 随机分配裤子颜色
+        this.pantsColor = CONFIG.COLORS.pants[Math.floor(Math.random() * CONFIG.COLORS.pants.length)];
 
         this.appearance = {
             face: ASSET_CONFIG.face.length > 0 ? ASSET_CONFIG.face[Math.floor(Math.random() * ASSET_CONFIG.face.length)] : '',
@@ -203,11 +205,9 @@ export class Sim {
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
-        // [修改] 资金初始化逻辑: 如果传入了 config.money 则使用，否则随机生成贫困/普通资金
         if (config.money !== undefined) {
             this.money = config.money;
         } else {
-            // 默认随机：普通人
             this.money = 500 + Math.floor(Math.random() * 1000);
         }
         
@@ -283,7 +283,6 @@ export class Sim {
         );
     }
 
-    // ... (rest of methods)
     addMemory(text: string, type: Memory['type'], relatedSimId?: string) {
         const timeStr = `Y${GameStore.time.year} M${GameStore.time.month} | ${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
         const newMemory: Memory = {
@@ -622,25 +621,20 @@ export class Sim {
                     if(Math.random() > 0.8) this.say("宝宝踢我了...", 'act');
                 }
             }
-            // 每日零花钱 (早上6点)
             if (GameStore.time.hour === 6 && GameStore.time.minute === 0) {
                 SchoolLogic.giveAllowance(this);
             }
         }
 
-        // [修改] 动作判断
         if (this.action === 'commuting_school') {
             this.commuteTimer += dt;
-            // 简单处理：通勤一定时间后到达
             if (this.commuteTimer > 1200 && this.target) {
                 this.pos = { ...this.target };
                 this.action = 'schooling';
                 this.say("上课中...", 'act');
             }
         } else if (this.action === 'schooling') {
-            // 上课中，需求下降减缓
-            this.needs.fun -= 0.005 * dt; // 没那么无聊
-            // 增加知识
+            this.needs.fun -= 0.005 * dt; 
             this.skills.logic += 0.002 * dt;
         }
 
@@ -656,7 +650,6 @@ export class Sim {
         }
 
         if (['Infant', 'Toddler'].includes(this.ageStage)) {
-            // [FIX] 修复婴幼儿“反复横跳”Bug：如果正在上学或去学校，不要触发回家逻辑
             if (this.homeId && !this.isAtHome() && this.action !== 'schooling' && this.action !== 'commuting_school') {
                 if (!this.target || this.action !== 'moving_home') {
                     const homePos = this.getHomeLocation();
@@ -687,7 +680,7 @@ export class Sim {
                     }
                 }
             }
-            else if (this.action !== 'schooling' && this.action !== 'commuting_school') { // 上学状态下不跟随
+            else if (this.action !== 'schooling' && this.action !== 'commuting_school') { 
                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                 if (parent) {
                     const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
@@ -800,9 +793,8 @@ export class Sim {
                 this.path = []; 
                 this.currentPathIndex = 0;
                 this.commuteTimer = 0;
-                // 添加对 commuting_school 的特判
                 if (this.action === 'commuting_school') {
-                    this.action = 'schooling'; // 锁定为上学状态
+                    this.action = 'schooling'; 
                     this.say("乖乖上学", 'act');
                 } 
                 else if (this.action !== 'moving_home') {

@@ -265,21 +265,40 @@ const GameCanvas: React.FC = () => {
             const headSize = ageConfig.headSize || 13;
 
             // 绘制小人身体
-            // 裤子 (下半身)
-            ctx.fillStyle = '#455A64'; 
-            ctx.fillRect(-w / 2, -h * 0.5, w, h * 0.5);
+            // [修复] 婴儿穿纸尿裤，其他人穿彩色裤子
+            if (sim.ageStage === 'Infant') {
+                // 纸尿裤 (白色)
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                // 绘制一个类似尿布的形状
+                ctx.roundRect(-w / 2 + 1, -h * 0.4, w - 2, h * 0.4, 4);
+                ctx.fill();
+                // 衣服 (Baby shirt)
+                const shoulderY = -h + (headSize * 0.6); 
+                ctx.fillStyle = sim.clothesColor;
+                ctx.fillRect(-w / 2, shoulderY, w, h * 0.4); 
+            } else {
+                // 正常裤子 (下半身)
+                // [修复] 使用 sim.pantsColor 并调整高度以防遮挡
+                ctx.fillStyle = sim.pantsColor || '#455A64'; 
+                // 裤子从腰部 (-h * 0.45) 到底部 (0)
+                ctx.fillRect(-w / 2, -h * 0.45, w, h * 0.45);
+                
+                // 衣服 (上半身) - 覆盖裤子腰部
+                const shoulderY = -h + (headSize * 0.6); 
+                // 衣服延伸到 -h * 0.4，比裤子腰线(-0.45h)略低，形成遮盖
+                const shirtBottomY = -h * 0.25;
+                
+                ctx.fillStyle = sim.clothesColor;
+                ctx.fillRect(-w / 2, shoulderY, w, shirtBottomY - shoulderY); 
+            }
             
-            // 衣服 (上半身) - 模拟衣服覆盖在裤子上
+            // 手臂 (通用)
             const shoulderY = -h + (headSize * 0.6); 
-            const legStartY = -h * 0.45;
-            
-            ctx.fillStyle = sim.clothesColor;
-            ctx.fillRect(-w / 2, shoulderY, w, legStartY - shoulderY + 2); 
-            
-            // 手臂
-            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            const shirtBottomY = -h * 0.4; // 与衣服一致
+            ctx.fillStyle = 'rgba(0,0,0,0.1)'; // 手臂阴影
             const armW = Math.max(3, w * 0.2);
-            const armH = (legStartY - shoulderY) * 0.8;
+            const armH = (shirtBottomY - shoulderY) * 0.9;
             ctx.fillRect(-w/2, shoulderY, armW, armH); // Left
             ctx.fillRect(w/2 - armW, shoulderY, armW, armH); // Right
 

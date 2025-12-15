@@ -34,12 +34,9 @@ export interface Furniture {
   fill?: boolean;
   borderWidth?: number;
   borderColor?: string;
-  
-  // [新增] 归属权字段，用于标记家具属于哪个家
   homeId?: string; 
 }
 
-// [新增] 住房单元定义
 export interface HousingUnit {
     id: string;       
     name: string;     
@@ -49,7 +46,6 @@ export interface HousingUnit {
     area: { x: number, y: number, w: number, h: number }; 
 }
 
-// 地皮模板定义
 export interface PlotTemplate {
     id: string;
     width: number;
@@ -77,7 +73,6 @@ export interface RoomDef {
     color: string;
     pixelPattern?: string;
     imagePath?: string;
-    // [新增]
     homeId?: string;
 }
 
@@ -176,6 +171,7 @@ export interface SimData {
   skinColor: string;
   hairColor: string;
   clothesColor: string;
+  pantsColor: string; // [新增]
   appearance: SimAppearance;
   mbti: string;
   zodiac: Zodiac;
@@ -218,7 +214,7 @@ export interface SimData {
   target?: Vector2 | null;
   interactionTarget?: any;
 
-  schoolPerformance?: number; // 0-100
+  schoolPerformance?: number; 
 }
 
 export interface LogEntry {

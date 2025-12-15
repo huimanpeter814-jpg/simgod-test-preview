@@ -26,14 +26,24 @@ export const CONFIG = {
         hair: ['#2b2b2b', '#4a3b32', '#8c6b5d', '#d9c2a3', '#a83f3f', '#3e5f8a'], 
         clothes: [
             '#e66767', '#f19066', '#f5cd79', '#63cdda', '#cf6a87', '#786fa6', '#546de5'
+        ],
+        // [新增] 裤子颜色库
+        pants: [
+            '#2d3436', // 黑/深灰
+            '#636e72', // 灰
+            '#0984e3', // 牛仔蓝
+            '#74b9ff', // 浅蓝
+            '#d63031', // 深红
+            '#e17055', // 砖红
+            '#fdcb6e', // 卡其色
+            '#6c5ce7', // 紫色
+            '#00b894'  // 墨绿
         ]
     }
 };
 
 export { PALETTES } from './data/scene';
-// [Removed] ROOMS, FURNITURE export from here
 
-// [修改] 年龄段定义 - 增加体型配置 (width, height, headSize)
 export const AGE_CONFIG = {
     Infant: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb', width: 12, height: 16, headSize: 8 },
     Toddler: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3', width: 14, height: 22, headSize: 10 },
@@ -51,14 +61,13 @@ export const ITEMS = [
     { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { fun: 60 }, trigger: 'rich' },
     { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { fun: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
     { id: 'gym_pass', label: '私教课', cost: 100, needs: { energy: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
-    { id: 'medicine', label: '急救包', cost: 100, buff: 'healing', trigger: 'sick' }, // [修改] 增加回血道具
+    { id: 'medicine', label: '急救包', cost: 100, buff: 'healing', trigger: 'sick' },
     { id: 'game_coin', label: '代币', cost: 5, needs: { fun: 20 }, trigger: 'bored' },
     { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { fun: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
     { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { hunger: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
     { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { fun: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
     { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { fun: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
     { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { hunger: 10, fun: 10 }, rel: true, trigger: 'love' },
-    // [新增] 避孕/助孕道具
     { id: 'protection', label: '安全措施', cost: 20, trigger: 'safe_sex' },
 ];
 
@@ -105,7 +114,7 @@ export const JOBS: Job[] = [
     { id: 'cook', title: '厨师', level: 3, salary: 600, startHour: 10, endHour: 20, companyType: 'restaurant' },
     { id: 'head_chef', title: '行政主厨', level: 4, salary: 1200, startHour: 10, endHour: 19, companyType: 'restaurant' },
 
-    // Library - 比如老师或管理员在寒暑假(2月, 7月)放假
+    // Library
     { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: 'library', vacationMonths: [2, 7] }
 ];
 
@@ -142,8 +151,7 @@ export const BUFFS = {
     shopping_spree: { id: 'shopping_spree', label: '剁手快乐', type: 'good' as const, duration: 180 },
     vacation_chill: { id: 'vacation_chill', label: '悠长假期', type: 'good' as const, duration: 400 },
 
-    // [新增] 家庭相关
-    pregnant: { id: 'pregnant', label: '孕育新生命', type: 'good' as const, duration: 1440 }, // 24小时游戏时间
+    pregnant: { id: 'pregnant', label: '孕育新生命', type: 'good' as const, duration: 1440 },
     new_parent: { id: 'new_parent', label: '初为人父/母', type: 'good' as const, duration: 600 },
     married: { id: 'married', label: '新婚燕尔', type: 'good' as const, duration: 600 },
     divorced: { id: 'divorced', label: '婚姻破裂', type: 'bad' as const, duration: 600 },
@@ -223,13 +231,13 @@ export const SOCIAL_TYPES = [
     { id: 'flirt', label: '调情', val: 10, type: 'romance', minVal: 30, maxVal: 100, logType: 'love' },
     { id: 'hug', label: '抱抱', val: 15, type: 'romance', minVal: 50, maxVal: 100, logType: 'love', special: 'hug' },
     { id: 'kiss', label: '亲亲', val: 20, type: 'romance', minVal: 70, maxVal: 100, logType: 'love', special: 'kiss' },
-    { id: 'woohoo', label: '嘿咻', val: 40, type: 'romance', minVal: 80, maxVal: 100, logType: 'love', special: 'woohoo' }, // [新增]
+    { id: 'woohoo', label: '嘿咻', val: 40, type: 'romance', minVal: 80, maxVal: 100, logType: 'love', special: 'woohoo' }, 
     { id: 'confess', label: '表白', val: 30, type: 'romance', minVal: 40, maxVal: 100, logType: 'love', special: 'confess' },
     { id: 'propose', label: '求婚', val: 50, type: 'romance', minVal: 90, maxVal: 100, logType: 'love', special: 'propose' },
-    { id: 'marriage', label: '结婚', val: 100, type: 'romance', minVal: 95, maxVal: 100, logType: 'rel_event', special: 'marriage' }, // [新增]
-    { id: 'try_baby', label: '备孕', val: 20, type: 'romance', minVal: 90, maxVal: 100, logType: 'family', special: 'try_baby' }, // [新增]
+    { id: 'marriage', label: '结婚', val: 100, type: 'romance', minVal: 95, maxVal: 100, logType: 'rel_event', special: 'marriage' }, 
+    { id: 'try_baby', label: '备孕', val: 20, type: 'romance', minVal: 90, maxVal: 100, logType: 'family', special: 'try_baby' }, 
     { id: 'breakup', label: '分手', val: -50, type: 'romance', minVal: -100, maxVal: -60, logType: 'bad', special: 'breakup' },
-    { id: 'divorce', label: '离婚', val: -100, type: 'romance', minVal: -100, maxVal: -80, logType: 'bad', special: 'divorce' }, // [新增]
+    { id: 'divorce', label: '离婚', val: -100, type: 'romance', minVal: -100, maxVal: -80, logType: 'bad', special: 'divorce' },
     { id: 'argue', label: '吵架', val: -15, type: 'friendship', minVal: -100, maxVal: 100, logType: 'bad' }
 ];
 
@@ -240,7 +248,7 @@ export const BASE_DECAY = {
     social: 0.8,
     bladder: 0.8,
     hygiene: 0.5,
-    health: 0.0 // 默认不衰减，特殊情况衰减
+    health: 0.0 
 };
 
 export const ORIENTATIONS = [
@@ -263,13 +271,13 @@ export const SCHOOL_CONFIG = {
         startHour: 8,
         endHour: 15,
         stages: ['Child'],
-        allowanceBase: 20 // 基础零花钱
+        allowanceBase: 20
     },
     high_school: {
         id: 'high_school',
-        label: '星海中学',
-        startHour: 7.5, // 7:30
-        endHour: 18, // 晚自习
+        label: '第一中学',
+        startHour: 7.5,
+        endHour: 18, 
         stages: ['Teen'],
         allowanceBase: 50
     }

@@ -1,4 +1,4 @@
-import { SimData } from '../../types';
+import { SimData, AgeStage } from '../../types';
 import { getAsset } from '../assetLoader';
 
 // ==========================================
@@ -6,14 +6,40 @@ import { getAsset } from '../assetLoader';
 // 包含：家具绘制、程序化发型、头像合成
 // ==========================================
 
-// 1. 绘制像素发型
-const drawPixelHair = (ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string, styleIndex: number) => {
-    ctx.fillStyle = color;
+// 1. 绘制像素发型 (更新支持年龄段)
+const drawPixelHair = (ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string, styleIndex: number, ageStage: AgeStage) => {
     
+    // [新增] 婴儿与老人的特殊发型处理
+    if (ageStage === 'Infant') {
+        // 婴儿：只有稀疏几根毛
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y - s - 1, 2, 3);
+        ctx.fillRect(x - 3, y - s, 2, 2);
+        ctx.fillRect(x + 3, y - s, 2, 2);
+        return;
+    }
+
+    // 老人：强制发色变灰/白
+    if (ageStage === 'Elder') {
+        // 随机灰度
+        const greyScale = ['#dcdde1', '#7f8fa6', '#b2bec3'];
+        // 使用 id 哈希来固定颜色选择
+        const hash = styleIndex % greyScale.length;
+        ctx.fillStyle = greyScale[hash];
+    } else {
+        ctx.fillStyle = color;
+    }
+
     // 基础发量（除秃顶/莫霍克外，大部分发型通用的后脑勺部分）
     const isBalding = styleIndex === 9;
     const isMohawk = styleIndex === 7;
     
+    // 老人更容易秃顶
+    if (ageStage === 'Elder' && styleIndex % 3 === 0) {
+        // 强制使用秃顶样式
+        styleIndex = 9;
+    }
+
     if (!isBalding && !isMohawk) {
         ctx.fillRect(x - s, y - s - 4, s * 2, s); 
     }
@@ -91,7 +117,7 @@ const drawPixelHair = (ctx: CanvasRenderingContext2D, x: number, y: number, s: n
             break;
 
         case 7: // 莫霍克 (Mohawk)
-            ctx.fillStyle = color;
+            if (ageStage !== 'Elder') ctx.fillStyle = color; // 老人已经变灰了
             // 中间竖条
             ctx.fillRect(x - s * 0.3, y - s - 8, s * 0.6, s * 1.5);
             // 稍微有些发茬在侧面
@@ -197,9 +223,18 @@ export function drawAvatarHead(ctx: CanvasRenderingContext2D, x: number, y: numb
         ctx.fillRect(x + eyeOffset - eyeSize, y + eyeyOffset, eyeSize, eyeSize); // 右眼
         
         // 腮红 (可爱细节)
-        ctx.fillStyle = 'rgba(255, 100, 100, 0.31)';
-        ctx.fillRect(x - eyeOffset - 2, y + 6, 4, 2);
-        ctx.fillRect(x + eyeOffset - 2, y + 6, 4, 2);
+        if (sim.ageStage === 'Toddler' || sim.ageStage === 'Child' || sim.gender === 'F') {
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.31)';
+            ctx.fillRect(x - eyeOffset - 2, y + 6, 4, 2);
+            ctx.fillRect(x + eyeOffset - 2, y + 6, 4, 2);
+        }
+        
+        // 老人皱纹
+        if (sim.ageStage === 'Elder') {
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(x - s + 4, y + 8, 4, 1); // 脸颊纹
+            ctx.fillRect(x + s - 8, y + 8, 4, 1);
+        }
     }
 
     // 2. 尝试绘制发型图片
@@ -210,9 +245,9 @@ export function drawAvatarHead(ctx: CanvasRenderingContext2D, x: number, y: numb
         // [优化] 程序化像素发型
         // 使用 sim.id 的哈希值来确定发型，保证每个人物固定一种发型
         const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const styleIndex = hash % 5; 
+        let styleIndex = hash % 15; // 0-14
         
-        drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex);
+        drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage);
     }
 }
 
