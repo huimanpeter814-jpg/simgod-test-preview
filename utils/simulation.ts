@@ -7,7 +7,8 @@ import { batchGenerateDiaries } from '../services/geminiService';
 import { SocialLogic } from './logic/social';
 
 export { Sim } from './Sim';
-export { drawAvatarHead, minutes, getJobCapacity } from './simulationHelpers';
+export { minutes, getJobCapacity } from './simulationHelpers';
+export { drawAvatarHead } from './render/pixelArt'; 
 
 export class GameStore {
     static sims: Sim[] = [];

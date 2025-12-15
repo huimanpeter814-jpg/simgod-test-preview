@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import { GameStore, Sim, drawAvatarHead } from '../../utils/simulation';
+import { GameStore, Sim } from '../../utils/simulation';
+import { drawAvatarHead } from '../../utils/render/pixelArt';
 import { SimData } from '../../types';
 
 interface RosterProps {

@@ -1,8 +1,9 @@
-﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, HOLIDAYS, AGE_CONFIG } from '../constants';
+﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, AGE_CONFIG } from '../constants';
 import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship, AgeStage } from '../types';
 import { GameStore } from './simulation'; 
 import { minutes, getJobCapacity } from './simulationHelpers';
 import { SocialLogic } from './logic/social';
+import { CareerLogic } from './logic/career';
 import { DecisionLogic } from './logic/decision';
 import { INTERACTIONS, RESTORE_TIMES, InteractionHandler } from './logic/interactionRegistry';
 
@@ -240,25 +241,7 @@ export class Sim {
     }
 
     assignJob() {
-        let preferredType = '';
-        if (this.lifeGoal.includes('富翁') || this.mbti.includes('T')) preferredType = 'internet';
-        else if (this.lifeGoal.includes('博学') || this.mbti.includes('N')) preferredType = 'design';
-        else if (this.mbti.includes('E')) preferredType = 'business';
-        else preferredType = Math.random() > 0.5 ? 'store' : 'restaurant';
-
-        const validJobs = JOBS.filter(j => {
-            if (j.id === 'unemployed') return true;
-            if (j.level !== 1) return false; 
-            if (preferredType && j.companyType !== preferredType) return false;
-            
-            const capacity = getJobCapacity(j);
-            const currentCount = GameStore.sims.filter(s => s.job.id === j.id).length;
-            return currentCount < capacity;
-        });
-
-        let finalJobChoice: Job | undefined = validJobs.length > 0 ? validJobs[Math.floor(Math.random() * validJobs.length)] : undefined;
-        if (!finalJobChoice) finalJobChoice = JOBS.find(j => j.id === 'unemployed')!;
-        this.job = finalJobChoice!;
+        CareerLogic.assignJob(this);
     }
 
     addMemory(text: string, type: Memory['type'], relatedSimId?: string) {
@@ -539,25 +522,7 @@ export class Sim {
     }
     
     checkCareerSatisfaction() {
-        if (this.job.id === 'unemployed') return;
-        
-        let quitScore = 0;
-        if (this.mood < 30) quitScore += 20;
-        if (this.hasBuff('stressed') || this.hasBuff('anxious')) quitScore += 30;
-        if (this.money > 10000) quitScore += 10; 
-        
-        if (this.job.companyType === 'internet' && this.mbti.includes('F')) quitScore += 10;
-        if (this.job.companyType === 'business' && this.mbti.includes('I')) quitScore += 15;
-        
-        if (Math.random() * 100 < quitScore && quitScore > 50) {
-            GameStore.addLog(this, `决定辞职... "这工作不适合我"`, 'sys');
-            this.addMemory(`辞去了 ${this.job.title} 的工作，想要休息一段时间。`, 'job');
-            
-            this.job = JOBS.find(j => j.id === 'unemployed')!;
-            this.workPerformance = 0;
-            this.say("我不干了! 💢", 'bad');
-            this.addBuff(BUFFS.well_rested);
-        }
+        CareerLogic.checkCareerSatisfaction(this);
     }
 
     buyItem(item: any) {
@@ -630,30 +595,7 @@ export class Sim {
 
 
     leaveWorkEarly() {
-        const currentHour = GameStore.time.hour + GameStore.time.minute / 60;
-        let startHour = this.currentShiftStart || this.job.startHour;
-        const totalDuration = this.job.endHour - this.job.startHour;
-
-        let workedDuration = currentHour - startHour;
-        if (workedDuration < 0) workedDuration += 24;
-
-        const workRatio = Math.max(0, Math.min(1, workedDuration / totalDuration));
-        
-        const actualPay = Math.floor(this.job.salary * workRatio);
-        this.money += actualPay;
-        this.dailyIncome += actualPay;
-
-        this.action = 'idle';
-        this.actionTimer = 0; 
-        this.target = null;
-        this.interactionTarget = null;
-        this.hasLeftWorkToday = true;
-
-        this.addBuff(BUFFS.stressed);
-        this.needs.fun = Math.max(0, this.needs.fun - 20);
-        
-        GameStore.addLog(this, `因精力耗尽早退。实发工资: $${actualPay} (占比 ${(workRatio*100).toFixed(0)}%)`, 'money');
-        this.say("太累了，先溜了... 😓", 'bad');
+        CareerLogic.leaveWorkEarly(this);
     }
 
     update(dt: number, minuteChanged: boolean) {
@@ -920,171 +862,7 @@ export class Sim {
     }
 
     checkSchedule() {
-        if (this.ageStage === 'Infant' || this.ageStage === 'Toddler' || this.ageStage === 'Elder' || this.job.id === 'unemployed') return;
-
-        const currentMonth = GameStore.time.month;
-        const holiday = HOLIDAYS[currentMonth];
-        
-        const isVacationMonth = this.job.vacationMonths?.includes(currentMonth);
-
-        const isPublicHoliday = holiday && (holiday.type === 'traditional' || holiday.type === 'break');
-
-        if (isPublicHoliday || isVacationMonth) return;
-
-        const currentHour = GameStore.time.hour;
-        const isWorkTime = currentHour >= this.job.startHour && currentHour < this.job.endHour;
-
-        if (isWorkTime) {
-            if (this.hasLeftWorkToday) return;
-
-            if (this.action === 'working') return;
-            if (this.action === 'commuting' && this.interactionTarget?.utility === 'work') return;
-            
-            this.isSideHustle = false; 
-            this.currentShiftStart = GameStore.time.hour + GameStore.time.minute / 60;
-
-            let searchLabels: string[] = [];
-            let searchCategories: string[] = ['work', 'work_group']; 
-
-            if (this.job.companyType === 'internet') {
-                searchLabels = this.job.level >= 4 ? ['老板椅'] : ['码农工位', '控制台'];
-            } else if (this.job.companyType === 'design') {
-                searchLabels = ['画架'];
-                searchCategories.push('paint'); 
-            } else if (this.job.companyType === 'business') {
-                searchLabels = this.job.level >= 4 ? ['老板椅'] : ['商务工位'];
-            } else if (this.job.companyType === 'store') {
-                searchLabels = ['服务台', '影院服务台', '售票处']; 
-            } else if (this.job.companyType === 'restaurant') {
-                if (this.job.title.includes('厨') || this.job.title === '打杂') {
-                    searchLabels = ['后厨', '灶台'];
-                } else {
-                    searchLabels = ['餐厅前台'];
-                }
-            } else if (this.job.companyType === 'library') {
-                searchLabels = ['管理员'];
-            }
-
-            let candidateFurniture: Furniture[] = [];
-            searchCategories.forEach(cat => {
-                const list = GameStore.furnitureIndex.get(cat);
-                if (list) candidateFurniture = candidateFurniture.concat(list);
-            });
-
-            const validDesks = candidateFurniture.filter(f =>
-                searchLabels.some(l => f.label.includes(l))
-            );
-
-            if (validDesks.length > 0) {
-                const desk = validDesks[Math.floor(Math.random() * validDesks.length)];
-                
-                let targetX = desk.x + desk.w / 2;
-                let targetY = desk.y + desk.h / 2;
-                
-                targetX += (Math.random() - 0.5) * 15;
-                targetY += (Math.random() - 0.5) * 15;
-
-                this.target = { x: targetX, y: targetY };
-                this.interactionTarget = { ...desk, utility: 'work' };
-                this.action = 'commuting';
-                this.actionTimer = 0; 
-                this.commuteTimer = 0;
-                this.say("去上班 💼", 'act');
-            } else {
-                const randomSpot = { x: 100 + Math.random()*200, y: 100 + Math.random()*200 };
-                this.target = randomSpot;
-                this.interactionTarget = {
-                    id: `virtual_work_${this.id}`,
-                    utility: 'work',
-                    label: '站立办公',
-                    type: 'virtual'
-                };
-                this.action = 'commuting';
-                this.actionTimer = 0;
-                this.commuteTimer = 0;
-                this.say("站着上班 💼", 'bad');
-            }
-        } 
-        else {
-            this.hasLeftWorkToday = false;
-
-            if (this.action === 'working' || this.action === 'commuting') {
-                 if (this.action === 'commuting' && this.interactionTarget?.utility !== 'work') return;
-
-                this.action = 'idle';
-                this.target = null;
-                this.interactionTarget = null;
-                this.path = []; // Reset Path
-                
-                this.money += this.job.salary;
-                this.dailyIncome += this.job.salary;
-                this.say(`下班! +$${this.job.salary}`, 'money');
-                this.addBuff(BUFFS.stressed);
-
-                let dailyPerf = 5; 
-                if (this.job.companyType === 'internet') {
-                    if (this.iq > 70) dailyPerf += 5;
-                    if (this.skills.logic > 50) dailyPerf += 3;
-                } else if (this.job.companyType === 'design') {
-                    if (this.creativity > 70) dailyPerf += 5;
-                    if (this.skills.creativity > 50) dailyPerf += 3;
-                } else if (this.job.companyType === 'business') {
-                    if (this.eq > 70) dailyPerf += 5;
-                    if (this.appearanceScore > 70) dailyPerf += 3;
-                } else if (this.job.companyType === 'restaurant') {
-                    if (this.constitution > 70) dailyPerf += 5;
-                    if (this.skills.cooking > 50) dailyPerf += 3;
-                }
-
-                if (this.mood > 80) dailyPerf += 2;
-
-                this.workPerformance += dailyPerf;
-
-                if (this.workPerformance > 500 && this.job.level < 4) {
-                    this.promote();
-                    this.workPerformance = 100;
-                }
-            }
-        }
-    }
-
-    promote() {
-        const nextLevel = JOBS.find(j => j.companyType === this.job.companyType && j.level === this.job.level + 1);
-        if (!nextLevel) return;
-
-        const cap = getJobCapacity(nextLevel);
-        const currentHolders = GameStore.sims.filter(s => s.job.id === nextLevel.id);
-        
-        if (currentHolders.length < cap) {
-            this.job = nextLevel;
-            this.money += 1000;
-            this.dailyIncome += 1000; 
-            GameStore.addLog(this, `升职了！现在是 ${nextLevel.title} (Lv.${nextLevel.level})`, 'sys');
-            this.say("升职啦! 🚀", 'act');
-            this.addBuff(BUFFS.promoted);
-            this.addMemory(`因为表现优异，升职为 ${nextLevel.title}！`, 'job');
-        } else {
-            const victim = currentHolders.sort((a, b) => a.workPerformance - b.workPerformance)[0];
-            if (this.workPerformance + this.mood > victim.workPerformance + victim.mood) {
-                const oldJob = this.job;
-                this.job = nextLevel;
-                victim.job = oldJob; 
-                victim.workPerformance = 0; 
-                this.money += 1000;
-                this.dailyIncome += 1000;
-                this.addBuff(BUFFS.promoted);
-                victim.addBuff(BUFFS.demoted);
-                GameStore.addLog(this, `PK 成功！取代了 ${victim.name} 成为 ${nextLevel.title}`, 'sys');
-                this.say("我赢了! 👑", 'act');
-                victim.say("可恶... 😭", 'bad');
-                this.addMemory(`在职场竞争中击败了 ${victim.name}，成功晋升为 ${nextLevel.title}。`, 'job', victim.id);
-                victim.addMemory(`在职场竞争中输给了 ${this.name}，被降职了...`, 'bad', this.id);
-            } else {
-                GameStore.addLog(this, `尝试晋升 ${nextLevel.title} 但 PK 失败了。`, 'sys');
-                this.workPerformance -= 100; 
-                this.say("还需要努力...", 'bad');
-            }
-        }
+        CareerLogic.checkSchedule(this);
     }
 
     updateBuffs(minutesPassed: number) {
