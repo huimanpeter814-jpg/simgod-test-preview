@@ -33,15 +33,15 @@ export const CONFIG = {
 export { PALETTES } from './data/scene';
 // [Removed] ROOMS, FURNITURE export from here
 
-// [新增] 年龄段定义
+// [修改] 年龄段定义 - 增加体型配置 (width, height, headSize)
 export const AGE_CONFIG = {
-    Infant: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb' },
-    Toddler: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3' },
-    Child: { min: 6, max: 12, label: '儿童', color: '#54a0ff' },
-    Teen: { min: 13, max: 18, label: '青少年', color: '#5f27cd' },
-    Adult: { min: 19, max: 39, label: '成年', color: '#1dd1a1' },
-    MiddleAged: { min: 40, max: 59, label: '中年', color: '#ff9f43' },
-    Elder: { min: 60, max: 120, label: '老年', color: '#8395a7' }
+    Infant: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb', width: 12, height: 16, headSize: 8 },
+    Toddler: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3', width: 14, height: 22, headSize: 10 },
+    Child: { min: 6, max: 12, label: '儿童', color: '#54a0ff', width: 16, height: 30, headSize: 11 },
+    Teen: { min: 13, max: 18, label: '青少年', color: '#5f27cd', width: 18, height: 38, headSize: 12 },
+    Adult: { min: 19, max: 39, label: '成年', color: '#1dd1a1', width: 20, height: 42, headSize: 13 },
+    MiddleAged: { min: 40, max: 59, label: '中年', color: '#ff9f43', width: 22, height: 42, headSize: 13 },
+    Elder: { min: 60, max: 120, label: '老年', color: '#8395a7', width: 20, height: 40, headSize: 13 }
 };
 
 export const ITEMS = [

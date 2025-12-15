@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { CONFIG } from '../constants';
+import { CONFIG, AGE_CONFIG } from '../constants'; // [Import Updated]
 import { GameStore, gameLoopStep, getActivePalette } from '../utils/simulation';
 import { getAsset } from '../utils/assetLoader';
 import { drawAvatarHead, drawPixelProp } from '../utils/render/pixelArt';
@@ -257,21 +257,38 @@ const GameCanvas: React.FC = () => {
                 ctx.fill();
             }
 
-            // 绘制小人身体
-            let w = 20, h = 42;
-            ctx.fillStyle = '#455A64'; 
-            ctx.fillRect(-w / 2, -h + 20, w, h / 2);
-            ctx.fillStyle = sim.clothesColor;
-            ctx.fillRect(-w / 2, -h + 12, w, h - 20);
-            ctx.fillStyle = 'rgba(0,0,0,0.1)';
-            ctx.fillRect(-w/2, -h + 12, 4, 10); // 左臂
-            ctx.fillRect(w/2 - 4, -h + 12, 4, 10); // 右臂
+            // [修改] 根据年龄段获取体型参数
+            // @ts-ignore
+            const ageConfig = AGE_CONFIG[sim.ageStage] || AGE_CONFIG.Adult;
+            const w = ageConfig.width || 20;
+            const h = ageConfig.height || 42;
+            const headSize = ageConfig.headSize || 13;
 
-            drawAvatarHead(ctx, 0, -h + 6, 13, sim);
+            // 绘制小人身体
+            // 裤子 (下半身)
+            ctx.fillStyle = '#455A64'; 
+            ctx.fillRect(-w / 2, -h * 0.5, w, h * 0.5);
+            
+            // 衣服 (上半身) - 模拟衣服覆盖在裤子上
+            const shoulderY = -h + (headSize * 0.6); 
+            const legStartY = -h * 0.45;
+            
+            ctx.fillStyle = sim.clothesColor;
+            ctx.fillRect(-w / 2, shoulderY, w, legStartY - shoulderY + 2); 
+            
+            // 手臂
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            const armW = Math.max(3, w * 0.2);
+            const armH = (legStartY - shoulderY) * 0.8;
+            ctx.fillRect(-w/2, shoulderY, armW, armH); // Left
+            ctx.fillRect(w/2 - armW, shoulderY, armW, armH); // Right
+
+            // 绘制头部 (位置根据高度动态计算)
+            drawAvatarHead(ctx, 0, -h + (headSize * 0.4), headSize, sim);
 
             if (sim.action === 'phone') {
-                ctx.fillStyle = '#ECEFF1'; ctx.fillRect(8, -22, 6, 9);
-                ctx.fillStyle = '#81D4FA'; ctx.fillRect(9, -21, 4, 7);
+                ctx.fillStyle = '#ECEFF1'; ctx.fillRect(w/2 - 2, shoulderY + 5, 6, 9);
+                ctx.fillStyle = '#81D4FA'; ctx.fillRect(w/2 - 1, shoulderY + 6, 4, 7);
             }
 
             // 气泡
