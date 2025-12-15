@@ -158,6 +158,13 @@ export const BUFFS = {
     lonely: { id: 'lonely', label: '孤独', type: 'bad' as const, duration: 60 },
     bored: { id: 'bored', label: '无聊', type: 'bad' as const, duration: 60 },
     smelly: { id: 'smelly', label: '邋遢', type: 'bad' as const, duration: 60 },
+
+    // [新增] 社交/情感 Buff
+    cheated: { id: 'cheated', label: '被背叛', type: 'bad' as const, duration: 480 }, // 严重吃醋/出轨被发现，持续很长时间
+    jealous: { id: 'jealous', label: '吃醋生气', type: 'bad' as const, duration: 90 }, // 普通吃醋
+    rejected: { id: 'rejected', label: '被拒', type: 'bad' as const, duration: 120 }, // 表白失败
+    crush: { id: 'crush', label: '心动瞬间', type: 'good' as const, duration: 90 }, // 遇到心动对象/搭讪成功
+    sweet_date: { id: 'sweet_date', label: '甜蜜蜜', type: 'good' as const, duration: 180 }, // 浪漫互动成功
 };
 
 export const HOLIDAYS = [

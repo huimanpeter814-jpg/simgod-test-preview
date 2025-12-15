@@ -402,7 +402,11 @@ export class Sim {
             if (loverId) {
                 const lover = GameStore.sims.find(s => s.id === loverId);
                 if (lover) {
-                    SocialLogic.updateRelationship(lover, this, 'romance', 10);
+                    // [修改] 礼物增加更多好感，尤其是对于拜金/现实的市民（如果有这个属性的话，目前用 money 近似判断）
+                    let relBonus = 15;
+                    if (lover.lifeGoal.includes('富翁')) relBonus += 10;
+                    
+                    SocialLogic.updateRelationship(lover, this, 'romance', relBonus);
                     lover.needs.fun = Math.min(100, lover.needs.fun + 20);
                     logSuffix = ` (送给 ${lover.name})`;
                     this.addMemory(`给 ${lover.name} 买了 ${item.label}，希望Ta喜欢。`, 'social', lover.id);
