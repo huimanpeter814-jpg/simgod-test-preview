@@ -7,247 +7,352 @@ import { getAsset } from '../assetLoader';
 // ==========================================
 
 // 1. 绘制像素发型 (更新支持年龄段)
-const drawPixelHair = (ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string, styleIndex: number, ageStage: AgeStage) => {
-    
-    // [新增] 婴儿与老人的特殊发型处理
+const drawPixelHair = (
+    ctx: CanvasRenderingContext2D, 
+    x: number, 
+    y: number, 
+    s: number, 
+    color: string, 
+    styleIndex: number, 
+    ageStage: AgeStage,
+    layer: 'back' | 'front'
+) => {    
+    // 婴儿：只有前层 (毛发稀疏，没有后发)
     if (ageStage === 'Infant') {
-        // 婴儿：只有稀疏几根毛
+        if (layer === 'back') return; // 婴儿没有后发
         ctx.fillStyle = color;
-        ctx.fillRect(x, y - s - 1, 2, 3);
-        ctx.fillRect(x - 3, y - s, 2, 2);
-        ctx.fillRect(x + 3, y - s, 2, 2);
+        ctx.beginPath();
+        ctx.arc(x, y - s - 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(x - 4, y - s, 2, 2);
+        ctx.fillRect(x + 2, y - s, 2, 2);
         return;
     }
 
-    // 老人：强制发色变灰/白
+    // 老人颜色处理
+    let finalColor = color;
+    let effectiveStyle = styleIndex;
+
     if (ageStage === 'Elder') {
-        // 随机灰度
         const greyScale = ['#dcdde1', '#7f8fa6', '#b2bec3'];
-        // 使用 id 哈希来固定颜色选择
-        const hash = styleIndex % greyScale.length;
-        ctx.fillStyle = greyScale[hash];
+        finalColor = greyScale[styleIndex % greyScale.length];
+        if (styleIndex % 3 === 0) effectiveStyle = 9; // 地中海
+    }
+
+    ctx.fillStyle = finalColor;
+
+    // --- 1. 辅助绘制函数 ---
+
+    // 高光 (仅在前层绘制)
+    const drawHighlight = (offY: number = 0, widthScale: number = 1.0) => {
+        if (layer === 'back') return; // 后层不画高光
+        if (finalColor === '#ffffff' || finalColor === '#dcdde1') return;
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        const w = s * 1.2 * widthScale;
+        const h = s * 0.25;
+        ctx.beginPath();
+        ctx.roundRect(x - w/2, y - s - s*0.2 + offY, w, h, 2);
+        ctx.fill();
+        ctx.fillStyle = finalColor;
+    };
+
+    // 基础头套 (Base Shape) - 绝大多数属于前层
+    // 作用：覆盖头皮，连接后发。
+    const drawBaseCap = () => {
+         const noBaseStyles = [6, 7, 9, 14]; 
+         if (!noBaseStyles.includes(effectiveStyle)) {
+            ctx.beginPath();
+            ctx.roundRect(x - s, y - s - 2, s * 2, s * 1.2, [6, 6, 0, 0]); 
+            ctx.fill();
+        }
+    };
+
+    // --- 2. 分层绘制逻辑 ---
+
+    if (layer === 'front') {
+        // === 前层绘制 (Front Layer) ===
+        // 这里绘制：头顶、刘海、鬓角、高光
+        
+        drawBaseCap(); // 画头顶基础部分
+
+        switch (effectiveStyle) {
+            case 0: // Standard Short
+                ctx.fillRect(x - s, y - s, s * 0.4, s * 0.8);
+                ctx.fillRect(x + s - s * 0.4, y - s, s * 0.4, s * 0.8);
+                ctx.fillRect(x - s * 0.5, y - s, s, s * 0.4); 
+                drawHighlight();
+                break;
+            case 1: // Bob
+                ctx.fillRect(x - s, y - s, s * 2, s * 0.5); // 齐刘海
+                // 两侧包脸部分
+                ctx.fillRect(x - s - 2, y - s, s * 0.6, s * 1.8);
+                ctx.fillRect(x + s + 2 - s * 0.6, y - s, s * 0.6, s * 1.8);
+                drawHighlight(0, 1.2);
+                break;
+            case 2: // Spiky
+                ctx.beginPath();
+                ctx.moveTo(x - s, y - s);
+                ctx.lineTo(x - s * 0.5, y - s - 6);
+                ctx.lineTo(x, y - s - 3);
+                ctx.lineTo(x + s * 0.5, y - s - 7);
+                ctx.lineTo(x + s, y - s);
+                ctx.fill();
+                ctx.fillRect(x - s, y - s, s * 0.3, s * 0.6);
+                ctx.fillRect(x + s - s * 0.3, y - s, s * 0.3, s * 0.6);
+                break;
+            case 3: // Slicked Back
+                ctx.fillRect(x - s, y - s, s * 2, s * 0.5);
+                ctx.fillRect(x - s, y - s, s * 0.5, s * 1.2);
+                ctx.fillRect(x + s - s * 0.5, y - s, s * 0.5, s * 1.2);
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fillRect(x + s * 0.2, y - s - 2, 1, s * 0.8);
+                ctx.fillStyle = finalColor;
+                drawHighlight();
+                break;
+            case 4: // Bun
+                ctx.fillRect(x - s, y - s, s * 0.3, s * 1.0);
+                ctx.fillRect(x + s - s * 0.3, y - s, s * 0.3, s * 1.0);
+                // 丸子算前层，因为它在头顶
+                ctx.beginPath();
+                ctx.arc(x, y - s - 5, s * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                drawHighlight(-2);
+                break;
+            case 5: // Hime Cut (前)
+                // 只画切发和刘海
+                ctx.fillRect(x - s + 1, y, s * 0.4, s * 0.8); // 脸颊切
+                ctx.fillRect(x + s - s * 0.4 - 1, y, s * 0.4, s * 0.8);
+                ctx.fillRect(x - s + 2, y - s, s * 2 - 4, s * 0.4); // 刘海
+                drawHighlight(0, 1.3);
+                break;
+            case 6: // Afro (前)
+                // 前层只画纹理细节，主体在后层
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.beginPath(); ctx.arc(x - s*0.5, y - s, s*0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x + s*0.5, y - s - 2, s*0.3, 0, Math.PI*2); ctx.fill();
+                break;
+            case 7: // Mohawk (前)
+                ctx.fillRect(x - s * 0.4, y - s - 10, s * 0.8, s * 2.0);
+                // 侧边青皮
+                ctx.fillStyle = 'rgba(0,0,0,0.15)'; 
+                ctx.beginPath();
+                ctx.roundRect(x - s, y - s, s * 2, s * 0.8, 4);
+                ctx.fill();
+                break;
+            case 8: // Twin Tails (前)
+                // 前层画皮筋，后层画马尾
+                ctx.fillStyle = '#FF5252';
+                ctx.fillRect(x - s - 2, y - s * 0.2, 4, 4);
+                ctx.fillRect(x + s - 2, y - s * 0.2, 4, 4);
+                break;
+            case 9: // Balding (前)
+                // 侧边保留一点点头发
+                ctx.beginPath();
+                ctx.roundRect(x - s - 2, y - s * 0.2, s * 0.6, s * 1.2, 2);
+                ctx.fill();
+                ctx.roundRect(x + s - s * 0.4 + 2, y - s * 0.2, s * 0.6, s * 1.2, 2);
+                ctx.fill();
+                break;
+            case 10: // Curtains
+                // 全部在前层，因为它要盖住脸
+                ctx.beginPath();
+                ctx.moveTo(x, y - s - 2);
+                ctx.quadraticCurveTo(x - s, y - s, x - s - 2, y + s * 0.8);
+                ctx.lineTo(x - s, y + s * 0.8);
+                ctx.quadraticCurveTo(x - s * 0.5, y, x, y - s);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x, y - s - 2);
+                ctx.quadraticCurveTo(x + s, y - s, x + s + 2, y + s * 0.8);
+                ctx.lineTo(x + s, y + s * 0.8);
+                ctx.quadraticCurveTo(x + s * 0.5, y, x, y - s);
+                ctx.fill();
+                drawHighlight();
+                break;
+            case 11: // High Ponytail (前)
+                // 只画发根那一圈
+                ctx.fillRect(x - s * 0.3, y - s - 4, s * 0.6, 4); 
+                drawHighlight(-4);
+                break;
+            case 12: // Mullet (前)
+                // 顶部和鬓角
+                ctx.fillRect(x - s - 1, y - s, s * 2 + 2, s * 0.5);
+                ctx.fillRect(x - s, y, s * 0.4, s * 0.8);
+                ctx.fillRect(x + s - s * 0.4, y, s * 0.4, s * 0.8);
+                drawHighlight();
+                break;
+            case 13: // Emo
+                // 遮眼必须在前层
+                ctx.beginPath();
+                ctx.moveTo(x - s, y - s - 2);
+                ctx.lineTo(x + s + 2, y - s - 2);
+                ctx.lineTo(x + s + 2, y + s);
+                ctx.lineTo(x + s * 0.2, y + s * 0.8); 
+                ctx.lineTo(x - s * 1.2, y + s * 0.2);
+                ctx.lineTo(x - s, y - s);
+                ctx.fill();
+                drawHighlight();
+                break;
+            case 14: // Dreads (前)
+                // 头顶的发根部分
+                ctx.roundRect(x - s, y - s - 2, s * 2, s * 0.8, 4);
+                ctx.fill();
+                break;
+            case 15: // Wavy (前)
+                // 发根
+                ctx.fillRect(x - s - 2, y - s, s * 0.6, s);
+                ctx.fillRect(x + s + 2 - s * 0.6, y - s, s * 0.6, s);
+                drawHighlight();
+                break;
+            case 16: // Half-Up (前)
+                // 束发处的细节
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fillRect(x - s * 0.5, y - s * 0.2, s, 2);
+                ctx.fillStyle = finalColor;
+                drawHighlight();
+                break;
+        }
+
     } else {
-        ctx.fillStyle = color;
-    }
-
-    // 基础发量（除秃顶/莫霍克外，大部分发型通用的后脑勺部分）
-    const isBalding = styleIndex === 9;
-    const isMohawk = styleIndex === 7;
-    
-    // 老人更容易秃顶
-    if (ageStage === 'Elder' && styleIndex % 3 === 0) {
-        // 强制使用秃顶样式
-        styleIndex = 9;
-    }
-
-    if (!isBalding && !isMohawk) {
-        ctx.fillRect(x - s, y - s - 4, s * 2, s); 
-    }
-
-    switch (styleIndex) {
-        // --- 原有发型 (0-4) ---
-        case 0: // 普通短发
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.4); 
-            ctx.fillRect(x - s, y - s, s * 0.4, s * 1.2); 
-            ctx.fillRect(x + s - s * 0.4, y - s, s * 0.4, s * 1.2); 
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.fillRect(x - s * 0.6, y - s - 2, s * 0.6, s * 0.4);
-            break;
-            
-        case 1: // 波波头
-            ctx.fillRect(x - s - 1, y - s, s * 2 + 2, s * 0.6); 
-            ctx.fillRect(x - s - 1, y - s, s * 0.6, s * 2); 
-            ctx.fillRect(x + s - s * 0.6 + 1, y - s, s * 0.6, s * 2); 
-            ctx.fillRect(x - s, y + s * 0.8, s * 0.4, s * 0.3);
-            ctx.fillRect(x + s - s * 0.4, y + s * 0.8, s * 0.4, s * 0.3);
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.fillRect(x + s * 0.2, y - s - 2, s * 0.8, s * 0.3);
-            break;
-
-        case 2: // 刺猬头
-            ctx.beginPath();
-            ctx.moveTo(x - s, y - s);
-            ctx.lineTo(x - s * 0.5, y - s - 6);
-            ctx.lineTo(x, y - s - 2);
-            ctx.lineTo(x + s * 0.5, y - s - 7); 
-            ctx.lineTo(x + s, y - s);
-            ctx.lineTo(x + s, y - s + s * 0.5);
-            ctx.lineTo(x - s, y - s + s * 0.5);
-            ctx.fill();
-            ctx.fillRect(x - s, y - s, s * 0.4, s * 0.8);
-            ctx.fillRect(x + s - s * 0.4, y - s, s * 0.4, s * 0.8);
-            break;
-
-        case 3: // 侧分/背头
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.5);
-            ctx.fillRect(x - s, y - s, s * 0.4, s * 1.0); 
-            ctx.fillRect(x + s - s * 0.6, y - s, s * 0.6, s * 1.4); 
-            ctx.fillRect(x - s, y - s - 2, s * 2, 2);
-            break;
-
-        case 4: // 丸子头
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.5); 
-            ctx.fillRect(x - s * 0.8, y - s, s * 0.3, s * 1.5); 
-            ctx.fillRect(x + s * 0.5, y - s, s * 0.3, s * 1.5); 
-            ctx.fillRect(x - s * 0.5, y - s - 8, s, s * 0.6);
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.fillRect(x - s * 0.3, y - s - 7, s * 0.3, s * 0.2);
-            break;
-
-        // --- 🆕 新增发型 (5-14) ---
-
-        case 5: // 长直发 (Long Straight / Hime Cut)
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.5); // 齐刘海
-            ctx.fillRect(x - s - 1, y - s, s * 0.5, s * 2.8); // 左长发
-            ctx.fillRect(x + s - s * 0.5 + 1, y - s, s * 0.5, s * 2.8); // 右长发
-            // 姬发式鬓角
-            ctx.fillRect(x - s + 2, y, s * 0.2, s * 0.8);
-            ctx.fillRect(x + s - s * 0.2 - 2, y, s * 0.2, s * 0.8);
-            break;
-
-        case 6: // 爆炸头 (Afro)
-            // 一个围绕头部的大圆/方块
-            ctx.beginPath();
-            ctx.roundRect(x - s * 1.5, y - s * 1.8, s * 3, s * 2.5, s);
-            ctx.fill();
-            // 纹理细节
-            ctx.fillStyle = 'rgba(0,0,0,0.1)';
-            ctx.fillRect(x - s, y - s, 2, 2);
-            ctx.fillRect(x + s/2, y - s*1.2, 2, 2);
-            break;
-
-        case 7: // 莫霍克 (Mohawk)
-            if (ageStage !== 'Elder') ctx.fillStyle = color; // 老人已经变灰了
-            // 中间竖条
-            ctx.fillRect(x - s * 0.3, y - s - 8, s * 0.6, s * 1.5);
-            // 稍微有些发茬在侧面
-            ctx.fillStyle = 'rgba(0,0,0,0.1)'; // 看起来像青皮
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.8);
-            break;
-
-        case 8: // 双马尾 (Twin Tails)
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.5); // 刘海
-            // 左辫子
-            ctx.fillRect(x - s * 1.6, y - s * 0.5, s * 0.6, s * 0.6); // 扎结处
-            ctx.fillRect(x - s * 1.8, y, s * 0.5, s * 1.5); // 下垂
-            // 右辫子
-            ctx.fillRect(x + s, y - s * 0.5, s * 0.6, s * 0.6); // 扎结处
-            ctx.fillRect(x + s * 1.3, y, s * 0.5, s * 1.5); // 下垂
-            break;
-
-        case 9: // 地中海/谢顶 (Balding)
-            // 只有侧边有头发
-            ctx.fillRect(x - s - 1, y - s * 0.2, s * 0.4, s * 1.2); // 左侧
-            ctx.fillRect(x + s - s * 0.4 + 1, y - s * 0.2, s * 0.4, s * 1.2); // 右侧
-            // 后脑勺一点点
-            ctx.fillRect(x - s, y - s * 0.5, s * 2, s * 0.2);
-            break;
-
-        case 10: // 中分/窗帘头 (Curtains / Middle Part)
-            // 左半边刘海
-            ctx.beginPath();
-            ctx.moveTo(x, y - s);
-            ctx.lineTo(x - s - 1, y - s);
-            ctx.lineTo(x - s - 1, y + s * 0.5);
-            ctx.lineTo(x - s * 0.5, y - s * 0.2); // 弧度
-            ctx.lineTo(x, y - s);
-            ctx.fill();
-            // 右半边刘海
-            ctx.beginPath();
-            ctx.moveTo(x, y - s);
-            ctx.lineTo(x + s + 1, y - s);
-            ctx.lineTo(x + s + 1, y + s * 0.5);
-            ctx.lineTo(x + s * 0.5, y - s * 0.2); // 弧度
-            ctx.lineTo(x, y - s);
-            ctx.fill();
-            break;
-
-        case 11: // 高马尾 (High Ponytail)
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.6); // 紧贴头皮
-            // 头顶马尾
-            ctx.fillRect(x - s * 0.4, y - s - 9, s * 0.8, s * 0.8); // 发根
-            ctx.fillRect(x - s * 0.2, y - s - 10, s * 1.2, s * 1.5); // 发尾垂下（向右偏）
-            break;
-
-        case 12: // 狼尾/鲻鱼头 (Mullet)
-            ctx.fillRect(x - s, y - s, s * 2, s * 0.3); // 短刘海
-            ctx.fillRect(x - s, y - s, s * 0.4, s * 0.8); // 鬓角
-            ctx.fillRect(x + s - s * 0.4, y - s, s * 0.4, s * 0.8);
-            // 后面的长发，宽出头部
-            ctx.fillRect(x - s * 1.2, y + s * 0.5, s * 2.4, s * 1.2);
-            break;
-            
-        case 13: // 遮眼侧刘海 (Emo / Side Swept)
-            ctx.fillRect(x - s, y - s - 2, s * 2, s * 0.8); // 顶部
-            // 巨大的刘海遮住右眼
-            ctx.beginPath();
-            ctx.moveTo(x - s, y - s);
-            ctx.lineTo(x + s + 1, y - s);
-            ctx.lineTo(x + s + 1, y + s * 0.8); // 右侧垂下
-            ctx.lineTo(x - s * 0.5, y + s * 0.2);
-            ctx.lineTo(x - s, y);
-            ctx.fill();
-            break;
-
-        case 14: // 脏辫/玉米垄 (Braids/Dreads)
-            // 绘制多条竖线代表辫子
-            for(let i = 0; i < 5; i++) {
-                let off = (i - 2) * (s * 0.45);
-                ctx.fillRect(x + off - 1, y - s - 2, 3, s * 2.2);
-            }
-            break;
+        // === 后层绘制 (Back Layer) ===
+        // 这里绘制：长发的背景部分、马尾、后脑勺蓬松处
+        // 这些部分会被脸遮住
+        
+        switch (effectiveStyle) {
+            case 1: // Bob (后)
+                // 后脑勺下方
+                ctx.roundRect(x - s - 2, y - s, s * 2 + 4, s * 1.8, [4, 4, 4, 4]); 
+                ctx.fill();
+                break;
+            case 5: // Hime Cut (后)
+                // 巨大的长方形背景
+                ctx.fillRect(x - s - 1, y - s, s * 2 + 2, s * 2.5);
+                break;
+            case 6: // Afro (后)
+                // 那个大圆球
+                const drawPuff = (px: number, py: number, r: number) => {
+                    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+                };
+                drawPuff(x, y - s * 0.8, s * 1.5);
+                drawPuff(x - s * 0.9, y - s * 0.5, s * 0.8);
+                drawPuff(x + s * 0.9, y - s * 0.5, s * 0.8);
+                break;
+            case 8: // Twin Tails (后)
+                // 两个大马尾
+                ctx.beginPath();
+                ctx.ellipse(x - s * 1.4, y, s * 0.6, s * 1.2, -0.2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(x + s * 1.4, y, s * 0.6, s * 1.2, 0.2, 0, Math.PI*2);
+                ctx.fill();
+                break;
+            case 9: // Balding (后)
+                // 后脑勺那一圈
+                ctx.fillRect(x - s, y + s * 0.5, s * 2, s * 0.4);
+                break;
+            case 11: // High Ponytail (后)
+                // 马尾本体
+                ctx.beginPath();
+                ctx.roundRect(x - s * 0.6, y - s - 12, s * 1.2, s * 1.2, 4);
+                ctx.fill();
+                // 垂下的发梢
+                ctx.fillRect(x - s * 0.3, y - s - 4, s * 0.6, s * 1.5);
+                break;
+            case 12: // Mullet (后)
+                // 颈部狼尾
+                ctx.beginPath();
+                ctx.moveTo(x - s, y + s * 0.5);
+                ctx.lineTo(x - s * 1.4, y + s * 1.5);
+                ctx.lineTo(x + s * 1.4, y + s * 1.5);
+                ctx.lineTo(x + s, y + s * 0.5);
+                ctx.fill();
+                break;
+            case 14: // Dreads (后)
+                // 所有的辫子
+                for(let i = 0; i < 5; i++) {
+                    let off = (i - 2) * (s * 0.5);
+                    ctx.fillStyle = finalColor;
+                    ctx.roundRect(x + off - 2, y - s - 2, 4, s * 2.5, 2);
+                    ctx.fill();
+                    // 纹理
+                    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                    ctx.fillRect(x + off - 2, y - s + 2, 4, 1);
+                    ctx.fillRect(x + off - 2, y - s * 0.5, 4, 1);
+                    ctx.fillRect(x + off - 2, y, 4, 1);
+                }
+                break;
+            case 15: // Wavy (后)
+                // 两个大卷
+                ctx.beginPath(); ctx.roundRect(x - s - 2, y, s * 0.6, s * 2, 3); ctx.fill();
+                ctx.beginPath(); ctx.roundRect(x + s + 2 - s * 0.6, y, s * 0.6, s * 2, 3); ctx.fill();
+                ctx.fillRect(x - s - 4, y + s * 1.5, 4, 4);
+                ctx.fillRect(x + s, y + s * 1.5, 4, 4);
+                break;
+            case 16: // Half-Up (后)
+                // 披肩部分
+                ctx.fillRect(x - s * 0.8, y, s * 1.6, s * 2.2);
+                break;
+        }
     }
 };
 
-// 2. 绘制头像 (支持图片绘制，及优化的像素绘制)
+// 2. 绘制头像 (三层结构：后发 -> 脸 -> 前发)
 export function drawAvatarHead(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, sim: SimData) {
     let s = size;
-
-    // 1. 尝试绘制脸部图片
+    const hairImg = getAsset(sim.appearance.hair);
     const faceImg = getAsset(sim.appearance.face);
+
+    // 计算发型样式 (无论是否使用图片，如果是程序化生成都需要这个index)
+    const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const styleIndex = hash % 17;
+
+    // --- 第一层：后发 (Back Hair) ---
+    // 如果有图片资源，通常图片包含整体，就不拆分了(或者根据你的资源逻辑调整)
+    // 这里假设只有程序化发型才支持拆分
+    if (!hairImg) {
+        drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage, 'back');
+    }
+
+    // --- 第二层：脸部 (Face) ---
     if (faceImg) {
         ctx.drawImage(faceImg, x - s, y - s, s * 2, s * 2);
     } else {
-        // [优化] 脸部形状：圆角矩形，更有乐高感
+        // 脸部形状
         ctx.fillStyle = sim.skinColor;
         ctx.beginPath();
-        ctx.roundRect(x - s, y - s, s * 2, s * 2, 4); // 4px圆角
+        ctx.roundRect(x - s, y - s, s * 2, s * 2, 4);
         ctx.fill();
 
-        // [保持] 豆豆眼
+        // 豆豆眼
         ctx.fillStyle = '#121212';
         const eyeSize = Math.max(2, s * 0.15);
         const eyeOffset = s * 0.45;
         const eyeyOffset = s * 0.2;
-        ctx.fillRect(x - eyeOffset, y + eyeyOffset, eyeSize, eyeSize);     // 左眼
-        ctx.fillRect(x + eyeOffset - eyeSize, y + eyeyOffset, eyeSize, eyeSize); // 右眼
+        ctx.fillRect(x - eyeOffset, y + eyeyOffset, eyeSize, eyeSize);     
+        ctx.fillRect(x + eyeOffset - eyeSize, y + eyeyOffset, eyeSize, eyeSize); 
         
-        // 腮红 (可爱细节)
+        // 腮红
         if (sim.ageStage === 'Toddler' || sim.ageStage === 'Child' || sim.gender === 'F') {
             ctx.fillStyle = 'rgba(255, 100, 100, 0.31)';
             ctx.fillRect(x - eyeOffset - 2, y + 6, 4, 2);
             ctx.fillRect(x + eyeOffset - 2, y + 6, 4, 2);
         }
         
-        // 老人皱纹
+        // 皱纹
         if (sim.ageStage === 'Elder') {
             ctx.fillStyle = 'rgba(0,0,0,0.1)';
-            ctx.fillRect(x - s + 4, y + 8, 4, 1); // 脸颊纹
+            ctx.fillRect(x - s + 4, y + 8, 4, 1);
             ctx.fillRect(x + s - 8, y + 8, 4, 1);
         }
     }
 
-    // 2. 尝试绘制发型图片
-    const hairImg = getAsset(sim.appearance.hair);
+    // --- 第三层：前发 (Front Hair) ---
     if (hairImg) {
+        // 图片模式下，简单覆盖在上面 (如果图片支持透明通道，效果没问题)
         ctx.drawImage(hairImg, x - s-(s*0.25), y - s - (s * 0.3), s * 2.5, s * 2.5);
     } else {
-        // [优化] 程序化像素发型
-        // 使用 sim.id 的哈希值来确定发型，保证每个人物固定一种发型
-        const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        let styleIndex = hash % 15; // 0-14
-        
-        drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage);
+        drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage, 'front');
     }
 }
 

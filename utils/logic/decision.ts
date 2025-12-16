@@ -240,8 +240,16 @@ export const DecisionLogic = {
 
         if (candidates.length) {
             candidates = candidates.filter((f: Furniture)=> {
-                 // [新增] 过滤私人领地
+                 // 过滤私人领地
                  if (DecisionLogic.isRestricted(sim, f)) return false;
+
+                 // [修改] 关键逻辑：如果是食物或生存必需品，且没钱，过滤掉收费项目
+                 if (type === 'hunger' && sim.money < 20) {
+                     // 如果这东西要钱（cost > 0），就别去了
+                     if (f.cost && f.cost > 0) return false;
+                     // 还要过滤掉那种 utility 是 buy_food 的（通常隐含收费）
+                     if (f.utility === 'buy_food' || f.utility === 'buy_drink') return false;
+                 }
 
                  if (f.cost && f.cost > sim.money) return false;
                  if (f.reserved && f.reserved !== sim.id) return false;

@@ -285,15 +285,15 @@ function generateFamily(count: number) {
     let wealthClass: 'poor' | 'middle' | 'rich';
     let baseMoney = 0;
 
-    if (r < 0.2) {
+    if (r < 0.15) {
         wealthClass = 'rich';
         baseMoney = 10000 + Math.floor(Math.random() * 20000); // 1万 - 3万
-    } else if (r < 0.6) {
+    } else if (r < 0.8) {
         wealthClass = 'middle';
-        baseMoney = 2000 + Math.floor(Math.random() * 3000); // 2千 - 5千
+        baseMoney = 2500 + Math.floor(Math.random() * 6500); // 2500 - 6500
     } else {
         wealthClass = 'poor';
-        baseMoney = 50 + Math.floor(Math.random() * 450); // 50 - 500
+        baseMoney = 1000 + Math.floor(Math.random() * 500); // 1000 - 1500
     }
 
     // [新逻辑] 2. 根据阶级分配住房

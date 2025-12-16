@@ -290,9 +290,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     'buy_food': {
-        verb: '享用美食 🌭', 
+        verb: '吃点心 🌭', 
         duration: 15,
         onStart: (sim, obj) => {
+            // 在家里的冰箱拿东西通常不需要 cost，这里主要针对路边摊
             const cost = 20; 
             if (sim.money >= cost) { 
                 sim.money -= cost; 
@@ -300,6 +301,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 sim.needs.fun += 10;    
                 return true; 
             }
+            
+            // 穷人保护机制：如果太饿了(低于20)，也许好心人会施舍? 
+            // 或者直接拒绝，让他们被迫去找免费的冰箱/食堂
             sim.say("买不起吃的...", 'bad'); 
             return false;
         }
@@ -368,12 +372,24 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'eat_canteen': {
         verb: '吃食堂 🍛', duration: 20,
         onStart: (sim, obj) => {
-            if (sim.money < 10) { sim.say("饭卡没钱了...", 'bad'); return false; }
-            sim.money -= 10;
+            // 如果是学生（甚至可以放宽到穷人），免费吃饭
+            const isStudent = ['Child', 'Teen'].includes(sim.ageStage);
+            
+            if (!isStudent && sim.money < 10) { 
+                sim.say("饭卡没钱了...", 'bad'); 
+                return false; 
+            }
+            
+            if (!isStudent) {
+                sim.money -= 10;
+            } else {
+                // 学生免费，甚至可能因为营养餐加健康
+                if (Math.random() > 0.8) sim.health += 0.5;
+            }
             return true;
         },
         onUpdate: (sim, obj, f, getRate) => {
-            sim.needs.hunger += getRate(30);
+            sim.needs.hunger += getRate(40); // 食堂饭管饱
         }
-    }
+    },
 };

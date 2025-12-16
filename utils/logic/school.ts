@@ -98,50 +98,55 @@ export const SchoolLogic = {
     checkKindergarten(sim: Sim) {
         if (!['Infant', 'Toddler'].includes(sim.ageStage)) return;
 
-        const parents = GameStore.sims.filter(s => (s.id === sim.fatherId || s.id === sim.motherId));
-        let parentsAtHome = false;
-        if (sim.homeId) {
-            parentsAtHome = parents.some(p => p.homeId === sim.homeId && p.isAtHome());
-        }
-
+        const currentHour = GameStore.time.hour;
+        // 设定托儿所时间：早上8点到下午6点
+        const isDaycareTime = currentHour >= 8 && currentHour < 18;
+        
         const inKindergarten = SchoolLogic.isInSchoolArea(sim, 'kindergarten');
 
-        if (!parentsAtHome) {
+        // 1. 白天：强制托管（解决父母出门导致反复传送的问题）
+        if (isDaycareTime) {
             if (!inKindergarten && sim.action !== 'commuting_school' && sim.action !== 'schooling') {
-                sim.say("爸爸妈妈不在家...", 'sys');
+                // 只有不在学校且没在路上时，才传送/出发
                 SchoolLogic.sendToSchool(sim, 'kindergarten');
-                GameStore.addLog(sim, "被送到了向日葵幼儿园托管", 'sys');
+                GameStore.addLog(sim, "到了上托儿所的时间，被送到了幼儿园", 'sys');
             } 
             else if (inKindergarten) {
+                // 在学校里保持状态
                 if (sim.action === 'idle') sim.action = 'schooling';
                 SchoolLogic.autoReplenishNeeds(sim);
                 
-                // [修改] 动态查找校内活动区域
+                // 找点事做，防止呆站着
                 if (!sim.target && !sim.interactionTarget) {
-                    // 动态查找当前的幼儿园范围 (找到 kg_ground)
                     const kgRoom = GameStore.rooms.find(r => r.id.includes('_kg_ground'));
                     if (kgRoom) {
                         const kgArea = { 
                             minX: kgRoom.x, maxX: kgRoom.x + kgRoom.w, 
                             minY: kgRoom.y, maxY: kgRoom.y + kgRoom.h 
                         };
-                        const actionType = (sim.needs.energy < 70) ? 'nap_crib' : 'play_blocks';
+                        // 累了睡，不累玩
+                        const actionType = (sim.needs.energy < 60) ? 'nap_crib' : 'play_blocks';
                         SchoolLogic.findObjectInArea(sim, actionType, kgArea);
                     }
                 }
             }
-        } else {
+        } 
+        // 2. 晚上：接回家
+        else {
             if (inKindergarten) {
-                sim.say("回家咯！", 'love');
+                // 放学逻辑：检查是否有家可回
                 const home = sim.getHomeLocation();
                 if (home) {
+                    // 只有放学这一刻传送一次
                     sim.pos = { x: home.x, y: home.y + 20 };
                     sim.target = null;
                     sim.action = 'idle';
                     sim.interactionTarget = null;
-                    GameStore.addLog(sim, "被父母接回了家", 'family');
+                    sim.say("爸爸妈妈来接我啦！", 'love');
+                    GameStore.addLog(sim, "放学被接回了家", 'family');
                 }
             }
+            // 在家时的逻辑由 Sim.update 的通用逻辑处理
         }
     },
 

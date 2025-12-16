@@ -169,7 +169,6 @@ export class Sim {
         this.skinColor = CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];
         this.hairColor = CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
         this.clothesColor = CONFIG.COLORS.clothes[Math.floor(Math.random() * CONFIG.COLORS.clothes.length)];
-        // [新增] 随机分配裤子颜色
         this.pantsColor = CONFIG.COLORS.pants[Math.floor(Math.random() * CONFIG.COLORS.pants.length)];
 
         this.appearance = {
@@ -212,7 +211,7 @@ export class Sim {
         }
         
         if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
-            this.money = 0; 
+            this.money = 50 + Math.floor(Math.random() * 50);
         }
 
         this.metabolism = {};

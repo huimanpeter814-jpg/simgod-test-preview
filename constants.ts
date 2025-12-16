@@ -54,6 +54,26 @@ export const AGE_CONFIG = {
     Elder: { min: 60, max: 120, label: '老年', color: '#8395a7', width: 20, height: 40, headSize: 13 }
 };
 
+export const HAIR_STYLE_NAMES = [
+    '普通短发',      // 0
+    '波波头',        // 1
+    '刺猬头',        // 2
+    '侧分背头',      // 3
+    '丸子头',        // 4
+    '姬发式长直',    // 5
+    '蓬松爆炸头',    // 6
+    '莫霍克',        // 7
+    '双马尾',        // 8
+    '地中海',        // 9
+    '中分窗帘头',    // 10
+    '高马尾',        // 11
+    '狼尾鲻鱼头',    // 12
+    '遮眼侧刘海',    // 13
+    '脏辫',          // 14
+    '波浪长卷发',    // 15
+    '半扎公主头',    // 16
+];
+
 export const ITEMS = [
     { id: 'drink', label: '冰美式', cost: 15, needs: { hunger: 2, fun: 5 }, trigger: 'street' },
     { id: 'book', label: '设计年鉴', cost: 60, needs: { fun: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },

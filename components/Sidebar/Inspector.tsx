@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GameStore, Sim } from '../../utils/simulation';
 import { drawAvatarHead } from '../../utils/render/pixelArt';
-import { SKILLS, ORIENTATIONS, AGE_CONFIG } from '../../constants';
+import { SKILLS, ORIENTATIONS, AGE_CONFIG, HAIR_STYLE_NAMES } from '../../constants';
 import { SimData, Memory } from '../../types';
+
 
 interface InspectorProps {
     selectedId: string | null;
@@ -144,6 +145,23 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
             relStatusClass = 'bg-pink-500/10 border-pink-500/30 text-pink-300';
         }
     }
+
+    const getHairStyleName = (s: SimData) => {
+        // 如果使用的是图片资源发型
+        if (s.appearance.hair) return "自定义发型";
+        
+        // 如果是程序化发型 (计算逻辑需与 pixelArt.ts 保持一致)
+        const hash = s.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const styleIndex = hash % 17; // 这里的 18 必须对应发型总数
+        
+        // 特殊情况处理：老人秃顶逻辑 (与 pixelArt.ts 保持一致)
+        if (s.ageStage === 'Elder' && styleIndex % 3 === 0) {
+            return HAIR_STYLE_NAMES[9]; // 强制显示地中海
+        }
+        
+        return HAIR_STYLE_NAMES[styleIndex] || '未知发型';
+    };
+    const hairName = getHairStyleName(sim);
 
     // [新增] 职业显示逻辑
     let jobTitle = sim.job.title;
@@ -428,12 +446,18 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                                     <span className="text-gray-200 font-bold">{sim.surname}</span>
                                 </div>
                                 <div className="flex flex-col gap-0.5">
-                                    <span className="text-gray-500 text-[9px]">发色</span>
-                                    <div className="flex items-center gap-1">
-                                        <div className="w-3 h-3 rounded-full border border-white/20" style={{background: sim.hairColor}}></div>
-                                        <span className="text-gray-300 font-mono text-[9px]">{sim.hairColor}</span>
+                            <span className="text-gray-500 text-[9px]">发型 / 色值</span>
+                            <div className="flex items-center gap-2">
+                                    {/* 颜色圆点 */}
+                                    <div className="w-3 h-3 rounded-full border border-white/20 shrink-0" style={{background: sim.hairColor}}></div>
+                                    
+                                    {/* 发型名称和色值 */}
+                                    <div className="flex flex-col leading-none justify-center">
+                                        <span className="text-gray-200 font-bold text-[10px]">{hairName}</span>
+                                        <span className="text-gray-500 font-mono text-[8px] scale-90 origin-left">{sim.hairColor}</span>
                                     </div>
                                 </div>
+                            </div>
                                 <div className="flex flex-col gap-0.5">
                                     <span className="text-gray-500 text-[9px]">身高</span>
                                     <span className="text-gray-200 font-mono">{sim.height} cm</span>
