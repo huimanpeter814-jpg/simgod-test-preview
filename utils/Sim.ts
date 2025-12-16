@@ -23,6 +23,28 @@ interface SimInitConfig {
     money?: number; 
 }
 
+// 🧬 遗传算法辅助函数
+const mixTrait = (val1: number, val2: number, mutationRange: number = 15) => {
+    // 父母平均值
+    const base = (val1 + val2) / 2;
+    // 基因突变 (-mutationRange ~ +mutationRange)
+    const mutation = (Math.random() - 0.5) * 2 * mutationRange;
+    return Math.max(0, Math.min(100, Math.floor(base + mutation)));
+};
+
+// MBTI 遗传：随机组合父母的性格特征
+const mixMBTI = (mbti1: string, mbti2: string) => {
+    // 10% 几率完全基因突变
+    if (Math.random() < 0.1) return MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
+    
+    // 45% 几率继承父亲，45% 继承母亲
+    const rand = Math.random();
+    if (rand < 0.55) return mbti1;
+    if (rand < 1.0) return mbti2;
+    
+    return mbti1; // Fallback
+};
+
 export class Sim {
     id: string;
     familyId: string;
@@ -419,6 +441,13 @@ export class Sim {
 
     die(cause: string) {
         GameStore.addLog(this, `[讣告] ${this.name} 因 ${cause} 离世了，享年 ${Math.floor(this.age)} 岁。`, 'bad');
+        
+        // === ⚱️ 遗产分配逻辑 (Heritage) ===
+        if (this.money > 0) {
+            this.handleInheritance();
+        }
+        // === 遗产逻辑结束 ===
+
         GameStore.sims.forEach(s => {
             if (s.id === this.id) return;
             const rel = s.relationships[this.id];
@@ -430,6 +459,62 @@ export class Sim {
             delete s.relationships[this.id];
         });
         GameStore.removeSim(this.id);
+    }
+
+    // 💰 处理遗产分配
+    handleInheritance() {
+        const totalAsset = this.money;
+        let heirs: Sim[] = [];
+        let heirType = '';
+
+        // 1. 第一顺位：配偶 (Spouse)
+        if (this.partnerId) {
+            const spouse = GameStore.sims.find(s => s.id === this.partnerId);
+            // 必须是已婚配偶，且仍然存活
+            if (spouse && this.relationships[spouse.id]?.isSpouse) {
+                heirs = [spouse];
+                heirType = '配偶';
+            }
+        }
+
+        // 2. 第二顺位：子女 (Children)
+        if (heirs.length === 0 && this.childrenIds.length > 0) {
+            // 查找所有存活的子女
+            const children = GameStore.sims.filter(s => this.childrenIds.includes(s.id));
+            if (children.length > 0) {
+                heirs = children;
+                heirType = '子女';
+            }
+        }
+
+        // 3. 第三顺位：父母 (Parents)
+        if (heirs.length === 0) {
+            const parents = GameStore.sims.filter(s => s.id === this.fatherId || s.id === this.motherId);
+            if (parents.length > 0) {
+                heirs = parents;
+                heirType = '父母';
+            }
+        }
+
+        // 执行分配
+        if (heirs.length > 0) {
+            const share = Math.floor(totalAsset / heirs.length);
+            heirs.forEach(heir => {
+                heir.money += share;
+                // 计入今日收入，可能会触发“暴富幻觉” Buff
+                heir.dailyIncome += share; 
+                
+                GameStore.addLog(heir, `继承了 ${this.name} 的遗产 $${share}`, 'money');
+                heir.addMemory(`继承了 ${this.name} 的遗产，心中五味杂陈。`, 'family', this.id);
+                heir.say("我会珍惜这笔遗产的...", 'sys');
+                
+                // 如果金额巨大，添加 Buff
+                if (share > 5000) heir.addBuff(BUFFS.rich_feel);
+            });
+            GameStore.addLog(null, `[遗产分配] ${this.name} 的 $${totalAsset} 遗产已由 ${heirType} 继承。`, 'sys');
+        } else {
+            GameStore.addLog(null, `[遗产充公] ${this.name} 无合法继承人，遗产 $${totalAsset} 捐赠给市政厅。`, 'sys');
+        }
     }
 
     calculateDailyBudget() {
@@ -913,14 +998,15 @@ export class Sim {
         this.removeBuff('pregnant');
         this.addBuff(BUFFS.new_parent);
 
+        // 获取父亲信息
+        const father = GameStore.sims.find(s => s.id === this.partnerForBabyId);
+        
         const gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
         
+        // 随父姓概率大，但也可能随母姓
         let babySurname = this.surname;
-        if (this.partnerForBabyId) {
-            const partner = GameStore.sims.find(s => s.id === this.partnerForBabyId);
-            if (partner && Math.random() > 0.5) {
-                babySurname = partner.surname;
-            }
+        if (father && Math.random() > 0.5) {
+            babySurname = father.surname;
         }
 
         const baby = new Sim({
@@ -935,28 +1021,51 @@ export class Sim {
             homeId: this.homeId, 
         });
 
-        if (Math.random() > 0.5) baby.skinColor = this.skinColor;
-        baby.hairColor = this.hairColor;
+        // === 🧬 遗传算法开始 (Genetics) ===
+        if (father) {
+            // 1. 外观遗传
+            baby.skinColor = Math.random() > 0.5 ? this.skinColor : father.skinColor;
+            baby.hairColor = Math.random() > 0.5 ? this.hairColor : father.hairColor;
+
+            // 2. 属性遗传 (取平均值 + 变异)
+            baby.iq = mixTrait(this.iq, father.iq, 15);
+            baby.eq = mixTrait(this.eq, father.eq, 15);
+            baby.constitution = mixTrait(this.constitution, father.constitution, 10);
+            baby.appearanceScore = mixTrait(this.appearanceScore, father.appearanceScore, 10); // 颜值遗传
+            baby.luck = mixTrait(this.luck, father.luck, 20); // 运气波动较大
+            baby.creativity = mixTrait(this.creativity, father.creativity, 15);
+
+            // 3. 性格遗传
+            baby.mbti = mixMBTI(this.mbti, father.mbti);
+            
+            // console.log(`[Genetics] Baby ${baby.name}: IQ(${baby.iq}) from ${this.name}(${this.iq})&${father.name}(${father.iq})`);
+        } else {
+            // 如果没有父亲（领养/单亲），主要随母亲，但变异更大
+            baby.skinColor = this.skinColor;
+            baby.hairColor = this.hairColor;
+            baby.iq = mixTrait(this.iq, this.iq, 20);
+            baby.eq = mixTrait(this.eq, this.eq, 20);
+            baby.constitution = mixTrait(this.constitution, 50, 20); // 回归平均
+            baby.appearanceScore = mixTrait(this.appearanceScore, 50, 20);
+        }
+        // === 遗传算法结束 ===
 
         GameStore.sims.push(baby);
         this.childrenIds.push(baby.id);
 
-        if (this.partnerForBabyId) {
-            const partner = GameStore.sims.find(s => s.id === this.partnerForBabyId);
-            if (partner) {
-                partner.childrenIds.push(baby.id);
-                partner.addBuff(BUFFS.new_parent);
-                partner.addMemory(`我们有孩子了！取名叫 ${baby.name}`, 'family', baby.id);
-                
-                SocialLogic.setKinship(partner, baby, 'child');
-                SocialLogic.setKinship(baby, partner, 'parent');
-            }
+        if (father) {
+            father.childrenIds.push(baby.id);
+            father.addBuff(BUFFS.new_parent);
+            father.addMemory(`我们有孩子了！取名叫 ${baby.name}`, 'family', baby.id);
+            
+            SocialLogic.setKinship(father, baby, 'child');
+            SocialLogic.setKinship(baby, father, 'parent');
         }
 
         SocialLogic.setKinship(this, baby, 'child');
         SocialLogic.setKinship(baby, this, 'parent');
 
-        GameStore.addLog(this, `生下了一个健康的${gender==='M'?'男':'女'}婴：${baby.name}！👶`, 'family');
+        GameStore.addLog(this, `生下了一个健康的${gender==='M'?'男':'女'}婴：${baby.name}！👶 (继承了父母的基因)`, 'family');
         this.addMemory(`我的孩子 ${baby.name} 出生了！`, 'family', baby.id);
         this.say("是个可爱的宝宝！", 'love');
     }

@@ -409,7 +409,9 @@ export class GameStore {
     static placePlot(x: number, y: number) {
         const templateId = this.editor.placingTemplateId;
         if (!templateId) return;
-        const newId = `plot_${Date.now()}`;
+        const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
+        const newId = `${prefix}${Date.now()}`;
+
         const newPlot: WorldPlot = { id: newId, templateId: templateId, x: x, y: y };
         this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
         this.worldLayout.push(newPlot);
