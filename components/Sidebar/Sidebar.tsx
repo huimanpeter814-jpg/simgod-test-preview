@@ -13,8 +13,8 @@ const GameOverlay: React.FC = () => {
     const [showStats, setShowStats] = useState(false);
     const [showEditor, setShowEditor] = useState(false); 
     
-    // [新增] 创造者模式检测
-    const [isCreatorMode, setIsCreatorMode] = useState(false);
+    // [已移除] 创造者模式检测逻辑，现在默认开启权限
+    // const [isCreatorMode, setIsCreatorMode] = useState(false);
 
     useEffect(() => {
         // Initial fetch
@@ -26,17 +26,8 @@ const GameOverlay: React.FC = () => {
             setSelectedId(GameStore.selectedSimId);
         });
 
-        // [新增] 简单的权限检查：
-        // 只有当网址包含 #creator 时才显示编辑器按钮 (例如: http://localhost:5173/#creator)
-        const checkHash = () => {
-            setIsCreatorMode(window.location.hash === '#creator');
-        };
-        checkHash();
-        window.addEventListener('hashchange', checkHash);
-
         return () => {
             unsub();
-            window.removeEventListener('hashchange', checkHash);
         };
     }, []);
 
@@ -90,25 +81,23 @@ const GameOverlay: React.FC = () => {
             {/* Bottom Right: Controls */}
             <div className="absolute right-8 bottom-8 pointer-events-auto flex gap-4 items-end">
                 
-                {/* [修改] Editor Button: 仅在创造者模式下显示 */}
-                {isCreatorMode && (
-                    <button
-                        onClick={toggleEditor}
-                        className={`
-                            group flex items-center justify-center
-                            w-14 h-14 rounded-full
-                            shadow-lg border-2 
-                            transition-all duration-300 transform hover:scale-105 active:scale-95
-                            ${showEditor 
-                                ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
-                                : 'bg-purple-600 hover:bg-purple-500 text-white border-white/20 hover:border-white'
-                            }
-                        `}
-                        title="创造者模式：地图编辑器"
-                    >
-                        <span className="text-2xl">🛠️</span>
-                    </button>
-                )}
+                {/* [修改] Editor Button: 现在对所有用户显示，不再需要 #creator */}
+                <button
+                    onClick={toggleEditor}
+                    className={`
+                        group flex items-center justify-center
+                        w-14 h-14 rounded-full
+                        shadow-lg border-2 
+                        transition-all duration-300 transform hover:scale-105 active:scale-95
+                        ${showEditor 
+                            ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
+                            : 'bg-purple-600 hover:bg-purple-500 text-white border-white/20 hover:border-white'
+                        }
+                    `}
+                    title="建筑模式 (已解锁)"
+                >
+                    <span className="text-2xl">🛠️</span>
+                </button>
 
                 {/* Statistics Button */}
                 <button
