@@ -499,7 +499,7 @@ async function handleDailyDiaries(monthIndex: number) {
     if (holiday) {
         contextStr += ` 本月是【${holiday.name}】(${holiday.type})，全城都在过节！`;
     }
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 5;
     
     for (let i = 0; i < allSimsData.length; i += BATCH_SIZE) {
         const batch = allSimsData.slice(i, i + BATCH_SIZE);

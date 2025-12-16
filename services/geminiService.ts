@@ -1,107 +1,111 @@
-// �Ƴ��˶� @google/genai ������������ fetch ֱ�ӵ��� REST API
-// ������ Web �����и��ȶ�������Ҫ Node.js polyfills
-
-
 // services/geminiService.ts
+
+// 硅基流动 API 配置
+const SILICON_FLOW_URL = "https://api.siliconflow.cn/v1/chat/completions";
+const MODEL_ID = "Qwen/Qwen3-8B"; 
 
 export const callGemini = async (prompt: string, systemInstruction: string = ""): Promise<string | null> => {
     const apiKey = import.meta.env.VITE_API_KEY;
     
-    // ⚠️ 检查 Key 是否为空
     if (!apiKey) {
         console.error("❌ 致命错误: .env.local 中未找到 API Key");
         return null;
     }
 
-    // 尝试使用 gemini-1.5-flash (这是目前最推荐的)
-    const model = "gemini-2.5-flash"; 
-    const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    const url = `${baseUrl}?key=${apiKey}`;
-
-    // 🔍 调试日志：请在浏览器控制台(F12)查看这条打印
-    console.log("🚀 正在请求 Gemini API:", baseUrl); 
-    // 注意：不要在生产环境打印含 Key 的完整 URL，但在调试时可以检查 Key 是否有多余空格
+    const messages: { role: string; content: string }[] = [];
+    
+    if (systemInstruction) {
+        messages.push({ role: "system", content: systemInstruction });
+    }
+    messages.push({ role: "user", content: prompt });
 
     const payload = {
-        contents: [{
-            parts: [{ text: prompt }]
-        }],
-        ...(systemInstruction && {
-            systemInstruction: {
-                parts: [{ text: systemInstruction }]
-            }
-        })
+        model: MODEL_ID, 
+        messages: messages,
+        temperature: 0.6, // 稍微降低一点温度，让它更专注执行指令
+        stream: false,
+        max_tokens: 8192 // [修改] 增加 Token 上限，防止 R1 思考太长导致正文被截断
     };
 
     try {
-        const response = await fetch(url, {
+        const response = await fetch(SILICON_FLOW_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}` 
+            },
             body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`❌ API 请求失败 [${response.status}]:`, errorText);
-            
-            if (response.status === 404) {
-                console.error("👉 原因: API未启用 或 模型名称错误。请务必新建一个 Project 并重新生成 Key。");
-            }
+            console.error(`❌ API Error [${response.status}]:`, errorText);
             return null;
         }
 
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        return data.choices?.[0]?.message?.content || null;
 
     } catch (error) {
-        console.error("❌ 网络错误 (请检查代理/VPN):", error);
+        console.error("❌ Network Error:", error);
         return null;
     }
 };
-/**
- * 批量生成市民日记
- * @param simsData 市民数据列表（包含 ID, 名字, 性格, 当天经历等）
- * @param globalContext 全局背景 (比如节日、季节)
- * @returns 解析后的字典对象 { [simId]: "日记内容" }
- */
+
 export const batchGenerateDiaries = async (simsData: any[], globalContext: string = ""): Promise<Record<string, string>> => {
-    // 1. 构造系统提示词 (System Instruction)
-    // 强制要求 JSON 格式，并设定角色
+    // [修改] 增强 Prompt，反复强调“所有市民”
     const systemPrompt = `
     你是一个像素风模拟游戏《SimGod》的叙事助手。
-    你的任务是根据市民的档案，用【第一人称】写一句像“微博/推特”一样的短日记。
+    你将收到一个包含 ${simsData.length} 位市民数据的列表。
+    你的任务是：**为列表中的【每一位】市民**写一句第一人称的“微博/推特”风短的每月总结。
 
-    请参考以下数据来丰富内容：
-    - **Events (经历)**: 如果有具体事件，必须在日记中提及。
-    - **Buffs (状态)**: 这是最重要的心情指标！(例如: "社畜过劳"要写得累，"恋爱脑"要写得甜)。
-    - **LifeGoal (目标)**: 如果今天没事发生，可以感慨一下梦想。
-    - **MBTI (性格)**: F人更感性，T人更逻辑，E人更外向，I人更内敛。
+    请严格参考数据：
+    - **Events (经历)**: 如果有具体事件，必须提及。
+    - **Buffs (状态)**: 这是最重要的心情指标！
+    - **LifeGoal (目标)**: 如果这个月没事发生，可以感慨一下梦想。
+    - **MBTI (性格)**
     - **Global Context**: ${globalContext} (如果是节日，请尽量关联)。
+    - 也可以是和经历、工作、目标完全无关但是符合性格的一些类似个性签名的话语。
 
-    要求：
-    1. **拒绝流水账**：不要写“我今天去工作了”，要写更为生动的语气。
-    2. **口语化**：可以使用 1-2 个 Emoji，语气要像真人发朋友圈。
-    3. **字数**：控制在 40 字以内，短小精悍。
-    4. **格式**：**必须**返回纯 JSON 对象 { [id]: "日记内容" }，不要 Markdown。
+    ❌ 严禁事项：
+    1. 不要只写一个人的！必须处理完列表里所有人！
+    2. 不要 Markdown 格式，只返回纯 JSON。
+    3. 不要解释，不要多余的废话。每个人30字以内。
+
+    ✅ 输出格式（纯JSON）：
+    {
+        "ID_1": "每月总结...",
+        "ID_2": "每月总结...",
+        ...
+        "ID_N": "每月总结..."
+    }
     `;
 
-    // 2. 构造用户输入
-    // 为了节省 Token，只发送必要字段
-    const userPrompt = JSON.stringify(simsData);
+    // [修改] 在用户输入里也再次提醒
+    const userPrompt = `请为以下 ${simsData.length} 位市民生成每月总结：\n${JSON.stringify(simsData)}`;
 
-    // 3. 调用 API
-    // 复用已有的 callGemini 逻辑，或者直接在这里构建请求（为了复用 key 和 fetch 逻辑，建议复用 callGemini，但 callGemini 需要支持 JSON 模式会更好，这里我们简单处理文本解析）
-    const responseText = await callGemini(userPrompt, systemPrompt);
+    let responseText = await callGemini(userPrompt, systemPrompt);
 
     if (!responseText) return {};
 
-    // 4. 解析结果
+    // 清洗 DeepSeek R1 的思考标签
+    responseText = responseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
     try {
-        // 清洗可能存在的 Markdown 标记
+        // 尝试提取 JSON 部分
         const cleanJson = responseText.replace(/```json|```/g, '').trim();
+        const startIdx = cleanJson.indexOf('{');
+        const endIdx = cleanJson.lastIndexOf('}');
+        
+        if (startIdx !== -1 && endIdx !== -1) {
+            const finalJsonStr = cleanJson.substring(startIdx, endIdx + 1);
+            return JSON.parse(finalJsonStr);
+        }
+        
         return JSON.parse(cleanJson);
     } catch (e) {
-        console.error("AI 日记解析失败:", e, responseText);
+        console.error("AI 日记解析失败:", e);
+        // console.log("原始返回:", responseText); // 调试时可以打开
         return {};
     }
 };
