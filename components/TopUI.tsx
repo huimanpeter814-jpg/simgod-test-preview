@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GameStore, SaveMetadata } from '../utils/simulation';
 import { HOLIDAYS } from '../constants';
+import HelpModal from './HelpModal'; // Import the new HelpModal
 
 const SaveLoadModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const [slots, setSlots] = useState<(SaveMetadata | null)[]>([]);
@@ -96,6 +97,7 @@ const TopUI: React.FC = () => {
   const [time, setTime] = useState({ ...GameStore.time });
   const [pop, setPop] = useState(0);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false); // State for Help Modal
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -154,13 +156,22 @@ const TopUI: React.FC = () => {
                 </div>
             </div>
 
-            {/* Save / Load Button */}
+            {/* Right Side Controls */}
             <div className="flex gap-2 pointer-events-auto">
                 <button 
                     onClick={() => setShowSaveModal(true)}
                     className="bg-black/60 backdrop-blur-md px-3 h-9 rounded-full border border-white/10 flex items-center gap-2 text-xs font-bold text-gray-300 hover:text-white hover:border-white/30 transition-all active:scale-95"
                 >
                     <span>💾 存档</span>
+                </button>
+
+                {/* [新增] Help Button */}
+                <button
+                    onClick={() => setShowHelpModal(true)}
+                    className="bg-black/60 backdrop-blur-md w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-sm font-bold text-gray-300 hover:text-white hover:bg-white/10 hover:border-white/30 transition-all active:scale-95"
+                    title="玩法说明"
+                >
+                    ?
                 </button>
             </div>
         </div>
@@ -181,8 +192,9 @@ const TopUI: React.FC = () => {
             </div>
         )}
 
-        {/* Save Modal */}
+        {/* Modals */}
         {showSaveModal && <SaveLoadModal onClose={() => setShowSaveModal(false)} />}
+        {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
     </>
   );
 };
