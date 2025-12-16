@@ -46,11 +46,14 @@ const GameCanvas: React.FC = () => {
     const isDragging = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });
     const hasDragged = useRef(false);
+    
+    // [New] Track drag start position for undo history
+    const dragStartPos = useRef({ x: 0, y: 0 });
 
     // [优化] 静态层 Canvas 缓存
     const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const lastTimePaletteRef = useRef<string>('');
-    const lastStaticUpdateRef = useRef<number>(0); // Timestamp of last static redraw
+    const lastStaticUpdateRef = useRef<number>(0); 
 
     useEffect(() => {
         const handleResize = () => {
@@ -145,9 +148,7 @@ const GameCanvas: React.FC = () => {
             }
         });
 
-        // [New] Draw Editor Selection Outlines in Static Layer (or should be dynamic? dynamic better)
         lastStaticUpdateRef.current = Date.now();
-        console.log("[Canvas] Static Layer Updated");
     };
 
     // ==========================================
@@ -174,24 +175,14 @@ const GameCanvas: React.FC = () => {
         const p = getActivePalette();
         const paletteKey = JSON.stringify(p);
         
-        // 如果正在拖拽地图物件，或者光照变化，则重绘静态层
-        // 拖拽时为了流畅性，必须实时更新静态层（因为房间和家具在动）
+        // 编辑模式下高频重绘静态层，确保拖拽流畅
         if (GameStore.editor.isDragging || paletteKey !== lastTimePaletteRef.current || !staticCanvasRef.current || GameStore.editor.mode !== 'none') {
-             // 优化：编辑模式下，只有在实际操作发生时才高频重绘，否则还是稍微节流一下？
-             // 简单起见，编辑模式下每帧重绘静态层以保证实时反馈，或者只在 GameStore 通知时重绘
-             // 但由于我们使用的是 requestAnimationFrame，这里直接检测时间戳
-             
-             // 如果在拖拽，强制重绘
              if (GameStore.editor.isDragging) {
                  renderStaticLayer();
              } else if (paletteKey !== lastTimePaletteRef.current) {
                  renderStaticLayer();
                  lastTimePaletteRef.current = paletteKey;
              }
-             // 当添加/删除物体导致 GameStore.notify() 时，也会触发重绘，这里我们依赖外部 trigger 可能不够
-             // 实际上，如果 GameStore.furniture 变了，我们需要知道。
-             // 简单hack：每秒检查一次，或者依赖 React 状态? 不行，Canvas 是 ref 驱动。
-             // 让 GameStore 的 notify 更新一个 timestamp
         }
 
         // 3. 绘制静态背景层
@@ -199,13 +190,12 @@ const GameCanvas: React.FC = () => {
             ctx.drawImage(staticCanvasRef.current, 0, 0);
         }
 
-        // 4. [New] Editor Overlays (Grid, Selections)
+        // 4. [New] Editor Overlays
         if (GameStore.editor.mode !== 'none') {
             // Draw Grid
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.lineWidth = 1;
             const gridSize = 100;
-            // Only draw grid visible in camera
             const startX = Math.floor(camX / gridSize) * gridSize;
             const startY = Math.floor(camY / gridSize) * gridSize;
             const endX = startX + (ctx.canvas.width / zoom);
@@ -224,20 +214,12 @@ const GameCanvas: React.FC = () => {
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
-                    // Find bounds of the plot from its rooms (approximate)
-                    // Or since we track plot X/Y, we might need width/height metadata in WorldPlot
-                    // Currently WorldPlot struct in types doesn't have w/h, but template does.
-                    const tpl = GameStore.rooms.find(r => r.id.startsWith(plot.id));
-                    if (tpl) {
-                        // This is weak finding. Let's rely on visual feedback on the object being clicked.
-                        // Actually, dragging logic updates all rooms.
-                        // Let's just highlight all rooms belonging to this plot.
-                        ctx.strokeStyle = '#ffff00';
-                        ctx.lineWidth = 4;
-                        GameStore.rooms.filter(r => r.id.startsWith(`${plot.id}_`)).forEach(r => {
-                            ctx.strokeRect(r.x, r.y, r.w, r.h);
-                        });
-                    }
+                    ctx.strokeStyle = '#ffff00';
+                    ctx.lineWidth = 4;
+                    // Draw bounding box based on rooms
+                    GameStore.rooms.filter(r => r.id.startsWith(`${plot.id}_`)).forEach(r => {
+                        ctx.strokeRect(r.x, r.y, r.w, r.h);
+                    });
                 }
             }
 
@@ -252,8 +234,7 @@ const GameCanvas: React.FC = () => {
             }
         }
 
-        // 5. 绘制角色 (Sims) - Only if not in dragging mode to reduce clutter? Or always show.
-        // Always show for context.
+        // 5. 绘制角色 (Sims)
         const renderSims = [...GameStore.sims].sort((a, b) => a.pos.y - b.pos.y);
         renderSims.forEach(sim => {
             const renderX = sim.pos.x; 
@@ -263,11 +244,9 @@ const GameCanvas: React.FC = () => {
             ctx.save();
             ctx.translate(renderX, renderY);
 
-            // ... (Existing Sim Drawing Logic) ...
             if (GameStore.selectedSimId === sim.id) {
                 ctx.fillStyle = '#39ff14';
                 ctx.beginPath(); ctx.ellipse(0, 5, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
-                // ... effects ...
             } else {
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.beginPath(); ctx.ellipse(0, 5, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -313,7 +292,6 @@ const GameCanvas: React.FC = () => {
             }
 
             if (sim.bubble.timer > 0 && sim.bubble.text) {
-                // ... bubble drawing ...
                 ctx.font = 'bold 10px "Microsoft YaHei", sans-serif';
                 let width = ctx.measureText(sim.bubble.text).width + 12;
                 let bg = '#fff', border='#2d3436', textC='#2d3436';
@@ -333,7 +311,6 @@ const GameCanvas: React.FC = () => {
         });
 
         // 6. 粒子
-        // ... (Existing Particle Logic) ...
         for (let i = GameStore.particles.length - 1; i >= 0; i--) {
             let p = GameStore.particles[i];
             p.y -= 0.6; p.life -= 0.015;
@@ -384,9 +361,7 @@ const GameCanvas: React.FC = () => {
         
         renderStaticLayer();
 
-        // Listen for force redraws (e.g., add plot)
         const unsub = GameStore.subscribe(() => {
-             // If we are in editor mode, any update might mean new object, so render static layer
              if (GameStore.editor.mode !== 'none') {
                  renderStaticLayer();
              }
@@ -418,20 +393,18 @@ const GameCanvas: React.FC = () => {
                         worldY >= r.y && worldY <= r.y + r.h
                     );
                     if (clickedRoom) {
-                        const plotId = clickedRoom.id.split('_')[0] + '_' + clickedRoom.id.split('_')[1]; // Assume id format like "plot_id_room_id"
-                        // Better approach: room id is `${plot.id}_${r.id}`
-                        // So we look for prefix match with worldLayout
                         const plot = GameStore.worldLayout.find(p => clickedRoom.id.startsWith(p.id + '_'));
                         
                         if (plot) {
                             GameStore.editor.selectedPlotId = plot.id;
                             GameStore.editor.isDragging = true;
                             GameStore.editor.dragOffset = { x: worldX - plot.x, y: worldY - plot.y };
+                            // Record start pos
+                            dragStartPos.current = { x: plot.x, y: plot.y };
                             GameStore.notify();
-                            return; // Stop camera drag
+                            return; 
                         }
                     }
-                    // Deselect if clicked empty space
                     GameStore.editor.selectedPlotId = null;
                     GameStore.notify();
 
@@ -445,10 +418,11 @@ const GameCanvas: React.FC = () => {
                         GameStore.editor.selectedFurnitureId = clickedFurn.id;
                         GameStore.editor.isDragging = true;
                         GameStore.editor.dragOffset = { x: worldX - clickedFurn.x, y: worldY - clickedFurn.y };
+                        // Record start pos
+                        dragStartPos.current = { x: clickedFurn.x, y: clickedFurn.y };
                         GameStore.notify();
-                        return; // Stop camera drag
+                        return; 
                     }
-                    // Deselect
                     GameStore.editor.selectedFurnitureId = null;
                     GameStore.notify();
                 }
@@ -469,14 +443,12 @@ const GameCanvas: React.FC = () => {
                 isCameraLocked.current = false; 
             }
 
-            // [New] Editor Dragging Logic
             if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
-                const gridSize = 10; // Snap to 10px
+                const gridSize = 10; 
 
                 if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                     const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                     if (plot) {
-                        // Calculate new position with snap
                         const rawX = mouseX - GameStore.editor.dragOffset.x;
                         const rawY = mouseY - GameStore.editor.dragOffset.y;
                         const newX = Math.round(rawX / gridSize) * gridSize;
@@ -486,7 +458,7 @@ const GameCanvas: React.FC = () => {
                         const moveY = newY - plot.y;
                         
                         if (moveX !== 0 || moveY !== 0) {
-                            GameStore.movePlot(plot.id, moveX, moveY);
+                            GameStore.movePlot(plot.id, moveX, moveY, false);
                         }
                     }
                 } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
@@ -503,7 +475,6 @@ const GameCanvas: React.FC = () => {
                     }
                 }
             } else {
-                // Normal Camera Drag
                 cameraRef.current.x -= dx;
                 cameraRef.current.y -= dy;
             }
@@ -514,12 +485,17 @@ const GameCanvas: React.FC = () => {
     const handleMouseUp = (e: React.MouseEvent) => {
         isDragging.current = false;
         
-        // [New] Stop dragging object
+        // [New] Stop dragging object & Record Undo
         if (GameStore.editor.isDragging) {
             GameStore.editor.isDragging = false;
-            // Force full index rebuild after drag ends
+            
+            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
+                GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
+            } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
+                GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
+            }
+
             GameStore.initIndex(); 
-            // Also notify to redraw static layer perfectly
             renderStaticLayer();
             return;
         }
@@ -532,7 +508,6 @@ const GameCanvas: React.FC = () => {
             const worldX = mouseX / zoom + cameraRef.current.x;
             const worldY = mouseY / zoom + cameraRef.current.y;
 
-            // Only allow Sim selection if NOT in editor mode
             if (GameStore.editor.mode === 'none') {
                 let hitSim: string | null = null; 
                 for (let i = GameStore.sims.length - 1; i >= 0; i--) {

@@ -1,6 +1,6 @@
 import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
-import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; 
+import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, EditorState } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
@@ -11,6 +11,15 @@ import { SocialLogic } from './logic/social';
 export { Sim } from './Sim';
 export { minutes, getJobCapacity } from './simulationHelpers';
 export { drawAvatarHead } from './render/pixelArt'; 
+
+// 编辑器操作接口
+interface EditorAction {
+    type: 'add' | 'remove' | 'move';
+    entityType: 'plot' | 'furniture';
+    id: string;
+    prevData?: any; // 用于撤销
+    newData?: any;  // 用于重做
+}
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -23,7 +32,7 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // [New] Editor State
+    // [Editor] 增强的编辑器状态
     static editor: EditorState = {
         mode: 'none',
         selectedPlotId: null,
@@ -32,11 +41,20 @@ export class GameStore {
         dragOffset: { x: 0, y: 0 }
     };
 
+    // [Editor] 历史记录堆栈
+    static history: EditorAction[] = [];
+    static redoStack: EditorAction[] = [];
+    
+    // [Editor] 暂存快照 (用于取消操作)
+    static snapshot: {
+        worldLayout: WorldPlot[];
+        furniture: Furniture[];
+    } | null = null;
+
     static rooms: RoomDef[] = [];
     static furniture: Furniture[] = [];
     static housingUnits: (HousingUnit & { x: number, y: number })[] = [];
     
-    // [New] Dynamic World Layout State
     static worldLayout: WorldPlot[] = [];
 
     static furnitureIndex: Map<string, Furniture[]> = new Map();
@@ -61,7 +79,6 @@ export class GameStore {
     // 重建世界：将地皮数据转化为绝对坐标数据
     static rebuildWorld(initial = false) {
         if (initial) {
-            // 首次加载时，从 data/world.ts 复制一份到内存
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
         }
 
@@ -69,28 +86,54 @@ export class GameStore {
         this.furniture = [];
         this.housingUnits = [];
         
-        // 1. 添加基础设施 (道路)
-        // @ts-ignore
-        this.rooms.push(...ROADS);
-        // @ts-ignore
-        this.furniture.push(...STREET_PROPS);
+        // 1. 添加基础设施 (现在全部是 Plot)
+        // 旧代码: this.rooms.push(...ROADS); 已废弃
 
-        // 2. 遍历地皮配置 (使用内存中的 worldLayout)
+        // 2. 遍历地皮配置
         this.worldLayout.forEach(plot => {
             GameStore.instantiatePlot(plot);
         });
 
-        console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}, Homes: ${this.housingUnits.length}`);
+        // 3. 添加全局独立家具 (STREET_PROPS)
+        // 注意：如果是编辑器添加的家具，已经存在于 this.furniture 中? 
+        // 不，instantiatePlot 只处理 plot 内部的。
+        // 我们需要把独立的 props 也加上。如果是初始加载，把 STREET_PROPS 加进去。
+        // 如果是后续重建，this.furniture 应该包含所有东西？
+        // 不，每次 rebuild 都会清空 furniture。所以我们需要一种方式持久化独立家具。
+        // 简单方案：initial 时加载 props，后续 addFurniture 会直接 push 到 this.furniture。
+        // 但 rebuild 会清空 furniture，所以我们需要一个 persistentFurniture 列表。
+        // 为了简化，我们假设 Editor 模式下的 addFurniture 是添加 "独立家具"，
+        // 而 instantiatePlot 是从 template 生成 "绑定家具"。
+        // 我们需要一个地方存储这些独立家具的数据源。
+        // 这里暂时简化：独立家具一旦添加，就只在运行时存在，rebuild 时不清空它们？
+        // 更好的做法：rebuild 时，先清空，然后重新实例化所有 plot，再把 "独立家具列表" 加回来。
+        // 目前我们没有独立家具列表，直接存在 this.furniture。
+        // 所以 rebuildWorld 在非 initial 时，不能简单清空 furniture。
+        // 修改策略：将 furniture 分为 "来自Plot" 和 "独立放置"。
+        // 暂时只在 initial 时加载 STREET_PROPS。后续新增的家具，如果不归属 Plot，需要保留。
         
-        // 3. 重建索引
+        if (initial) {
+             // @ts-ignore
+             this.furniture.push(...STREET_PROPS);
+        } else {
+            // 如果不是初始加载，我们需要保留那些 id 以前缀 "custom_" 开头或者是 STREET_PROPS 的家具
+            // 但这样有点复杂。
+            // 让我们采用简单的方案：this.furniture 包含所有。
+            // 当 rebuildWorld 被调用时（比如 addPlot），我们保留 custom furniture。
+            const customFurniture = this.furniture.filter(f => !f.id.includes('_') || f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
+            this.furniture = customFurniture; 
+            // 注意：这会导致非 custom 的家具被清空，然后由下面的 instantiatePlot 重新生成。这是对的。
+        }
+
+        console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}`);
+        
         this.initIndex();
     }
 
-    // [New] 实例化单个地皮 (用于 AddPlot 或 Rebuild)
     static instantiatePlot(plot: WorldPlot) {
         const template = PLOTS[plot.templateId];
         if (!template) {
-            console.error(`Plot template not found: ${plot.templateId}`);
+            // console.error(`Plot template not found: ${plot.templateId}`);
             return;
         }
 
@@ -122,7 +165,7 @@ export class GameStore {
 
             this.rooms.push({
                 ...r,
-                id: `${plot.id}_${r.id}`, // Room ID linked to Plot ID
+                id: `${plot.id}_${r.id}`,
                 x: absX,
                 y: absY,
                 homeId: ownerUnit ? ownerUnit.id : undefined
@@ -140,7 +183,7 @@ export class GameStore {
 
             this.furniture.push({
                 ...f,
-                id: `${plot.id}_${f.id}`, // Furniture ID linked to Plot ID
+                id: `${plot.id}_${f.id}`,
                 x: absX,
                 y: absY,
                 homeId: ownerUnit ? ownerUnit.id : undefined
@@ -148,8 +191,218 @@ export class GameStore {
         });
     }
 
-    // [New] 编辑器功能：添加地皮
+    // === Editor Transaction Logic ===
+
+    static enterEditorMode() {
+        this.editor.mode = 'plot'; // 默认模式
+        // 创建快照
+        this.snapshot = {
+            worldLayout: JSON.parse(JSON.stringify(this.worldLayout)),
+            furniture: JSON.parse(JSON.stringify(this.furniture)) // 这里主要为了保存 custom furniture
+        };
+        this.history = [];
+        this.redoStack = [];
+        this.time.speed = 0; // 暂停游戏
+        this.notify();
+    }
+
+    static confirmEditorChanges() {
+        this.snapshot = null; // 清除快照，确认修改
+        this.editor.mode = 'none';
+        this.editor.selectedPlotId = null;
+        this.editor.selectedFurnitureId = null;
+        this.time.speed = 1; // 恢复游戏
+        this.initIndex(); // 确保索引最新
+        this.notify();
+    }
+
+    static cancelEditorChanges() {
+        if (this.snapshot) {
+            // 恢复快照
+            this.worldLayout = this.snapshot.worldLayout;
+            // 恢复家具需要小心，因为 instantiatePlot 会重新生成 plot furniture
+            // 我们只需要恢复 custom furniture
+            // 简单做法：直接全量恢复快照的 furniture，然后 rebuildWorld 会处理好
+            // 但 rebuildWorld 会重新生成 plot furniture。
+            // 所以我们其实只需要恢复 worldLayout，并且把 custom furniture 还原。
+            
+            // 重新全量构建
+            this.rebuildWorld(false); 
+            // 此时 this.furniture 包含 plot furniture + current custom (which is none if we rebuilt from clean slate?)
+            // 我们的 rebuildWorld 逻辑是保留 "existing custom"。
+            // 所以我们需要把 snapshot 里的 custom furniture 提取出来赋值给 this.furniture
+            const snapshotCustom = this.snapshot.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
+            this.furniture = [...this.furniture.filter(f => !f.id.startsWith('custom_')), ...snapshotCustom];
+            
+            // 再跑一次 rebuild 确保顺序或者索引正确? 其实不需要，只要索引正确。
+            this.initIndex();
+        }
+        this.snapshot = null;
+        this.editor.mode = 'none';
+        this.editor.selectedPlotId = null;
+        this.editor.selectedFurnitureId = null;
+        this.time.speed = 1;
+        this.notify();
+    }
+
+    static clearMap() {
+        if (this.editor.mode === 'none') return;
+        
+        // 记录操作用于撤销 (这是一个破坏性操作，记录所有数据量太大，暂时仅支持清空 Layout)
+        // 简化：Clear 操作不可撤销，或者只能通过 Cancel 恢复
+        if (!confirm('确定要清空所有地皮和家具吗？(此操作不可撤销，除非点击取消退出编辑器)')) return;
+
+        this.worldLayout = [];
+        this.furniture = []; // 清空所有
+        this.rooms = [];
+        this.housingUnits = [];
+        
+        this.initIndex();
+        this.notify();
+    }
+
+    // === Undo / Redo ===
+
+    static recordAction(action: EditorAction) {
+        this.history.push(action);
+        this.redoStack = []; // 新操作清空重做栈
+        if (this.history.length > 50) this.history.shift(); // 限制步数
+    }
+
+    static undo() {
+        const action = this.history.pop();
+        if (!action) return;
+
+        this.redoStack.push(action);
+
+        if (action.type === 'move') {
+            if (action.entityType === 'plot') {
+                const plot = this.worldLayout.find(p => p.id === action.id);
+                if (plot && action.prevData) {
+                    plot.x = action.prevData.x;
+                    plot.y = action.prevData.y;
+                    this.rebuildWorld(false); // 必须重建以移动所有子组件
+                }
+            } else if (action.entityType === 'furniture') {
+                const furn = this.furniture.find(f => f.id === action.id);
+                if (furn && action.prevData) {
+                    furn.x = action.prevData.x;
+                    furn.y = action.prevData.y;
+                }
+            }
+        } else if (action.type === 'add') {
+            // 撤销添加 -> 删除
+            if (action.entityType === 'plot') {
+                this.removePlot(action.id, false); // false = don't record history
+            } else {
+                this.removeFurniture(action.id, false);
+            }
+        } else if (action.type === 'remove') {
+            // 撤销删除 -> 恢复
+            if (action.entityType === 'plot' && action.prevData) {
+                this.worldLayout.push(action.prevData);
+                this.rebuildWorld(false);
+            } else if (action.entityType === 'furniture' && action.prevData) {
+                this.furniture.push(action.prevData);
+            }
+        }
+        this.initIndex();
+        this.notify();
+    }
+
+    static redo() {
+        const action = this.redoStack.pop();
+        if (!action) return;
+
+        this.history.push(action);
+
+        if (action.type === 'move') {
+            if (action.entityType === 'plot') {
+                const plot = this.worldLayout.find(p => p.id === action.id);
+                if (plot && action.newData) {
+                    plot.x = action.newData.x;
+                    plot.y = action.newData.y;
+                    this.rebuildWorld(false);
+                }
+            } else if (action.entityType === 'furniture') {
+                const furn = this.furniture.find(f => f.id === action.id);
+                if (furn && action.newData) {
+                    furn.x = action.newData.x;
+                    furn.y = action.newData.y;
+                }
+            }
+        } else if (action.type === 'add') {
+            // 重做添加
+            if (action.entityType === 'plot' && action.newData) {
+                this.worldLayout.push(action.newData);
+                this.rebuildWorld(false);
+            } else if (action.entityType === 'furniture' && action.newData) {
+                this.furniture.push(action.newData);
+            }
+        } else if (action.type === 'remove') {
+            // 重做删除
+            if (action.entityType === 'plot') {
+                this.removePlot(action.id, false);
+            } else {
+                this.removeFurniture(action.id, false);
+            }
+        }
+        this.initIndex();
+        this.notify();
+    }
+
+    // === Collision Detection ===
+
+    // 检测矩形碰撞
+    static isColliding(rect1: {x:number, y:number, w:number, h:number}, rect2: {x:number, y:number, w:number, h:number}) {
+        return (
+            rect1.x < rect2.x + rect2.w &&
+            rect1.x + rect1.w > rect2.x &&
+            rect1.y < rect2.y + rect2.h &&
+            rect1.y + rect1.h > rect2.y
+        );
+    }
+
+    static checkOverlap(item: {x:number, y:number, w:number, h:number, id?:string}, type: 'plot' | 'furniture'): boolean {
+        // 1. Plot vs Plot
+        if (type === 'plot') {
+            for (const p of this.worldLayout) {
+                if (p.id === item.id) continue;
+                // 获取 Plot 的实际宽高 (从 template)
+                const tpl = PLOTS[p.templateId];
+                if (!tpl) continue;
+                if (this.isColliding(item, {x: p.x, y: p.y, w: tpl.width, h: tpl.height})) {
+                    return true;
+                }
+            }
+        }
+        
+        // 2. Furniture vs Furniture
+        // 注意：家具只和家具碰撞，不和 Plot 碰撞 (因为家具是在 Plot 上面的)
+        // 但根据需求 "地皮和家具不可以重叠"，如果这意味着家具不能放在非 Plot 区域? 不，通常意味着物理碰撞
+        // 如果是独立家具，检查是否和其他独立家具碰撞
+        if (type === 'furniture') {
+            for (const f of this.furniture) {
+                if (f.id === item.id) continue;
+                if (this.isColliding(item, f)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    // === Actions ===
+
     static addPlot(templateId: string, x: number, y: number) {
+        const tpl = PLOTS[templateId];
+        if (!tpl) return;
+
+        // 碰撞检测
+        if (this.checkOverlap({x, y, w: tpl.width, h: tpl.height}, 'plot')) {
+            alert('位置重叠！无法放置。');
+            return;
+        }
+
         const newId = `plot_${Date.now()}`;
         const newPlot: WorldPlot = {
             id: newId,
@@ -157,18 +410,26 @@ export class GameStore {
             x: x,
             y: y
         };
+        
+        this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
+        
         this.worldLayout.push(newPlot);
-        this.instantiatePlot(newPlot); // 增量实例化，不完全重建
-        this.initIndex(); // 必须重建索引
+        this.instantiatePlot(newPlot); 
+        this.initIndex(); 
         this.notify();
     }
 
-    // [New] 编辑器功能：移除地皮
-    static removePlot(plotId: string) {
-        // 1. Remove from Layout
+    static removePlot(plotId: string, record = true) {
+        const plot = this.worldLayout.find(p => p.id === plotId);
+        if (!plot) return;
+
+        if (record) {
+            this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
+        }
+
         this.worldLayout = this.worldLayout.filter(p => p.id !== plotId);
         
-        // 2. Remove associated entities (prefix match)
+        // Remove associated entities
         this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
         this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
         this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
@@ -178,75 +439,119 @@ export class GameStore {
         this.notify();
     }
 
-    // [New] 编辑器功能：移动地皮 (平移所有组件，不重建)
-    static movePlot(plotId: string, dx: number, dy: number) {
+    static movePlot(plotId: string, dx: number, dy: number, finished: boolean = false) {
         const plot = this.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
 
-        plot.x += dx;
-        plot.y += dy;
+        const oldX = plot.x;
+        const oldY = plot.y;
+        const newX = oldX + dx;
+        const newY = oldY + dy;
 
-        // Move Rooms
-        this.rooms.forEach(r => {
-            if (r.id.startsWith(`${plotId}_`)) {
-                r.x += dx;
-                r.y += dy;
-            }
+        const tpl = PLOTS[plot.templateId];
+        
+        // 如果是拖拽结束 (finished=true)，执行碰撞检测和最终移动
+        // 如果是拖拽中 (finished=false)，我们只更新显示，不做严格碰撞回弹 (或者做实时变红)
+        // 这里的 movePlot 是被 GameCanvas 的 mouseMove 调用的，它是增量移动
+        // 为了支持 Undo，我们需要记录"开始拖拽前"的位置。
+        // 这通常在 onMouseDown 记录。
+        
+        // 这里简化：movePlot 只在 finished 时记录 history
+        // 但 GameCanvas 调用是每一帧。
+        // 我们修改 GameCanvas 逻辑：拖拽结束时调用一个 `finalizeMove`。
+        
+        // 暂时保持简单：实时移动，不做碰撞阻止 (让用户自己看着办)，或者在松手时检测重叠并弹回？
+        // 需求是 "不可以重叠"。
+        // 实时检测：如果新位置重叠，禁止移动？
+        
+        if (this.checkOverlap({ id: plotId, x: newX, y: newY, w: tpl.width, h: tpl.height }, 'plot')) {
+            // 碰撞了，不移动 (简单的阻挡)
+            return;
+        }
+
+        plot.x = newX;
+        plot.y = newY;
+
+        // Sync components
+        this.rooms.forEach(r => { if (r.id.startsWith(`${plotId}_`)) { r.x += dx; r.y += dy; } });
+        this.furniture.forEach(f => { if (f.id.startsWith(`${plotId}_`)) { f.x += dx; f.y += dy; } });
+        this.housingUnits.forEach(h => { 
+            if (h.id.startsWith(`${plotId}_`)) { 
+                h.x += dx; h.y += dy; 
+                if(h.maxX) h.maxX += dx; if(h.maxY) h.maxY += dy; 
+            } 
         });
 
-        // Move Furniture
-        this.furniture.forEach(f => {
-            if (f.id.startsWith(`${plotId}_`)) {
-                f.x += dx;
-                f.y += dy;
-            }
-        });
-
-        // Move Housing Units
-        this.housingUnits.forEach(h => {
-            if (h.id.startsWith(`${plotId}_`)) {
-                h.x += dx;
-                h.y += dy;
-                // @ts-ignore
-                if(h.maxX) h.maxX += dx;
-                // @ts-ignore
-                if(h.maxY) h.maxY += dy;
-            }
-        });
-
-        // Don't rebuild index every frame while dragging, just notify redraw
         this.notify();
     }
+    
+    // [New] 专门用于记录移动结束的动作
+    static finalizeMove(entityType: 'plot' | 'furniture', id: string, startPos: {x:number, y:number}) {
+        let currentPos = {x:0, y:0};
+        if (entityType === 'plot') {
+            const p = this.worldLayout.find(x => x.id === id);
+            if (p) currentPos = {x: p.x, y: p.y};
+        } else {
+            const f = this.furniture.find(x => x.id === id);
+            if (f) currentPos = {x: f.x, y: f.y};
+        }
 
-    // [New] 编辑器功能：添加家具
+        if (startPos.x !== currentPos.x || startPos.y !== currentPos.y) {
+            this.recordAction({
+                type: 'move',
+                entityType,
+                id,
+                prevData: startPos, // 撤销时回到起点
+                newData: currentPos // 重做时回到终点
+            });
+        }
+    }
+
     static addFurniture(itemTemplate: Furniture, x: number, y: number) {
+        if (this.checkOverlap({x, y, w: itemTemplate.w, h: itemTemplate.h}, 'furniture')) {
+            alert('位置重叠！');
+            return;
+        }
+
         const newItem = {
             ...itemTemplate,
             id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
             x: x,
             y: y
         };
+        
+        this.recordAction({ type: 'add', entityType: 'furniture', id: newItem.id, newData: newItem });
+
         this.furniture.push(newItem);
         this.initIndex();
         this.notify();
     }
 
-    // [New] 编辑器功能：移除家具
-    static removeFurniture(id: string) {
+    static removeFurniture(id: string, record = true) {
+        const item = this.furniture.find(f => f.id === id);
+        if (!item) return;
+
+        if (record) {
+            this.recordAction({ type: 'remove', entityType: 'furniture', id, prevData: item });
+        }
+
         this.furniture = this.furniture.filter(f => f.id !== id);
         this.editor.selectedFurnitureId = null;
         this.initIndex();
         this.notify();
     }
 
-    // [New] 编辑器功能：移动家具
     static moveFurniture(id: string, x: number, y: number) {
         const item = this.furniture.find(f => f.id === id);
-        if (item) {
-            item.x = x;
-            item.y = y;
-            this.notify();
+        if (!item) return;
+
+        if (this.checkOverlap({ id, x, y, w: item.w, h: item.h }, 'furniture')) {
+            return;
         }
+
+        item.x = x;
+        item.y = y;
+        this.notify();
     }
 
     static initIndex() {
@@ -254,7 +559,7 @@ export class GameStore {
         this.worldGrid.clear();
         this.pathFinder.clear(); 
 
-        const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole'];
+        const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole', 'grass', 'concrete', 'tile', 'wood', 'run_track'];
 
         this.furniture.forEach(f => {
             if (!this.furnitureIndex.has(f.utility)) {
@@ -272,10 +577,13 @@ export class GameStore {
                 ref: f
             });
 
+            // 碰撞体积构建
             const padding = 4;
             const isPassable = f.pixelPattern && passableTypes.some(t => f.pixelPattern?.includes(t));
             
-            if (!isPassable) {
+            // 简单的通行逻辑：如果不是地面装饰，就是障碍物
+            // 可以优化：增加 isObstacle 字段
+            if (!isPassable && f.utility !== 'none' && !f.label.includes('地毯')) {
                 this.pathFinder.setObstacle(
                     f.x + padding, 
                     f.y + padding, 
@@ -327,15 +635,19 @@ export class GameStore {
             return s;
         });
 
+        // 保存当前世界布局
         const saveData = {
-            version: 2.4, // Bump version
+            version: 2.5,
             time: this.time,
             logs: this.logs,
-            sims: safeSims
+            sims: safeSims,
+            worldLayout: this.worldLayout,
+            customFurniture: this.furniture.filter(f => f.id.startsWith('custom_')) // 只保存自定义家具
         };
 
         try {
             localStorage.setItem('pixel_life_save_v1', JSON.stringify(saveData));
+            console.log("Game Saved.");
         } catch (e) {
             console.error("Save failed", e);
         }
@@ -347,13 +659,24 @@ export class GameStore {
             if (!json) return false;
             const data = JSON.parse(json);
             if (!data.version || data.version < 2.4) {
-                 console.warn("Save too old, resetting for new time system");
+                 console.warn("Save too old, resetting.");
                  return false;
             }
 
             this.time = { ...data.time };
             this.logs = data.logs || [];
             
+            // 恢复世界布局
+            if (data.worldLayout) {
+                this.worldLayout = data.worldLayout;
+                this.rebuildWorld(false); // 重建
+                // 恢复自定义家具
+                if (data.customFurniture) {
+                    this.furniture.push(...data.customFurniture);
+                    this.initIndex();
+                }
+            }
+
             this.sims = data.sims.map((sData: any) => {
                 const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); 
                 Object.assign(sim, sData);
@@ -394,7 +717,7 @@ export class GameStore {
     }
 }
 
-// 按照家庭生成初始人口
+// 按照家庭生成初始人口 (保持不变)
 function generateFamily(count: number) {
     const familyId = Math.random().toString(36).substring(2, 8);
     
@@ -530,7 +853,7 @@ export function initGame() {
     GameStore.logs = []; 
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
-    GameStore.rebuildWorld(true); // true = initial build, copy from constants
+    GameStore.rebuildWorld(true); // true = initial build
 
     if (GameStore.loadGame()) {
         GameStore.addLog(null, "存档读取成功", "sys");
