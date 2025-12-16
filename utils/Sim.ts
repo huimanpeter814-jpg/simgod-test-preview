@@ -648,6 +648,37 @@ export class Sim {
                 this.say("身上有味了...", 'bad');
             }
         }
+        // ==========================================
+        // [修复] 动态追踪逻辑：检查家具是否移动了
+        // ==========================================
+        if (this.interactionTarget && this.interactionTarget.type !== 'human') {
+            const obj = this.interactionTarget as Furniture;
+            // 计算家具当前的中心点
+            const currentTargetX = obj.x + obj.w / 2;
+            const currentTargetY = obj.y + obj.h / 2;
+
+            // 1. 如果正在路上 (moving/commuting)，发现目标变了，更新目标并重置路径
+            if (this.target && (Math.abs(this.target.x - currentTargetX) > 1 || Math.abs(this.target.y - currentTargetY) > 1)) {
+                // console.log(`[Sim] 目标家具 ${obj.label} 移动了，重新寻路...`);
+                this.target = { x: currentTargetX, y: currentTargetY };
+                this.path = []; // 清空路径，触发下一帧的重新 A* 寻路
+                this.currentPathIndex = 0;
+            }
+
+            // 2. 如果正在使用中 (using/working)，发现家具移走了，强制中断或瞬移
+            // 这里选择瞬移跟随，保持视觉连贯性
+            if ((this.action === 'using' || this.action === 'working' || this.action === 'eating' || this.action === 'sleeping') && !this.target) {
+                const distToObj = Math.sqrt(Math.pow(this.pos.x - currentTargetX, 2) + Math.pow(this.pos.y - currentTargetY, 2));
+                if (distToObj > 10) { // 如果距离家具中心超过10像素
+                     // 选择 A: 瞬移跟随 (看起来像被家具带着走)
+                     this.pos = { x: currentTargetX, y: currentTargetY };
+                     
+                     // 选择 B: 或者中断动作 (如果觉得瞬移太怪)
+                     // this.reset();
+                     // this.say("诶？椅子呢？", "bad");
+                }
+            }
+        }
 
         if (this.action === 'commuting_school') {
             this.commuteTimer += dt;
@@ -871,6 +902,7 @@ export class Sim {
                     else this.action = 'idle';
                 }
             }
+            
         }
         if (this.bubble.timer > 0) this.bubble.timer -= dt;
     }

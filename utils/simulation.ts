@@ -434,6 +434,23 @@ export class GameStore {
             this.recordAction({ type: 'move', entityType, id, prevData: startPos, newData: { x, y } });
             this.initIndex();
             this.refreshFurnitureOwnership();
+
+            // [新增] 检查是否有市民正在使用这个被移动的物品
+            if (entityType === 'furniture') {
+                this.sims.forEach(sim => {
+                    if (sim.interactionTarget && sim.interactionTarget.id === id) {
+                        // 如果市民正在使用该物品，直接瞬移市民到新位置，避免视觉脱节
+                        if (sim.action === 'using' || sim.action === 'working' || sim.action === 'sleeping') {
+                            const f = this.furniture.find(i => i.id === id);
+                            if (f) {
+                                sim.pos.x = f.x + f.w / 2;
+                                sim.pos.y = f.y + f.h / 2;
+                            }
+                        }
+                        // 如果市民正在路上，上面的 Sim.update 修复逻辑会自动处理重寻路
+                    }
+                });
+            }
         }
         this.editor.previewPos = null;
         this.notify();
