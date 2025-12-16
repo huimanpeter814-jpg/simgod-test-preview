@@ -104,6 +104,15 @@ export interface EditorState {
   previewPos: { x: number, y: number } | null;
 }
 
+// [新增] 从 simulation.ts 移动过来的接口
+export interface EditorAction {
+    type: 'add' | 'remove' | 'move' | 'modify';
+    entityType: 'plot' | 'furniture' | 'room';
+    id: string;
+    prevData?: any; // 用于撤销
+    newData?: any;  // 用于重做
+}
+
 export interface RoomDef {
   id: string;
   x: number;
@@ -279,7 +288,6 @@ export interface GameTime {
   speed: number;
 }
 
-// [新增] 存档元数据接口，解决 simulation.ts 的导入错误
 export interface SaveMetadata {
     slot: number;
     timestamp: number;

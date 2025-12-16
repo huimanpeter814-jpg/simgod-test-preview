@@ -1,26 +1,18 @@
 import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, EditorState, SaveMetadata } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
 import { FamilyGenerator } from './logic/genetics';
 import { NarrativeSystem } from './logic/narrative';
+import { EditorManager } from '../managers/EditorManager';
 
 // Re-exports
 export { Sim } from './Sim';
 export { minutes, getJobCapacity } from './simulationHelpers';
 export { drawAvatarHead } from './render/pixelArt'; 
-
-// 编辑器操作接口
-interface EditorAction {
-    type: 'add' | 'remove' | 'move' | 'modify';
-    entityType: 'plot' | 'furniture' | 'room';
-    id: string;
-    prevData?: any; // 用于撤销
-    newData?: any;  // 用于重做
-}
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -33,29 +25,8 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // [Editor] 增强的编辑器状态
-    static editor: EditorState = {
-        mode: 'none',
-        selectedPlotId: null,
-        selectedFurnitureId: null,
-        selectedRoomId: null,
-        isDragging: false,
-        dragOffset: { x: 0, y: 0 },
-        placingTemplateId: null,
-        placingFurniture: null,
-        drawingFloor: null,
-        drawingPlot: null,
-        previewPos: null
-    };
-
-    static history: EditorAction[] = [];
-    static redoStack: EditorAction[] = [];
-    
-    static snapshot: {
-        worldLayout: WorldPlot[];
-        furniture: Furniture[];
-        rooms: RoomDef[]; 
-    } | null = null;
+    // [Refactor] 静态 EditorManager 实例
+    static editor = new EditorManager();
 
     static rooms: RoomDef[] = [];
     static furniture: Furniture[] = [];
@@ -311,321 +282,31 @@ export class GameStore {
         }
     }
 
-    // === Editor Logic ===
-    static enterEditorMode() {
-        this.editor.mode = 'plot'; 
-        this.snapshot = {
-            worldLayout: JSON.parse(JSON.stringify(this.worldLayout)),
-            furniture: JSON.parse(JSON.stringify(this.furniture)),
-            rooms: JSON.parse(JSON.stringify(this.rooms.filter(r => r.isCustom))) 
-        };
-        this.history = [];
-        this.redoStack = [];
-        this.time.speed = 0; 
-        this.notify();
-    }
+    // === Proxy Methods to EditorManager ===
+    static get history() { return this.editor.history; } // For compatibility if accessed directly
+    static get redoStack() { return this.editor.redoStack; }
 
-    static confirmEditorChanges() {
-        this.snapshot = null; 
-        this.resetEditorState();
-        this.time.speed = 1; 
-        this.initIndex(); 
-        this.refreshFurnitureOwnership();
-        this.notify();
-    }
-
-    static cancelEditorChanges() {
-        if (this.snapshot) {
-            this.worldLayout = this.snapshot.worldLayout;
-            const snapshotCustom = this.snapshot.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
-            this.furniture = [...this.furniture.filter(f => !f.id.startsWith('custom_')), ...snapshotCustom];
-            const existingSystemRooms = this.rooms.filter(r => !r.isCustom);
-            this.rooms = [...existingSystemRooms, ...this.snapshot.rooms];
-            this.rebuildWorld(false); 
-        }
-        this.snapshot = null;
-        this.resetEditorState();
-        this.time.speed = 1;
-        this.notify();
-    }
-
-    static resetEditorState() {
-        this.editor.mode = 'none';
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.editor.selectedRoomId = null;
-        this.editor.placingTemplateId = null;
-        this.editor.placingFurniture = null;
-        this.editor.drawingFloor = null;
-        this.editor.drawingPlot = null;
-        this.editor.isDragging = false;
-        this.editor.previewPos = null;
-    }
-
-    static clearMap() {
-        if (this.editor.mode === 'none') return;
-        if (!confirm('确定要清空所有地皮和家具吗？')) return;
-        this.worldLayout = [];
-        this.furniture = []; 
-        this.rooms = [];
-        this.housingUnits = [];
-        this.initIndex();
-        this.notify();
-    }
-
-    static recordAction(action: EditorAction) {
-        this.history.push(action);
-        this.redoStack = []; 
-        if (this.history.length > 50) this.history.shift(); 
-    }
-
-    static undo() {
-        const action = this.history.pop();
-        if (!action) return;
-        this.redoStack.push(action);
-        this.applyUndoRedo(action, true);
-    }
-
-    static redo() {
-        const action = this.redoStack.pop();
-        if (!action) return;
-        this.history.push(action);
-        this.applyUndoRedo(action, false);
-    }
-
-    static applyUndoRedo(action: EditorAction, isUndo: boolean) {
-        const data = isUndo ? action.prevData : action.newData;
-        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : (action.type === 'modify' ? 'modify' : 'move'))) : action.type;
-
-        if (type === 'move') {
-            if (action.entityType === 'plot') {
-                const plot = this.worldLayout.find(p => p.id === action.id);
-                if (plot && data) { plot.x = data.x; plot.y = data.y; this.rebuildWorld(false); }
-            } else if (action.entityType === 'furniture') {
-                const furn = this.furniture.find(f => f.id === action.id);
-                if (furn && data) { furn.x = data.x; furn.y = data.y; }
-            } else if (action.entityType === 'room') {
-                const room = this.rooms.find(r => r.id === action.id);
-                if (room && data) { room.x = data.x; room.y = data.y; }
-            }
-        } else if (type === 'add') {
-            if (action.entityType === 'plot' && data) { this.worldLayout.push(data); this.rebuildWorld(false); }
-            else if (action.entityType === 'furniture' && data) { this.furniture.push(data); }
-            else if (action.entityType === 'room' && data) { this.rooms.push(data); }
-        } else if (type === 'remove') {
-            if (action.entityType === 'plot') { this.removePlot(action.id, false); }
-            else if (action.entityType === 'furniture') { this.removeFurniture(action.id, false); }
-            else if (action.entityType === 'room') { this.removeRoom(action.id, false); }
-        } else if (type === 'modify') {
-            if (action.entityType === 'plot' && data) {
-                const plot = this.worldLayout.find(p => p.id === action.id);
-                if (plot) {
-                    if (data.templateId) plot.templateId = data.templateId;
-                    this.rebuildWorld(false);
-                }
-            }
-        }
-        this.initIndex();
-        this.notify();
-    }
-
-    // === Actions ===
-    static startPlacingPlot(templateId: string) {
-        this.editor.mode = 'plot';
-        this.editor.placingTemplateId = templateId;
-        this.editor.placingFurniture = null;
-        this.editor.drawingFloor = null;
-        this.editor.drawingPlot = null;
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.editor.isDragging = true; 
-        
-        let w = 300, h = 300;
-        if (templateId) {
-            const tpl = PLOTS[templateId];
-            if (tpl) { w = tpl.width; h = tpl.height; }
-        }
-        this.editor.dragOffset = { x: w / 2, y: h / 2 };
-        this.notify();
-    }
-
-    static startDrawingPlot(templateId: string = 'default_empty') {
-        this.editor.mode = 'plot';
-        this.editor.drawingPlot = { startX: 0, startY: 0, currX: 0, currY: 0, templateId };
-        this.editor.placingTemplateId = null;
-        this.editor.placingFurniture = null;
-        this.editor.drawingFloor = null;
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.notify();
-    }
-
-    static startPlacingFurniture(template: Partial<Furniture>) {
-        this.editor.mode = 'furniture';
-        this.editor.placingFurniture = template;
-        this.editor.placingTemplateId = null;
-        this.editor.drawingFloor = null;
-        this.editor.drawingPlot = null;
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.editor.isDragging = true;
-        this.editor.dragOffset = { x: (template.w || 0) / 2, y: (template.h || 0) / 2 };
-        this.notify();
-    }
-
-    static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean = false) {
-        this.editor.mode = 'floor';
-        this.editor.drawingFloor = { startX: 0, startY: 0, currX: 0, currY: 0, pattern, color, label, hasWall };
-        this.editor.placingTemplateId = null;
-        this.editor.placingFurniture = null;
-        this.editor.drawingPlot = null;
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.editor.selectedRoomId = null;
-        this.notify();
-    }
-
-    static placePlot(x: number, y: number) {
-        const templateId = this.editor.placingTemplateId || 'default_empty';
-        const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
-        const newId = `${prefix}${Date.now()}`;
-        const newPlot: WorldPlot = { id: newId, templateId: templateId, x: x, y: y };
-        this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
-        this.worldLayout.push(newPlot);
-        this.instantiatePlot(newPlot); 
-        this.initIndex(); 
-        this.editor.placingTemplateId = null;
-        this.editor.isDragging = false;
-        this.notify();
-    }
-
-    static createCustomPlot(rect: {x: number, y: number, w: number, h: number}, templateId: string) {
-        const newId = `plot_custom_${Date.now()}`;
-        const newPlot: WorldPlot = { id: newId, templateId: templateId, x: rect.x, y: rect.y, width: rect.w, height: rect.h };
-        this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
-        this.worldLayout.push(newPlot);
-        this.instantiatePlot(newPlot);
-        this.initIndex();
-        this.editor.selectedPlotId = newId;
-        this.notify();
-    }
-
-    static placeFurniture(x: number, y: number) {
-        const tpl = this.editor.placingFurniture;
-        if (!tpl) return;
-        const newItem = { ...tpl, id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, x: x, y: y } as Furniture;
-        this.recordAction({ type: 'add', entityType: 'furniture', id: newItem.id, newData: newItem });
-        this.furniture.push(newItem);
-        this.initIndex();
-        this.refreshFurnitureOwnership();
-        this.editor.placingFurniture = null;
-        this.editor.isDragging = false;
-        this.notify();
-    }
-
-    static createCustomRoom(rect: {x: number, y: number, w: number, h: number}, pattern: string, color: string, label: string, hasWall: boolean) {
-        const newRoom: RoomDef = {
-            id: `custom_room_${Date.now()}`,
-            x: rect.x, y: rect.y, w: rect.w, h: rect.h,
-            label: label, color: color, pixelPattern: pattern, isCustom: true, hasWall: hasWall
-        };
-        this.recordAction({ type: 'add', entityType: 'room', id: newRoom.id, newData: newRoom });
-        this.rooms.push(newRoom);
-        this.initIndex();
-        this.notify();
-    }
-
-    static removePlot(plotId: string, record = true) {
-        const plot = this.worldLayout.find(p => p.id === plotId);
-        if (!plot) return;
-        if (record) this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
-        this.worldLayout = this.worldLayout.filter(p => p.id !== plotId);
-        this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
-        this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
-        this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
-        this.editor.selectedPlotId = null;
-        this.initIndex();
-        this.notify();
-    }
-
-    static removeRoom(roomId: string, record = true) {
-        const room = this.rooms.find(r => r.id === roomId);
-        if (!room) return;
-        if (record) this.recordAction({ type: 'remove', entityType: 'room', id: roomId, prevData: room });
-        this.rooms = this.rooms.filter(r => r.id !== roomId);
-        this.editor.selectedRoomId = null;
-        this.initIndex();
-        this.notify();
-    }
-
-    static changePlotTemplate(plotId: string, newTemplateId: string) {
-        const plot = this.worldLayout.find(p => p.id === plotId);
-        if (!plot) return;
-        const oldTemplate = plot.templateId;
-        this.recordAction({ type: 'modify', entityType: 'plot', id: plotId, prevData: { templateId: oldTemplate }, newData: { templateId: newTemplateId } });
-        plot.templateId = newTemplateId;
-        this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
-        this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
-        this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
-        this.instantiatePlot(plot);
-        this.initIndex();
-        this.notify();
-    }
-
-    static finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
-        if (!this.editor.previewPos) return;
-        const { x, y } = this.editor.previewPos;
-        let hasChange = false;
-        
-        if (entityType === 'plot') {
-            const plot = this.worldLayout.find(p => p.id === id);
-            if (plot && (plot.x !== x || plot.y !== y)) {
-                const dx = x - plot.x;
-                const dy = y - plot.y;
-                plot.x = x; plot.y = y; 
-                this.rooms.forEach(r => { if(r.id.startsWith(`${id}_`)) { r.x += dx; r.y += dy; } });
-                this.furniture.forEach(f => { if(f.id.startsWith(`${id}_`)) { f.x += dx; f.y += dy; } });
-                this.housingUnits.forEach(u => { 
-                    if(u.id.startsWith(`${id}_`)) { u.x += dx; u.y += dy; if(u.maxX) u.maxX += dx; if(u.maxY) u.maxY += dy; } 
-                });
-                hasChange = true; 
-            }
-        } else if (entityType === 'furniture') {
-            const furn = this.furniture.find(f => f.id === id);
-            if (furn && (furn.x !== x || furn.y !== y)) { furn.x = x; furn.y = y; hasChange = true; }
-        } else if (entityType === 'room') {
-            const room = this.rooms.find(r => r.id === id);
-            if (room && (room.x !== x || room.y !== y)) { room.x = x; room.y = y; hasChange = true; }
-        }
-
-        if (hasChange) {
-            this.recordAction({ type: 'move', entityType, id, prevData: startPos, newData: { x, y } });
-            this.initIndex();
-            this.refreshFurnitureOwnership();
-            if (entityType === 'furniture') {
-                this.sims.forEach(sim => {
-                    if (sim.interactionTarget && sim.interactionTarget.id === id) {
-                        if (sim.action === 'using' || sim.action === 'working' || sim.action === 'sleeping') {
-                            const f = this.furniture.find(i => i.id === id);
-                            if (f) { sim.pos.x = f.x + f.w / 2; sim.pos.y = f.y + f.h / 2; }
-                        }
-                    }
-                });
-            }
-        }
-        this.editor.previewPos = null;
-        this.notify();
-    }
-
-    static removeFurniture(id: string, record = true) {
-        const item = this.furniture.find(f => f.id === id);
-        if (!item) return;
-        if (record) this.recordAction({ type: 'remove', entityType: 'furniture', id, prevData: item });
-        this.furniture = this.furniture.filter(f => f.id !== id);
-        this.editor.selectedFurnitureId = null;
-        this.initIndex();
-        this.notify();
-    }
+    static enterEditorMode() { this.editor.enterEditorMode(); }
+    static confirmEditorChanges() { this.editor.confirmChanges(); }
+    static cancelEditorChanges() { this.editor.cancelChanges(); }
+    static resetEditorState() { this.editor.resetState(); }
+    static clearMap() { this.editor.clearMap(); }
+    static recordAction(action: EditorAction) { this.editor.recordAction(action); }
+    static undo() { this.editor.undo(); }
+    static redo() { this.editor.redo(); }
+    static startPlacingPlot(templateId: string) { this.editor.startPlacingPlot(templateId); }
+    static startDrawingPlot(templateId: string) { this.editor.startDrawingPlot(templateId); }
+    static startPlacingFurniture(template: Partial<Furniture>) { this.editor.startPlacingFurniture(template); }
+    static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean) { this.editor.startDrawingFloor(pattern, color, label, hasWall); }
+    static placePlot(x: number, y: number) { this.editor.placePlot(x, y); }
+    static createCustomPlot(rect: any, templateId: string) { this.editor.createCustomPlot(rect, templateId); }
+    static placeFurniture(x: number, y: number) { this.editor.placeFurniture(x, y); }
+    static createCustomRoom(rect: any, pattern: string, color: string, label: string, hasWall: boolean) { this.editor.createCustomRoom(rect, pattern, color, label, hasWall); }
+    static removePlot(plotId: string) { this.editor.removePlot(plotId); }
+    static removeRoom(roomId: string) { this.editor.removeRoom(roomId); }
+    static removeFurniture(id: string) { this.editor.removeFurniture(id); }
+    static changePlotTemplate(plotId: string, templateId: string) { this.editor.changePlotTemplate(plotId, templateId); }
+    static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) { this.editor.finalizeMove(type, id, startPos); }
 
     static initIndex() {
         this.furnitureIndex.clear();
