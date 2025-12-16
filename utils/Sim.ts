@@ -1,12 +1,14 @@
 ﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, AGE_CONFIG } from '../constants';
 import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship, AgeStage } from '../types';
 import { GameStore } from './simulation'; 
-import { minutes, getJobCapacity } from './simulationHelpers';
+import { minutes } from './simulationHelpers';
 import { SocialLogic } from './logic/social';
 import { CareerLogic } from './logic/career';
 import { DecisionLogic } from './logic/decision';
 import { INTERACTIONS, RESTORE_TIMES, InteractionHandler } from './logic/interactionRegistry';
 import { SchoolLogic } from './logic/school';
+import { LifeCycleLogic } from './logic/LifeCycleLogic'; // [新增]
+import { EconomyLogic } from './logic/EconomyLogic';     // [新增]
 
 interface SimInitConfig {
     x?: number;
@@ -22,28 +24,6 @@ interface SimInitConfig {
     homeId?: string | null;
     money?: number; 
 }
-
-// 🧬 遗传算法辅助函数
-const mixTrait = (val1: number, val2: number, mutationRange: number = 15) => {
-    // 父母平均值
-    const base = (val1 + val2) / 2;
-    // 基因突变 (-mutationRange ~ +mutationRange)
-    const mutation = (Math.random() - 0.5) * 2 * mutationRange;
-    return Math.max(0, Math.min(100, Math.floor(base + mutation)));
-};
-
-// MBTI 遗传：随机组合父母的性格特征
-const mixMBTI = (mbti1: string, mbti2: string) => {
-    // 10% 几率完全基因突变
-    if (Math.random() < 0.1) return MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
-    
-    // 45% 几率继承父亲，45% 继承母亲
-    const rand = Math.random();
-    if (rand < 0.55) return mbti1;
-    if (rand < 1.0) return mbti2;
-    
-    return mbti1; // Fallback
-};
 
 export class Sim {
     id: string;
@@ -130,7 +110,7 @@ export class Sim {
 
     commuteTimer: number = 0;
 
-    // [优化] 决策冷却计时器，防止每帧都进行复杂寻路和决策
+    // 决策冷却计时器
     decisionTimer: number = 0; 
 
     constructor(config: SimInitConfig = {}) {
@@ -271,23 +251,9 @@ export class Sim {
         CareerLogic.assignJob(this);
     }
 
+    // 经济：支付房租 (代理到 EconomyLogic)
     payRent() {
-        if (!this.homeId) return; 
-        if (this.ageStage === 'Infant' || this.ageStage === 'Toddler' || this.ageStage === 'Child') return;
-
-        const home = GameStore.housingUnits.find(u => u.id === this.homeId);
-        if (!home) return;
-
-        const adultRoommates = GameStore.sims.filter(s => s.homeId === this.homeId && !['Infant', 'Toddler', 'Child'].includes(s.ageStage));
-        const share = Math.ceil(home.cost / (adultRoommates.length || 1));
-
-        if (this.money >= share) {
-            this.money -= share;
-            this.dailyExpense += share;
-        } else {
-            this.addBuff(BUFFS.broke);
-            this.say("房租要交不起了...", 'bad');
-        }
+        EconomyLogic.payRent(this);
     }
 
     getHomeLocation(): Vector2 | null {
@@ -353,7 +319,8 @@ export class Sim {
 
     applyMonthlyEffects(month: number, holiday?: { name: string, type: string }) {
         this.age += 0.1;
-        this.checkAgeStage();
+        // 生命周期：检查年龄阶段 (代理到 LifeCycleLogic)
+        LifeCycleLogic.checkAgeStage(this);
 
         if (!holiday) return;
 
@@ -400,294 +367,43 @@ export class Sim {
         }
     }
 
-    checkAgeStage() {
-        const currentStageConf = AGE_CONFIG[this.ageStage];
-        if (this.age > currentStageConf.max) {
-            const stages: AgeStage[] = ['Infant', 'Toddler', 'Child', 'Teen', 'Adult', 'MiddleAged', 'Elder'];
-            const idx = stages.indexOf(this.ageStage);
-            if (idx < stages.length - 1) {
-                this.ageStage = stages[idx + 1];
-                this.say(`我长大了！变成 ${AGE_CONFIG[this.ageStage].label} 了`, 'sys');
-                this.addMemory(`在这个月，我成长为了 ${AGE_CONFIG[this.ageStage].label}。`, 'life');
-                
-                if (this.ageStage === 'Toddler') { this.height += 30; this.weight += 7; }
-                else if (this.ageStage === 'Child') { this.height += 30; this.weight += 15; }
-                else if (this.ageStage === 'Teen') { this.height += 30; this.weight += 20; }
-                else if (this.ageStage === 'Adult') { this.height += 5; this.weight += 5; }
-
-                if (this.ageStage === 'Adult' && this.job.id === 'unemployed') {
-                    this.assignJob();
-                    this.say("该找份工作养活自己了！", 'sys');
-                }
-            }
-        }
-    }
-
     checkDeath(dt: number) {
-        if (this.health <= 0) {
-            this.die("健康耗尽");
-            return;
-        }
-        if (this.ageStage === 'Elder') {
-            let deathProb = 0.00001 * (this.age - 60) * dt; 
-            deathProb *= (1.5 - this.constitution / 100);
-            deathProb *= (1.5 - this.luck / 100);
-
-            if (Math.random() < deathProb) {
-                this.die("寿终正寝");
-            }
-        }
+        LifeCycleLogic.checkDeath(this, dt);
     }
 
+    // 死亡处理已移动到 LifeCycleLogic，这里只是为了兼容旧代码调用
     die(cause: string) {
-        GameStore.addLog(this, `[讣告] ${this.name} 因 ${cause} 离世了，享年 ${Math.floor(this.age)} 岁。`, 'bad');
-        
-        // === ⚱️ 遗产分配逻辑 (Heritage) ===
-        if (this.money > 0) {
-            this.handleInheritance();
-        }
-        // === 遗产逻辑结束 ===
-
-        GameStore.sims.forEach(s => {
-            if (s.id === this.id) return;
-            const rel = s.relationships[this.id];
-            if ((rel && rel.friendship > 60) || this.familyId === s.familyId) {
-                s.addBuff(BUFFS.mourning);
-                s.addMemory(`${this.name} 离开了我们... R.I.P.`, 'family');
-                s.say("R.I.P...", 'bad');
-            }
-            delete s.relationships[this.id];
-        });
-        GameStore.removeSim(this.id);
+        LifeCycleLogic.die(this, cause);
     }
 
-    // 💰 处理遗产分配
+    // 遗产处理已移动到 LifeCycleLogic
     handleInheritance() {
-        const totalAsset = this.money;
-        let heirs: Sim[] = [];
-        let heirType = '';
-
-        // 1. 第一顺位：配偶 (Spouse)
-        if (this.partnerId) {
-            const spouse = GameStore.sims.find(s => s.id === this.partnerId);
-            // 必须是已婚配偶，且仍然存活
-            if (spouse && this.relationships[spouse.id]?.isSpouse) {
-                heirs = [spouse];
-                heirType = '配偶';
-            }
-        }
-
-        // 2. 第二顺位：子女 (Children)
-        if (heirs.length === 0 && this.childrenIds.length > 0) {
-            // 查找所有存活的子女
-            const children = GameStore.sims.filter(s => this.childrenIds.includes(s.id));
-            if (children.length > 0) {
-                heirs = children;
-                heirType = '子女';
-            }
-        }
-
-        // 3. 第三顺位：父母 (Parents)
-        if (heirs.length === 0) {
-            const parents = GameStore.sims.filter(s => s.id === this.fatherId || s.id === this.motherId);
-            if (parents.length > 0) {
-                heirs = parents;
-                heirType = '父母';
-            }
-        }
-
-        // 执行分配
-        if (heirs.length > 0) {
-            const share = Math.floor(totalAsset / heirs.length);
-            heirs.forEach(heir => {
-                heir.money += share;
-                // 计入今日收入，可能会触发“暴富幻觉” Buff
-                heir.dailyIncome += share; 
-                
-                GameStore.addLog(heir, `继承了 ${this.name} 的遗产 $${share}`, 'money');
-                heir.addMemory(`继承了 ${this.name} 的遗产，心中五味杂陈。`, 'family', this.id);
-                heir.say("我会珍惜这笔遗产的...", 'sys');
-                
-                // 如果金额巨大，添加 Buff
-                if (share > 5000) heir.addBuff(BUFFS.rich_feel);
-            });
-            GameStore.addLog(null, `[遗产分配] ${this.name} 的 $${totalAsset} 遗产已由 ${heirType} 继承。`, 'sys');
-        } else {
-            GameStore.addLog(null, `[遗产充公] ${this.name} 无合法继承人，遗产 $${totalAsset} 捐赠给市政厅。`, 'sys');
-        }
+        LifeCycleLogic.handleInheritance(this);
     }
 
+    // 经济：计算预算 (代理到 EconomyLogic)
     calculateDailyBudget() {
-        if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
-            this.dailyBudget = 0;
-            return;
-        }
-
-        let safetyPercent = 0.2;
-        const isEarth = this.zodiac.element === 'earth';
-        const isFire = this.zodiac.element === 'fire';
-        const isJ = this.mbti.includes('J');
-
-        if (isEarth || isJ) safetyPercent = 0.4;
-        if (isFire || !isJ) safetyPercent = 0.1;
-
-        const safetyMargin = this.money * safetyPercent;
-        let disposable = Math.max(0, this.money - safetyMargin);
-
-        let propensity = 0.2;
-        if (this.hasBuff('rich_feel')) propensity = 0.5;
-        if (this.hasBuff('shopping_spree')) propensity = 0.8; 
-        if (this.hasBuff('stressed')) propensity = 0.4;
-
-        this.dailyBudget = Math.floor(disposable * propensity);
+        EconomyLogic.calculateDailyBudget(this);
     }
 
+    // 经济：检查消费 (代理到 EconomyLogic)
     checkSpending() {
-        if (this.action !== 'wandering' && this.action !== 'idle') {
-            return;
-        }
-        if (this.money <= 0) return;
-
-        if (this.money < 100) {
-            if (!this.hasBuff('broke') && !this.hasBuff('anxious')) {
-                this.addBuff(BUFFS.broke);
-                this.addBuff(BUFFS.anxious);
-            }
-            return;
-        }
-
-        const affordable = ITEMS.filter(item => item.cost <= this.dailyBudget && item.cost <= this.money);
-        let bestItem: any = null;
-        let maxScore = 0;
-
-        affordable.forEach(item => {
-            let score = 0;
-            if (item.needs) {
-                if (item.needs.hunger && this.needs.hunger < 60) score += item.needs.hunger * 2;
-                if (item.needs.fun && this.needs.fun < 60) score += item.needs.fun * 2;
-                if (item.needs.energy && this.needs.energy < 50 && item.needs.energy > 0) score += 20;
-            }
-            if (item.id === 'museum_ticket' && (this.mbti.includes('N') || this.skills.creativity > 20)) {
-                score += 40;
-            }
-            
-            if (item.skill) {
-                if (this.lifeGoal.includes('博学') || this.lifeGoal.includes('富翁')) score += 30;
-                if (this.mbti.includes('N') && item.skill === 'logic') score += 20;
-                if (this.zodiac.element === 'fire' && item.skill === 'athletics') score += 20;
-            }
-
-            if (item.attribute) {
-                const currentVal = (this as any)[item.attribute] || 0;
-                if (currentVal < 40) score += 30;
-
-                if (item.attribute === 'iq' && this.job.companyType === 'internet') score += 40;
-                if (item.attribute === 'creativity' && this.job.companyType === 'design') score += 40;
-                if ((item.attribute === 'appearanceScore' || item.attribute === 'eq') && this.job.companyType === 'business') score += 40;
-                if (item.attribute === 'constitution' && this.job.companyType === 'restaurant') score += 30;
-
-                if (this.lifeGoal.includes('万人迷') && item.attribute === 'appearanceScore') score += 50;
-                if (this.lifeGoal.includes('大牛') && item.attribute === 'iq') score += 50;
-                if (this.lifeGoal.includes('健身') && item.attribute === 'constitution') score += 50;
-            }
-
-            if (this.hasBuff('shopping_spree')) {
-                score += 50; 
-                if (item.cost > 100) score += 30; 
-            }
-
-            if (item.trigger === 'rich_hungry' && this.money > 5000) score += 50;
-            if (item.trigger === 'addicted' && this.mbti.includes('P') && this.needs.fun < 30) score += 100;
-            if (item.trigger === 'love' && this.hasBuff('in_love')) score += 80;
-            if (item.trigger === 'beauty' && this.appearanceScore < 50) score += 30; 
-
-            score += Math.random() * 20;
-
-            if (score > 50 && score > maxScore) {
-                maxScore = score;
-                bestItem = item;
-            }
-        });
-
-        if (bestItem) {
-            this.buyItem(bestItem);
-        }
-        
-        this.checkCareerSatisfaction();
+        EconomyLogic.checkSpending(this);
     }
     
     checkCareerSatisfaction() {
         CareerLogic.checkCareerSatisfaction(this);
     }
 
+    // 经济：购买物品 (代理到 EconomyLogic)
     buyItem(item: any) {
-        this.money -= item.cost;
-        this.dailyExpense += item.cost;
-        this.dailyBudget -= item.cost;
-
-        if (item.needs) {
-            for (let k in item.needs) {
-                if (this.needs[k] !== undefined) this.needs[k] = Math.min(100, this.needs[k] + item.needs[k]);
-            }
-        }
-
-        if (item.skill) {
-            let val = item.skillVal || 5;
-            this.skills[item.skill] = Math.min(100, this.skills[item.skill] + val);
-            this.say("📚 涨知识", 'act');
-        }
-
-        if (item.attribute) {
-            let val = item.attrVal || 2;
-            const current = (this as any)[item.attribute] || 0;
-            (this as any)[item.attribute] = Math.min(100, current + val);
-            
-            let emoji = '✨';
-            if (item.attribute === 'appearanceScore') emoji = '💅';
-            if (item.attribute === 'constitution') emoji = '💪';
-            if (item.attribute === 'iq') emoji = '🧠';
-            
-            this.say(`${emoji} 提升!`, 'act');
-        }
-
-        if (item.buff) this.addBuff(BUFFS[item.buff as keyof typeof BUFFS]);
-
-        if (item.id === 'museum_ticket') {
-             this.say("买票去看展 🎨", 'act');
-             this.addBuff(BUFFS.art_inspired);
-             DecisionLogic.findObject(this, 'art'); 
-        }
-
-        let logSuffix = "";
-        if (item.rel) {
-            const loverId = Object.keys(this.relationships).find(id => this.relationships[id].isLover);
-            if (loverId) {
-                const lover = GameStore.sims.find(s => s.id === loverId);
-                if (lover) {
-                    let relBonus = 15;
-                    if (lover.lifeGoal.includes('富翁')) relBonus += 10;
-                    
-                    SocialLogic.updateRelationship(lover, this, 'romance', relBonus);
-                    lover.needs.fun = Math.min(100, lover.needs.fun + 20);
-                    logSuffix = ` (送给 ${lover.name})`;
-                    this.addMemory(`给 ${lover.name} 买了 ${item.label}，希望Ta喜欢。`, 'social', lover.id);
-                }
-            }
-        }
-
-        if (item.id !== 'museum_ticket') this.say(`💸 ${item.label}`, 'act');
-        GameStore.addLog(this, `购买了 ${item.label} -$${item.cost}${logSuffix}`, 'money');
+        EconomyLogic.buyItem(this, item);
     }
 
+    // 经济：赚钱 (代理到 EconomyLogic)
     earnMoney(amount: number, source: string) {
-        const earned = Math.floor(amount);
-        this.money += earned;
-        this.dailyIncome += earned; 
-        GameStore.addLog(this, `通过 ${source} 赚了 $${earned}`, 'money');
-        this.say(`赚到了! +$${earned}`, 'money');
-        this.addBuff(BUFFS.side_hustle_win);
+        EconomyLogic.earnMoney(this, amount, source);
     }
-
 
     leaveWorkEarly() {
         CareerLogic.leaveWorkEarly(this);
@@ -697,14 +413,11 @@ export class Sim {
         this.prevPos = { ...this.pos };
         const f = 0.0008 * dt;
 
-        // [优化] 分时处理逻辑，大量低频逻辑移入 minuteChanged
         if (minuteChanged) {
             SchoolLogic.checkKindergarten(this);
             this.updateBuffs(1);
-            this.updateMood(); // 心情计算不用每帧进行
-            this.checkDeath(dt); // 死亡判定每分钟一次足矣
-            
-            // [优化] 工作日程检查每分钟一次即可
+            this.updateMood();
+            this.checkDeath(dt); 
             this.checkSchedule();
 
             if (this.isPregnant) {
@@ -719,7 +432,6 @@ export class Sim {
                 SchoolLogic.giveAllowance(this);
             }
 
-            // 分钟级的状态检查
             if (this.needs.social < 20 && !this.hasBuff('lonely')) {
                 this.addBuff(BUFFS.lonely);
                 this.say("好孤独...", 'bad');
@@ -733,34 +445,23 @@ export class Sim {
                 this.say("身上有味了...", 'bad');
             }
         }
-        // ==========================================
-        // [修复] 动态追踪逻辑：检查家具是否移动了
-        // ==========================================
+
+        // 家具移动追踪逻辑
         if (this.interactionTarget && this.interactionTarget.type !== 'human') {
             const obj = this.interactionTarget as Furniture;
-            // 计算家具当前的中心点
             const currentTargetX = obj.x + obj.w / 2;
             const currentTargetY = obj.y + obj.h / 2;
 
-            // 1. 如果正在路上 (moving/commuting)，发现目标变了，更新目标并重置路径
             if (this.target && (Math.abs(this.target.x - currentTargetX) > 1 || Math.abs(this.target.y - currentTargetY) > 1)) {
-                // console.log(`[Sim] 目标家具 ${obj.label} 移动了，重新寻路...`);
                 this.target = { x: currentTargetX, y: currentTargetY };
-                this.path = []; // 清空路径，触发下一帧的重新 A* 寻路
+                this.path = []; 
                 this.currentPathIndex = 0;
             }
 
-            // 2. 如果正在使用中 (using/working)，发现家具移走了，强制中断或瞬移
-            // 这里选择瞬移跟随，保持视觉连贯性
             if ((this.action === 'using' || this.action === 'working' || this.action === 'eating' || this.action === 'sleeping') && !this.target) {
                 const distToObj = Math.sqrt(Math.pow(this.pos.x - currentTargetX, 2) + Math.pow(this.pos.y - currentTargetY, 2));
-                if (distToObj > 10) { // 如果距离家具中心超过10像素
-                     // 选择 A: 瞬移跟随 (看起来像被家具带着走)
+                if (distToObj > 10) { 
                      this.pos = { x: currentTargetX, y: currentTargetY };
-                     
-                     // 选择 B: 或者中断动作 (如果觉得瞬移太怪)
-                     // this.reset();
-                     // this.say("诶？椅子呢？", "bad");
                 }
             }
         }
@@ -777,9 +478,6 @@ export class Sim {
             this.skills.logic += 0.002 * dt;
         }
 
-        // [优化] 移除原本每帧调用的 checkSchedule / updateMood / checkDeath
-        // 这些已经移入 minuteChanged 块中
-
         if (this.needs.energy <= 0 || this.needs.hunger <= 0) {
             this.health -= 0.05 * f * 10; 
             if (Math.random() > 0.95) this.say("感觉快不行了...", 'bad');
@@ -787,15 +485,10 @@ export class Sim {
             this.health += 0.01 * f;
         }
 
-        // [修复] 优化婴幼儿行为逻辑，防止与幼儿园托管逻辑冲突
         if (['Infant', 'Toddler'].includes(this.ageStage)) {
-            // [新增] 检查当前是否为上学时间 (8点到18点)
             const isSchoolTime = GameStore.time.hour >= 8 && GameStore.time.hour < 18;
 
-            // 1. 如果不在家
             if (this.homeId && !this.isAtHome()) {
-                // 如果不是上学时间 (或没去上学)，且不在家，才尝试回家
-                // 如果是上学时间，SchoolLogic 会负责传送，Sim.ts 里的回家逻辑会被屏蔽
                 if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') {
                     if (!this.target || this.action !== 'moving_home') {
                         const homePos = this.getHomeLocation();
@@ -807,7 +500,6 @@ export class Sim {
                     }
                 }
             } 
-            // 2. 如果在家
             else if (this.homeId && this.isAtHome()) {
                 if (!this.target && Math.random() > 0.95) {
                     const home = GameStore.housingUnits.find(u => u.id === this.homeId);
@@ -828,8 +520,6 @@ export class Sim {
                     }
                 }
             }
-            // 3. 其他情况 (比如无家可归，跟随父母)
-            // [修复] 同样增加 !isSchoolTime 限制，上学期间不跟随
             else if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') { 
                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                 if (parent) {
@@ -907,22 +597,20 @@ export class Sim {
             if (this.actionTimer <= 0) this.finishAction();
         } 
         else if (!this.target) {
-            // [优化] 决策冷却逻辑，防止每帧都在进行寻路计算
             if (this.decisionTimer > 0) {
                 this.decisionTimer -= dt;
             } else {
-                // 只有当没有目标、没有正在进行动作、且冷却时间到了的时候，才做决策
                 if (this.job.id !== 'unemployed') {
                     if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
                          if (this.action === 'moving') this.action = 'idle';
                          DecisionLogic.decideAction(this);
-                         this.decisionTimer = 30 + Math.random() * 30; // 决策后休息 1-2 秒 (30-60 ticks)
+                         this.decisionTimer = 30 + Math.random() * 30; 
                     }
                 } else {
                     if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
                         if (this.action === 'moving') this.action = 'idle';
                         DecisionLogic.decideAction(this);
-                        this.decisionTimer = 30 + Math.random() * 30; // 决策后休息 1-2 秒
+                        this.decisionTimer = 30 + Math.random() * 30; 
                     }
                 }
             }
@@ -950,9 +638,8 @@ export class Sim {
                     this.path = GameStore.pathFinder.findPath(this.pos.x, this.pos.y, this.target.x, this.target.y);
                     this.currentPathIndex = 0;
                     if (this.path.length === 0) {
-                        // [优化] 如果寻路失败，稍微等待再重试，防止每帧都寻路
                         this.decisionTimer = 60; 
-                        this.path.push({ x: this.target.x, y: this.target.y }); // 降级为直线
+                        this.path.push({ x: this.target.x, y: this.target.y }); 
                     }
                 }
 
@@ -993,81 +680,7 @@ export class Sim {
     }
 
     giveBirth() {
-        this.isPregnant = false;
-        this.pregnancyTimer = 0;
-        this.removeBuff('pregnant');
-        this.addBuff(BUFFS.new_parent);
-
-        // 获取父亲信息
-        const father = GameStore.sims.find(s => s.id === this.partnerForBabyId);
-        
-        const gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
-        
-        // 随父姓概率大，但也可能随母姓
-        let babySurname = this.surname;
-        if (father && Math.random() > 0.5) {
-            babySurname = father.surname;
-        }
-
-        const baby = new Sim({
-            x: this.pos.x + 20,
-            y: this.pos.y + 20,
-            surname: babySurname, 
-            familyId: this.familyId,
-            ageStage: 'Infant',
-            gender: gender,
-            motherId: this.id, 
-            fatherId: this.partnerForBabyId || undefined,
-            homeId: this.homeId, 
-        });
-
-        // === 🧬 遗传算法开始 (Genetics) ===
-        if (father) {
-            // 1. 外观遗传
-            baby.skinColor = Math.random() > 0.5 ? this.skinColor : father.skinColor;
-            baby.hairColor = Math.random() > 0.5 ? this.hairColor : father.hairColor;
-
-            // 2. 属性遗传 (取平均值 + 变异)
-            baby.iq = mixTrait(this.iq, father.iq, 15);
-            baby.eq = mixTrait(this.eq, father.eq, 15);
-            baby.constitution = mixTrait(this.constitution, father.constitution, 10);
-            baby.appearanceScore = mixTrait(this.appearanceScore, father.appearanceScore, 10); // 颜值遗传
-            baby.luck = mixTrait(this.luck, father.luck, 20); // 运气波动较大
-            baby.creativity = mixTrait(this.creativity, father.creativity, 15);
-
-            // 3. 性格遗传
-            baby.mbti = mixMBTI(this.mbti, father.mbti);
-            
-            // console.log(`[Genetics] Baby ${baby.name}: IQ(${baby.iq}) from ${this.name}(${this.iq})&${father.name}(${father.iq})`);
-        } else {
-            // 如果没有父亲（领养/单亲），主要随母亲，但变异更大
-            baby.skinColor = this.skinColor;
-            baby.hairColor = this.hairColor;
-            baby.iq = mixTrait(this.iq, this.iq, 20);
-            baby.eq = mixTrait(this.eq, this.eq, 20);
-            baby.constitution = mixTrait(this.constitution, 50, 20); // 回归平均
-            baby.appearanceScore = mixTrait(this.appearanceScore, 50, 20);
-        }
-        // === 遗传算法结束 ===
-
-        GameStore.sims.push(baby);
-        this.childrenIds.push(baby.id);
-
-        if (father) {
-            father.childrenIds.push(baby.id);
-            father.addBuff(BUFFS.new_parent);
-            father.addMemory(`我们有孩子了！取名叫 ${baby.name}`, 'family', baby.id);
-            
-            SocialLogic.setKinship(father, baby, 'child');
-            SocialLogic.setKinship(baby, father, 'parent');
-        }
-
-        SocialLogic.setKinship(this, baby, 'child');
-        SocialLogic.setKinship(baby, this, 'parent');
-
-        GameStore.addLog(this, `生下了一个健康的${gender==='M'?'男':'女'}婴：${baby.name}！👶 (继承了父母的基因)`, 'family');
-        this.addMemory(`我的孩子 ${baby.name} 出生了！`, 'family', baby.id);
-        this.say("是个可爱的宝宝！", 'love');
+        LifeCycleLogic.giveBirth(this);
     }
 
     checkSchedule() {
