@@ -21,11 +21,19 @@ interface EditorAction {
     newData?: any;  // 用于重做
 }
 
+// 存档元数据接口
+export interface SaveMetadata {
+    slot: number;
+    timestamp: number;
+    timeLabel: string; // "Y1 M2"
+    pop: number; // 人口
+    realTime: string; // "2023-10-01 12:00"
+}
+
 export class GameStore {
     static sims: Sim[] = [];
     static particles: { x: number; y: number; life: number }[] = [];
     
-    // [设置] 默认速度调整为 2 (30FPS下，每帧加2 -> 30帧加60 -> 1秒=1游戏分钟)
     static time: GameTime = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
     
     static timeAccumulator: number = 0;
@@ -45,11 +53,9 @@ export class GameStore {
         previewPos: null
     };
 
-    // [Editor] 历史记录堆栈
     static history: EditorAction[] = [];
     static redoStack: EditorAction[] = [];
     
-    // [Editor] 暂存快照 (用于取消操作)
     static snapshot: {
         worldLayout: WorldPlot[];
         furniture: Furniture[];
@@ -65,6 +71,10 @@ export class GameStore {
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
     static pathFinder: PathFinder = new PathFinder(CONFIG.CANVAS_W, CONFIG.CANVAS_H, 20);
 
+    // Toast Notification State
+    static toastMessage: string | null = null;
+    static toastTimer: any = null;
+
     static subscribe(cb: () => void) {
         this.listeners.push(cb);
         return () => { this.listeners = this.listeners.filter(l => l !== cb); };
@@ -74,34 +84,36 @@ export class GameStore {
         this.listeners.forEach(cb => cb());
     }
 
+    static showToast(msg: string) {
+        this.toastMessage = msg;
+        if (this.toastTimer) clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => {
+            this.toastMessage = null;
+            this.notify();
+        }, 3000);
+        this.notify();
+    }
+
     static removeSim(id: string) {
         this.sims = this.sims.filter(s => s.id !== id);
         if (this.selectedSimId === id) this.selectedSimId = null;
         this.notify();
     }
 
-    // 重建世界
+    // 重建世界：根据代码中的 WORLD_LAYOUT 生成静态地图
     static rebuildWorld(initial = false) {
-        if (initial) {
-            this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
-        }
+        // 始终从代码配置中加载最新的地皮布局
+        // 这样如果你在代码里改了地图，旧存档加载时会自动应用新地图
+        this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
 
         this.rooms = [];
         this.housingUnits = [];
         
-        // 每次 rebuild 都会重新生成 plot 下的家具，所以只保留 custom furniture
-        const persistentFurniture = this.furniture.filter(f => 
-            f.id.startsWith('custom_') || 
-            f.id.startsWith('vending_') || 
-            f.id.startsWith('trash_') || 
-            f.id.startsWith('hydrant_')
-        );
-        this.furniture = persistentFurniture;
-
-        if (initial) {
-             // @ts-ignore
-             this.furniture.push(...STREET_PROPS);
-        }
+        // 清空当前家具，只保留系统初始家具 (STREET_PROPS)
+        // 注意：玩家自定义家具 (custom_) 不在这里处理，而是在 Load 时额外叠加
+        this.furniture = [];
+        // @ts-ignore
+        this.furniture.push(...STREET_PROPS);
 
         this.worldLayout.forEach(plot => {
             GameStore.instantiatePlot(plot);
@@ -164,35 +176,23 @@ export class GameStore {
         });
     }
 
-    // === [NEW] 归属权刷新逻辑 ===
-    // 遍历所有 custom 家具，检测它们是否在某个 HousingUnit 内，如果是，将 homeId 写入家具数据中
     static refreshFurnitureOwnership() {
         this.furniture.forEach(f => {
-            // 仅处理用户放置的自定义家具 (custom_ 开头)
             if (f.id.startsWith('custom_')) {
-                // 计算家具中心点
                 const cx = f.x + f.w / 2;
                 const cy = f.y + f.h / 2;
-
                 const ownerUnit = this.housingUnits.find(u => {
-                    // maxX/maxY 是 instantiatePlot 时计算并附加的，如果没有则实时计算
                     const maxX = u.maxX ?? (u.x + u.area.w);
                     const maxY = u.maxY ?? (u.y + u.area.h);
                     return cx >= u.x && cx < maxX && cy >= u.y && cy < maxY;
                 });
-                
-                if (ownerUnit) {
-                    f.homeId = ownerUnit.id;
-                } else {
-                    delete f.homeId;
-                }
+                if (ownerUnit) f.homeId = ownerUnit.id;
+                else delete f.homeId;
             }
         });
-        console.log("[System] Furniture ownership refreshed.");
     }
 
-    // === Editor Transaction Logic ===
-
+    // === Editor Logic ===
     static enterEditorMode() {
         this.editor.mode = 'plot'; 
         this.snapshot = {
@@ -210,7 +210,7 @@ export class GameStore {
         this.resetEditorState();
         this.time.speed = 1; 
         this.initIndex(); 
-        this.refreshFurnitureOwnership(); // [新增] 确认编辑后主动刷新一次归属权
+        this.refreshFurnitureOwnership();
         this.notify();
     }
 
@@ -239,13 +239,11 @@ export class GameStore {
 
     static clearMap() {
         if (this.editor.mode === 'none') return;
-        if (!confirm('确定要清空所有地皮和家具吗？(此操作不可撤销，除非点击取消退出编辑器)')) return;
-
+        if (!confirm('确定要清空所有地皮和家具吗？')) return;
         this.worldLayout = [];
         this.furniture = []; 
         this.rooms = [];
         this.housingUnits = [];
-        
         this.initIndex();
         this.notify();
     }
@@ -260,112 +258,52 @@ export class GameStore {
         const action = this.history.pop();
         if (!action) return;
         this.redoStack.push(action);
-
-        if (action.type === 'move') {
-            if (action.entityType === 'plot') {
-                const plot = this.worldLayout.find(p => p.id === action.id);
-                if (plot && action.prevData) {
-                    plot.x = action.prevData.x;
-                    plot.y = action.prevData.y;
-                    this.rebuildWorld(false); 
-                }
-            } else if (action.entityType === 'furniture') {
-                const furn = this.furniture.find(f => f.id === action.id);
-                if (furn && action.prevData) {
-                    furn.x = action.prevData.x;
-                    furn.y = action.prevData.y;
-                }
-            }
-        } else if (action.type === 'add') {
-            if (action.entityType === 'plot') {
-                this.removePlot(action.id, false);
-            } else {
-                this.removeFurniture(action.id, false);
-            }
-        } else if (action.type === 'remove') {
-            if (action.entityType === 'plot' && action.prevData) {
-                this.worldLayout.push(action.prevData);
-                this.rebuildWorld(false);
-            } else if (action.entityType === 'furniture' && action.prevData) {
-                this.furniture.push(action.prevData);
-            }
-        }
-        this.initIndex();
-        this.notify();
+        this.applyUndoRedo(action, true);
     }
 
     static redo() {
         const action = this.redoStack.pop();
         if (!action) return;
         this.history.push(action);
+        this.applyUndoRedo(action, false);
+    }
 
-        if (action.type === 'move') {
+    static applyUndoRedo(action: EditorAction, isUndo: boolean) {
+        // 简化的 Undo/Redo 处理，复用逻辑
+        const data = isUndo ? action.prevData : action.newData;
+        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : 'move')) : action.type;
+
+        if (type === 'move') {
             if (action.entityType === 'plot') {
                 const plot = this.worldLayout.find(p => p.id === action.id);
-                if (plot && action.newData) {
-                    plot.x = action.newData.x;
-                    plot.y = action.newData.y;
-                    this.rebuildWorld(false);
-                }
-            } else if (action.entityType === 'furniture') {
-                const furn = this.furniture.find(f => f.id === action.id);
-                if (furn && action.newData) {
-                    furn.x = action.newData.x;
-                    furn.y = action.newData.y;
-                }
-            }
-        } else if (action.type === 'add') {
-            if (action.entityType === 'plot' && action.newData) {
-                this.worldLayout.push(action.newData);
-                this.rebuildWorld(false);
-            } else if (action.entityType === 'furniture' && action.newData) {
-                this.furniture.push(action.newData);
-            }
-        } else if (action.type === 'remove') {
-            if (action.entityType === 'plot') {
-                this.removePlot(action.id, false);
+                if (plot && data) { plot.x = data.x; plot.y = data.y; this.rebuildWorld(false); }
             } else {
-                this.removeFurniture(action.id, false);
+                const furn = this.furniture.find(f => f.id === action.id);
+                if (furn && data) { furn.x = data.x; furn.y = data.y; }
             }
+        } else if (type === 'add') {
+            if (action.entityType === 'plot' && data) { this.worldLayout.push(data); this.rebuildWorld(false); }
+            else if (action.entityType === 'furniture' && data) { this.furniture.push(data); }
+        } else if (type === 'remove') {
+            if (action.entityType === 'plot') { this.removePlot(action.id, false); }
+            else { this.removeFurniture(action.id, false); }
         }
         this.initIndex();
         this.notify();
     }
 
     static isColliding(rect1: {x:number, y:number, w:number, h:number}, rect2: {x:number, y:number, w:number, h:number}) {
+        // 缩小一点判定区域，允许边缘轻微重叠 (margin 5px)
+        const m = 5;
         return (
-            rect1.x < rect2.x + rect2.w &&
-            rect1.x + rect1.w > rect2.x &&
-            rect1.y < rect2.y + rect2.h &&
-            rect1.y + rect1.h > rect2.y
+            rect1.x + m < rect2.x + rect2.w - m &&
+            rect1.x + rect1.w - m > rect2.x + m &&
+            rect1.y + m < rect2.y + rect2.h - m &&
+            rect1.y + rect1.h - m > rect2.y + m
         );
     }
 
-    static checkOverlap(item: {x:number, y:number, w:number, h:number, id?:string}, type: 'plot' | 'furniture', skipCheck: boolean = false): boolean {
-        if (skipCheck) return false;
-
-        if (type === 'plot') {
-            for (const p of this.worldLayout) {
-                if (p.id === item.id) continue;
-                const tpl = PLOTS[p.templateId];
-                if (!tpl) continue;
-                if (this.isColliding(item, {x: p.x, y: p.y, w: tpl.width, h: tpl.height})) {
-                    return true;
-                }
-            }
-        }
-        
-        if (type === 'furniture') {
-            for (const f of this.furniture) {
-                if (f.id === item.id) continue;
-                if (this.isColliding(item, f)) return true;
-            }
-        }
-        return false;
-    }
-
     // === Actions ===
-
     static startPlacingPlot(templateId: string) {
         this.editor.mode = 'plot';
         this.editor.placingTemplateId = templateId;
@@ -389,24 +327,12 @@ export class GameStore {
     static placePlot(x: number, y: number) {
         const templateId = this.editor.placingTemplateId;
         if (!templateId) return;
-        
-        const tpl = PLOTS[templateId];
-        if (!tpl) return;
-
         const newId = `plot_${Date.now()}`;
-        const newPlot: WorldPlot = {
-            id: newId,
-            templateId: templateId,
-            x: x,
-            y: y
-        };
-        
+        const newPlot: WorldPlot = { id: newId, templateId: templateId, x: x, y: y };
         this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
-        
         this.worldLayout.push(newPlot);
         this.instantiatePlot(newPlot); 
         this.initIndex(); 
-        
         this.editor.placingTemplateId = null;
         this.editor.isDragging = false;
         this.notify();
@@ -415,20 +341,15 @@ export class GameStore {
     static placeFurniture(x: number, y: number) {
         const tpl = this.editor.placingFurniture;
         if (!tpl) return;
-
         const newItem = {
             ...tpl,
             id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
-            x: x,
-            y: y
+            x: x, y: y
         } as Furniture;
-        
         this.recordAction({ type: 'add', entityType: 'furniture', id: newItem.id, newData: newItem });
-
         this.furniture.push(newItem);
         this.initIndex();
-        this.refreshFurnitureOwnership(); // [新增] 放置家具后刷新归属权
-        
+        this.refreshFurnitureOwnership();
         this.editor.placingFurniture = null;
         this.editor.isDragging = false;
         this.notify();
@@ -437,16 +358,11 @@ export class GameStore {
     static removePlot(plotId: string, record = true) {
         const plot = this.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
-
-        if (record) {
-            this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
-        }
-
+        if (record) this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
         this.worldLayout = this.worldLayout.filter(p => p.id !== plotId);
         this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
         this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
         this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
-
         this.editor.selectedPlotId = null;
         this.initIndex();
         this.notify();
@@ -455,42 +371,23 @@ export class GameStore {
     static finalizeMove(entityType: 'plot' | 'furniture', id: string, startPos: {x:number, y:number}) {
         if (!this.editor.previewPos) return;
         const { x, y } = this.editor.previewPos;
-
         let hasChange = false;
-
         if (entityType === 'plot') {
             const plot = this.worldLayout.find(p => p.id === id);
-            if (plot) {
-                if (plot.x !== x || plot.y !== y) {
-                    plot.x = x;
-                    plot.y = y;
-                    hasChange = true;
-                    this.rebuildWorld(false); 
-                }
+            if (plot && (plot.x !== x || plot.y !== y)) {
+                plot.x = x; plot.y = y; hasChange = true; this.rebuildWorld(false); 
             }
         } else {
             const furn = this.furniture.find(f => f.id === id);
-            if (furn) {
-                if (furn.x !== x || furn.y !== y) {
-                    furn.x = x;
-                    furn.y = y;
-                    hasChange = true;
-                }
+            if (furn && (furn.x !== x || furn.y !== y)) {
+                furn.x = x; furn.y = y; hasChange = true;
             }
         }
-
         if (hasChange) {
-            this.recordAction({
-                type: 'move',
-                entityType,
-                id,
-                prevData: startPos, 
-                newData: { x, y } 
-            });
+            this.recordAction({ type: 'move', entityType, id, prevData: startPos, newData: { x, y } });
             this.initIndex();
-            this.refreshFurnitureOwnership(); // [新增] 移动后刷新归属权
+            this.refreshFurnitureOwnership();
         }
-        
         this.editor.previewPos = null;
         this.notify();
     }
@@ -498,11 +395,7 @@ export class GameStore {
     static removeFurniture(id: string, record = true) {
         const item = this.furniture.find(f => f.id === id);
         if (!item) return;
-
-        if (record) {
-            this.recordAction({ type: 'remove', entityType: 'furniture', id, prevData: item });
-        }
-
+        if (record) this.recordAction({ type: 'remove', entityType: 'furniture', id, prevData: item });
         this.furniture = this.furniture.filter(f => f.id !== id);
         this.editor.selectedFurnitureId = null;
         this.initIndex();
@@ -544,8 +437,6 @@ export class GameStore {
                 );
             }
         });
-        
-        console.log(`[System] Indexes Built.`);
     }
 
     static spawnHeart(x: number, y: number) {
@@ -554,10 +445,14 @@ export class GameStore {
 
     static addLog(sim: Sim | null, text: string, type: any, isAI = false) {
         const timeStr = `Y${this.time.year} M${this.time.month} | ${String(this.time.hour).padStart(2, '0')}:${String(this.time.minute).padStart(2, '0')}`;
-        let category: 'sys' | 'chat' | 'rel' = 'chat';
-        if (type === 'sys' || type === 'money' || type === 'family') category = 'sys';
-        else if (type === 'rel_event' || type === 'jealous') category = 'rel';
-        else if (type === 'love') category = 'rel';
+        
+        // [分类优化] 映射新的分类体系
+        let category: 'sys' | 'chat' | 'rel' | 'life' = 'chat';
+        
+        if (['sys', 'family'].includes(type)) category = 'sys';
+        else if (['money', 'act', 'achievement', 'normal'].includes(type)) category = 'life';
+        else if (['love', 'jealous', 'rel_event', 'bad'].includes(type)) category = 'rel'; // 'bad' 通常是分手或吵架
+        else category = 'chat'; // 'chat' or default
 
         const entry: LogEntry = {
             id: Math.random(),
@@ -573,7 +468,37 @@ export class GameStore {
         this.notify();
     }
 
-    static saveGame() {
+    // ==========================================
+    // 💾 存档系统 (Core Data Separation)
+    // ==========================================
+
+    // 获取存档列表
+    static getSaveSlots(): (SaveMetadata | null)[] {
+        const slots: (SaveMetadata | null)[] = [];
+        for (let i = 1; i <= 5; i++) {
+            try {
+                const json = localStorage.getItem(`simgod_save_${i}`);
+                if (json) {
+                    const data = JSON.parse(json);
+                    slots.push({
+                        slot: i,
+                        timestamp: data.timestamp || 0,
+                        timeLabel: `Y${data.time?.year || 1} M${data.time?.month || 1}`,
+                        pop: data.sims?.length || 0,
+                        realTime: new Date(data.timestamp).toLocaleString()
+                    });
+                } else {
+                    slots.push(null);
+                }
+            } catch (e) {
+                slots.push(null);
+            }
+        }
+        return slots;
+    }
+
+    static saveGame(slotIndex: number = 1) {
+        // 清理 Sim 中的临时对象，防止循环引用
         const safeSims = this.sims.map(sim => {
             const s = Object.assign({}, sim);
             if (s.interactionTarget && (s.interactionTarget as any).ref) {
@@ -588,64 +513,112 @@ export class GameStore {
         });
 
         const saveData = {
-            version: 2.6, // [修改] 升级存档版本以强制重置地图布局
+            version: 3.0, // 版本号升级
+            timestamp: Date.now(),
             time: this.time,
             logs: this.logs,
             sims: safeSims,
-            worldLayout: this.worldLayout,
+            // [核心数据分离] 不保存 worldLayout, rooms, staticFurniture
+            // 只保存玩家摆放的家具 (custom_)
             customFurniture: this.furniture.filter(f => f.id.startsWith('custom_')) 
         };
 
         try {
-            localStorage.setItem('pixel_life_save_v1', JSON.stringify(saveData));
-            console.log("Game Saved.");
+            localStorage.setItem(`simgod_save_${slotIndex}`, JSON.stringify(saveData));
+            console.log(`Game Saved to Slot ${slotIndex}.`);
+            this.showToast(`✅ 存档 ${slotIndex} 保存成功！`);
         } catch (e) {
             console.error("Save failed", e);
+            this.showToast(`❌ 保存失败: 存储空间不足?`);
         }
     }
 
-    static loadGame(): boolean {
+    static loadGame(slotIndex: number = 1): boolean {
         try {
-            const json = localStorage.getItem('pixel_life_save_v1');
+            const json = localStorage.getItem(`simgod_save_${slotIndex}`);
             if (!json) return false;
             const data = JSON.parse(json);
-            // [修改] 检查版本号，如果低于 2.6 则强制重置地图布局
-            if (!data.version || data.version < 2.6) {
-                 console.warn("Save version too old, migrating map layout...");
-                 // 仅保留角色数据和时间，丢弃旧的 worldLayout
-                 this.time = { ...data.time };
-                 this.logs = data.logs || [];
-                 // 强制使用新的默认布局
-                 this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
-                 // 保留用户自定义家具 (如果位置合理)
-                 if (data.customFurniture) {
-                     this.furniture = data.customFurniture;
-                 }
-                 // 加载角色
-                 this.loadSims(data.sims);
-                 
-                 this.rebuildWorld(false);
-                 return true;
-            }
 
-            this.time = { ...data.time };
+            // 1. 先初始化全新的“代码版”地图 (Core Data Separation)
+            // 这会加载最新的 WORLD_LAYOUT, 房间, 和系统家具
+            this.rebuildWorld(true);
+
+            // 2. 恢复游戏时间与日志
+            this.time = { ...data.time, speed: 1 }; // 加载后暂停或慢速
             this.logs = data.logs || [];
-            
-            if (data.worldLayout) {
-                this.worldLayout = data.worldLayout;
-                if (data.customFurniture) {
-                    this.furniture = data.customFurniture;
+
+            // 3. 恢复 Sims
+            this.loadSims(data.sims);
+
+            // 4. 撒入用户家具 (Conflict Resolution)
+            if (data.customFurniture && Array.isArray(data.customFurniture)) {
+                let restoredCount = 0;
+                let conflictCount = 0;
+
+                data.customFurniture.forEach((cf: Furniture) => {
+                    // 检查碰撞：新地图上该位置是否有东西？
+                    // 我们主要检查与静态家具的碰撞，以及是否在房间内(可选)
+                    
+                    // 简单的碰撞检测：尝试在原位放置
+                    let isConflict = false;
+                    for (const staticF of this.furniture) {
+                        if (this.isColliding(cf, staticF)) {
+                            isConflict = true;
+                            break;
+                        }
+                    }
+
+                    if (!isConflict) {
+                        this.furniture.push(cf);
+                        restoredCount++;
+                    } else {
+                        // 冲突处理策略：尝试在附近找空位 (简单的螺旋搜索，或者直接放弃)
+                        // 这里简化为：直接放弃并退款 (或者放入仓库，如果以后有仓库系统)
+                        // 也可以尝试偏移几次
+                        let placed = false;
+                        const offsets = [{x:20,y:0}, {x:-20,y:0}, {x:0,y:20}, {x:0,y:-20}];
+                        for (const off of offsets) {
+                            const newCf = { ...cf, x: cf.x + off.x, y: cf.y + off.y };
+                            let retryConflict = false;
+                            for (const staticF of this.furniture) {
+                                if (this.isColliding(newCf, staticF)) {
+                                    retryConflict = true; break;
+                                }
+                            }
+                            if (!retryConflict) {
+                                this.furniture.push(newCf);
+                                placed = true;
+                                restoredCount++;
+                                break;
+                            }
+                        }
+                        if (!placed) conflictCount++;
+                    }
+                });
+                
+                if (conflictCount > 0) {
+                    this.addLog(null, `地图结构变更，${conflictCount} 件家具因位置冲突被移除。`, 'sys');
                 }
-                this.rebuildWorld(false); 
             }
 
-            this.loadSims(data.sims);
+            // 5. 刷新索引和归属权
+            this.initIndex();
+            this.refreshFurnitureOwnership();
+            
+            this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
             this.notify();
             return true;
         } catch (e) {
             console.error("Load failed", e);
+            this.showToast(`❌ 读取存档失败`);
             return false;
         }
+    }
+
+    static deleteSave(slotIndex: number) {
+        localStorage.removeItem(`simgod_save_${slotIndex}`);
+        this.notify();
+        this.showToast(`🗑️ 存档 ${slotIndex} 已删除`);
     }
 
     static loadSims(simsData: any[]) {
@@ -667,13 +640,6 @@ export class GameStore {
         });
     }
 
-    static clearSave() {
-        if (confirm('确定要删除存档并重置世界吗？\n这将清除当前进度并刷新页面。')) {
-            localStorage.removeItem('pixel_life_save_v1');
-            location.reload();
-        }
-    }
-
     static spawnFamily() {
         const size = 1 + Math.floor(Math.random() * 4); 
         const fam = generateFamily(size);
@@ -687,58 +653,38 @@ export class GameStore {
 
 function generateFamily(count: number) {
     const familyId = Math.random().toString(36).substring(2, 8);
-    
     const r = Math.random();
     let wealthClass: 'poor' | 'middle' | 'rich';
     let baseMoney = 0;
 
-    if (r < 0.15) {
-        wealthClass = 'rich';
-        baseMoney = 10000 + Math.floor(Math.random() * 20000); 
-    } else if (r < 0.8) {
-        wealthClass = 'middle';
-        baseMoney = 2500 + Math.floor(Math.random() * 6500); 
-    } else {
-        wealthClass = 'poor';
-        baseMoney = 1000 + Math.floor(Math.random() * 500); 
-    }
+    if (r < 0.15) { wealthClass = 'rich'; baseMoney = 10000 + Math.floor(Math.random() * 20000); } 
+    else if (r < 0.8) { wealthClass = 'middle'; baseMoney = 2500 + Math.floor(Math.random() * 6500); } 
+    else { wealthClass = 'poor'; baseMoney = 1000 + Math.floor(Math.random() * 500); }
 
-    let targetHomeTypes: string[] = [];
-    if (wealthClass === 'rich') targetHomeTypes = ['villa', 'apartment']; 
-    else if (wealthClass === 'middle') targetHomeTypes = ['apartment', 'public_housing']; 
-    else targetHomeTypes = ['public_housing']; 
+    let targetHomeTypes: string[] = wealthClass === 'rich' ? ['villa', 'apartment'] : (wealthClass === 'middle' ? ['apartment', 'public_housing'] : ['public_housing']); 
 
     const availableHomes = GameStore.housingUnits.filter(unit => {
         const occupants = GameStore.sims.filter(s => s.homeId === unit.id).length;
         return targetHomeTypes.includes(unit.type) && (occupants + count <= unit.capacity);
     });
 
-    availableHomes.sort((a, b) => {
-        const idxA = targetHomeTypes.indexOf(a.type);
-        const idxB = targetHomeTypes.indexOf(b.type);
-        return idxA - idxB;
-    });
+    availableHomes.sort((a, b) => targetHomeTypes.indexOf(a.type) - targetHomeTypes.indexOf(b.type));
 
     let homeId: string | null = null;
     let homeX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
     let homeY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
-    let homeTypeStr = "露宿街头";
 
     if (availableHomes.length > 0) {
         const bestType = availableHomes[0].type;
         const bestHomes = availableHomes.filter(h => h.type === bestType);
         const home = bestHomes[Math.floor(Math.random() * bestHomes.length)];
-        
         homeId = home.id;
         homeX = home.x + home.area.w / 2;
         homeY = home.y + home.area.h / 2;
-        homeTypeStr = home.name;
     }
 
     const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
-
     const members: Sim[] = [];
-
     const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
     const isSameSex = parentCount === 2 && Math.random() < 0.1; 
     
@@ -747,21 +693,13 @@ function generateFamily(count: number) {
     if (isSameSex) p2Gender = p1Gender;
 
     const p1Surname = getSurname();
-    const parent1 = new Sim({ 
-        x: homeX, y: homeY, 
-        surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId,
-        money: baseMoney 
-    });
+    const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId, money: baseMoney });
     members.push(parent1);
 
     let parent2: Sim | null = null;
     if (parentCount === 2) {
         const p2Surname = getSurname(); 
-        parent2 = new Sim({ 
-            x: homeX + 10, y: homeY + 10, 
-            surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId,
-            money: 0 
-        });
+        parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId, money: 0 });
         members.push(parent2);
         SocialLogic.marry(parent1, parent2, true); 
     }
@@ -770,17 +708,10 @@ function generateFamily(count: number) {
     for (let i = 0; i < childCount; i++) {
         const r = Math.random();
         const ageStage = r > 0.6 ? 'Child' : (r > 0.3 ? 'Teen' : 'Toddler');
-        
         let childSurname = p1Surname;
         if (parent2 && Math.random() > 0.5) childSurname = parent2.surname;
-
         const child = new Sim({ 
-            x: homeX + (i+1)*15, 
-            y: homeY + 15, 
-            surname: childSurname, 
-            familyId, 
-            ageStage,
-            homeId, 
+            x: homeX + (i+1)*15, y: homeY + 15, surname: childSurname, familyId, ageStage, homeId, 
             fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
             motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined),
             money: 0
@@ -788,12 +719,9 @@ function generateFamily(count: number) {
         
         members.forEach(p => {
             if (p.ageStage === 'Adult') {
-                SocialLogic.setKinship(p, child, 'child');
-                SocialLogic.setKinship(child, p, 'parent');
-                p.childrenIds.push(child.id);
+                SocialLogic.setKinship(p, child, 'child'); SocialLogic.setKinship(child, p, 'parent'); p.childrenIds.push(child.id);
             } else {
-                SocialLogic.setKinship(p, child, 'sibling');
-                SocialLogic.setKinship(child, p, 'sibling');
+                SocialLogic.setKinship(p, child, 'sibling'); SocialLogic.setKinship(child, p, 'sibling');
             }
         });
         members.push(child);
@@ -805,16 +733,15 @@ export function initGame() {
     GameStore.sims = [];
     GameStore.particles = [];
     GameStore.logs = []; 
-    // 确保初始化时速度也是 2
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
     GameStore.rebuildWorld(true); 
 
-    if (GameStore.loadGame()) {
-        GameStore.addLog(null, "存档读取成功", "sys");
+    // 尝试加载存档1，如果失败则生成新世界
+    if (GameStore.loadGame(1)) {
+        GameStore.addLog(null, "自动读取存档 1 成功", "sys");
     } else {
         const familyCount = 4 + Math.floor(Math.random() * 3);
-        
         for (let i = 0; i < familyCount; i++) {
             const size = 1 + Math.floor(Math.random() * 4); 
             const fam = generateFamily(size);
@@ -827,7 +754,6 @@ export function initGame() {
 
 export function updateTime() {
     if (GameStore.editor.mode !== 'none') return;
-
     if (GameStore.time.speed === 0) return;
 
     GameStore.timeAccumulator += GameStore.time.speed;
@@ -835,20 +761,15 @@ export function updateTime() {
     if (GameStore.timeAccumulator >= 60) {
         GameStore.timeAccumulator = 0;
         GameStore.time.minute++;
-
-        // 触发市民的“分钟级”更新 (minuteChanged = true)
-        // 优化：将大量低频逻辑放入这里，而不是每一帧都执行
         GameStore.sims.forEach(s => s.update(1, true));
 
         if (GameStore.time.minute >= 60) {
             GameStore.time.minute = 0;
             GameStore.time.hour++;
-
             GameStore.sims.forEach(s => s.checkSpending());
 
             if (GameStore.time.hour >= 24) {
                 GameStore.time.hour = 0;
-
                 const currentSimMonth = GameStore.time.totalDays; 
                 handleDailyDiaries(currentSimMonth);
 
@@ -862,7 +783,6 @@ export function updateTime() {
 
                 const currentMonth = GameStore.time.month;
                 let dailyLog = `进入 ${GameStore.time.year} 年 ${currentMonth} 月`;
-                
                 const holiday = HOLIDAYS[currentMonth];
                 if (holiday) {
                     dailyLog += ` | 🎉 本月是: ${holiday.name}`;
@@ -871,15 +791,11 @@ export function updateTime() {
                 GameStore.addLog(null, dailyLog, 'sys');
 
                 GameStore.sims.forEach(s => {
-                    s.dailyExpense = 0;
-                    s.dailyIncome = 0; 
-                    s.payRent(); 
-                    
-                    s.calculateDailyBudget(); 
-                    s.applyMonthlyEffects(currentMonth, holiday);
+                    s.dailyExpense = 0; s.dailyIncome = 0; s.payRent(); s.calculateDailyBudget(); s.applyMonthlyEffects(currentMonth, holiday);
                 });
                 
-                GameStore.saveGame();
+                // 自动保存到 Slot 1
+                GameStore.saveGame(1);
             }
         }
         GameStore.notify();
@@ -887,7 +803,6 @@ export function updateTime() {
 }
 
 async function handleDailyDiaries(monthIndex: number) {
-    // 日记生成逻辑保持精简以适应上下文长度限制
     const allSimsData = GameStore.sims.map(sim => sim.getDaySummary(monthIndex));
     const currentMonth = GameStore.time.month;
     const holiday = HOLIDAYS[currentMonth];

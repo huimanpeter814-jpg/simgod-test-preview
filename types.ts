@@ -243,7 +243,8 @@ export interface LogEntry {
   time: string;
   text: string;
   type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family';
-  category: 'sys' | 'chat' | 'rel';
+  // [修改] 更新后的分类
+  category: 'sys' | 'chat' | 'rel' | 'life';
   isAI: boolean;
   simName?: string;
 }
