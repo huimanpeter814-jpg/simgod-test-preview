@@ -1,13 +1,14 @@
-import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
+import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, EditorState } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, EditorState, SaveMetadata } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
-import { batchGenerateDiaries } from '../services/geminiService'; 
-import { SocialLogic } from './logic/social';
+import { FamilyGenerator } from './logic/genetics';
+import { NarrativeSystem } from './logic/narrative';
 
+// Re-exports
 export { Sim } from './Sim';
 export { minutes, getJobCapacity } from './simulationHelpers';
 export { drawAvatarHead } from './render/pixelArt'; 
@@ -19,15 +20,6 @@ interface EditorAction {
     id: string;
     prevData?: any; // 用于撤销
     newData?: any;  // 用于重做
-}
-
-// 存档元数据接口
-export interface SaveMetadata {
-    slot: number;
-    timestamp: number;
-    timeLabel: string; // "Y1 M2"
-    pop: number; // 人口
-    realTime: string; // "2023-10-01 12:00"
 }
 
 export class GameStore {
@@ -129,6 +121,7 @@ export class GameStore {
         this.addLog(sim, `搬进了新家：${newHome.name}`, 'life');
         this.showToast(`✅ 已分配住址：${newHome.name}`);
 
+        // 配偶和孩子跟随搬家
         const partner = this.sims.find(s => s.id === sim.partnerId && sim.relationships[s.id]?.isSpouse);
         if (partner && partner.homeId !== newHome.id) {
             partner.homeId = newHome.id;
@@ -146,10 +139,8 @@ export class GameStore {
         this.notify();
     }
 
-    // [修改] 重建世界逻辑
-    // 修复：如果 worldLayout 已经有数据（比如来自 LoadGame），不要强制覆盖为默认值
+    // 重建世界逻辑
     static rebuildWorld(initial = false) {
-        // 仅当布局为空时，才加载默认布局
         if (this.worldLayout.length === 0) {
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
         }
@@ -157,7 +148,6 @@ export class GameStore {
         if (initial) {
             this.rooms = [];
         } else {
-            // 重建时，保留 isCustom 的房间（手动绘制的）
             this.rooms = this.rooms.filter(r => r.isCustom);
         }
         
@@ -181,7 +171,6 @@ export class GameStore {
     static instantiatePlot(plot: WorldPlot) {
         let template = PLOTS[plot.templateId];
         
-        // [修改] 如果没有找到模板，或者模板是 default_empty，使用自定义属性构建模板
         if (!template || plot.templateId === 'default_empty') {
             const w = plot.width || 300;
             const h = plot.height || 300;
@@ -193,21 +182,16 @@ export class GameStore {
                 type: (plot.customType as any) || 'public', 
                 rooms: [
                     { 
-                        id: 'base', 
-                        x: 0, 
-                        y: 0, 
-                        w: w, 
-                        h: h, 
-                        label: plot.customName || '空地皮', // 使用自定义名称
-                        color: plot.customColor || '#dcdcdc', // 使用自定义颜色
+                        id: 'base', x: 0, y: 0, w: w, h: h, 
+                        label: plot.customName || '空地皮', 
+                        color: plot.customColor || '#dcdcdc', 
                         pixelPattern: 'simple' 
                     }
                 ],
                 furniture: [],
-                housingUnits: [] // 初始化为空数组
+                housingUnits: [] 
             };
 
-            // [修复] 关键逻辑：如果是住宅类型，动态生成 HousingUnit
             const type = plot.customType;
             if (type && ['dorm', 'villa', 'apartment'].includes(type)) {
                 let unitType: 'public_housing' | 'apartment' | 'villa' = 'public_housing';
@@ -215,26 +199,20 @@ export class GameStore {
                 let cost = 500;
 
                 if (type === 'villa') {
-                    unitType = 'villa';
-                    capacity = 4; // 别墅容纳一家人
-                    cost = 5000;
+                    unitType = 'villa'; capacity = 4; cost = 5000;
                 } else if (type === 'apartment') {
-                    unitType = 'apartment';
-                    capacity = 2; // 公寓适合情侣/单身
-                    cost = 1500;
+                    unitType = 'apartment'; capacity = 2; cost = 1500;
                 } else if (type === 'dorm') {
-                    unitType = 'public_housing';
-                    capacity = 8; // 宿舍容纳多人
-                    cost = 200;
+                    unitType = 'public_housing'; capacity = 8; cost = 200;
                 }
 
                 template.housingUnits!.push({
-                    id: 'custom_home', // 这里的ID是模板内的相对ID
+                    id: 'custom_home', 
                     name: plot.customName || (unitType === 'villa' ? '私人别墅' : '自建公寓'),
                     capacity: capacity,
                     cost: cost,
                     type: unitType,
-                    area: { x: 0, y: 0, w: w, h: h } // 默认整个地皮范围都是家
+                    area: { x: 0, y: 0, w: w, h: h } 
                 });
             }
         }
@@ -259,62 +237,31 @@ export class GameStore {
         template.rooms.forEach(r => {
             const absX = r.x + plot.x;
             const absY = r.y + plot.y;
-            const ownerUnit = plotUnits.find(u => 
-                absX >= u.x && absX < u.maxX && 
-                absY >= u.y && absY < u.maxY
-            );
-            this.rooms.push({
-                ...r,
-                id: `${plot.id}_${r.id}`,
-                x: absX,
-                y: absY,
-                homeId: ownerUnit ? ownerUnit.id : undefined
-            });
+            const ownerUnit = plotUnits.find(u => absX >= u.x && absX < u.maxX && absY >= u.y && absY < u.maxY);
+            this.rooms.push({ ...r, id: `${plot.id}_${r.id}`, x: absX, y: absY, homeId: ownerUnit ? ownerUnit.id : undefined });
         });
 
         template.furniture.forEach(f => {
             const absX = f.x + plot.x;
             const absY = f.y + plot.y;
-            const ownerUnit = plotUnits.find(u => 
-                absX >= u.x && absX < u.maxX && 
-                absY >= u.y && absY < u.maxY
-            );
-            this.furniture.push({
-                ...f,
-                id: `${plot.id}_${f.id}`,
-                x: absX,
-                y: absY,
-                homeId: ownerUnit ? ownerUnit.id : undefined
-            });
+            const ownerUnit = plotUnits.find(u => absX >= u.x && absX < u.maxX && absY >= u.y && absY < u.maxY);
+            this.furniture.push({ ...f, id: `${plot.id}_${f.id}`, x: absX, y: absY, homeId: ownerUnit ? ownerUnit.id : undefined });
         });
     }
 
-    // [新增] 更新地皮属性
     static updatePlotAttributes(plotId: string, attrs: { name?: string, color?: string, type?: string }) {
         const plot = this.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
 
         let hasChange = false;
-        if (attrs.name !== undefined && plot.customName !== attrs.name) {
-            plot.customName = attrs.name;
-            hasChange = true;
-        }
-        if (attrs.color !== undefined && plot.customColor !== attrs.color) {
-            plot.customColor = attrs.color;
-            hasChange = true;
-        }
-        if (attrs.type !== undefined && plot.customType !== attrs.type) {
-            plot.customType = attrs.type;
-            hasChange = true;
-        }
+        if (attrs.name !== undefined && plot.customName !== attrs.name) { plot.customName = attrs.name; hasChange = true; }
+        if (attrs.color !== undefined && plot.customColor !== attrs.color) { plot.customColor = attrs.color; hasChange = true; }
+        if (attrs.type !== undefined && plot.customType !== attrs.type) { plot.customType = attrs.type; hasChange = true; }
 
         if (hasChange) {
-            // 清除旧的实体
             this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
             this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
             this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
-            
-            // 重新实例化
             this.instantiatePlot(plot);
             this.initIndex();
             this.notify();
@@ -337,53 +284,25 @@ export class GameStore {
         });
     }
 
-    // [新增] 获取可导出的地图数据
     static getMapData() {
         return {
             version: "1.0",
             timestamp: Date.now(),
             worldLayout: this.worldLayout,
             rooms: this.rooms.filter(r => r.isCustom),
-            customFurniture: this.furniture.filter(f => 
-                f.id.startsWith('custom_') || 
-                f.id.startsWith('vending_') || 
-                f.id.startsWith('trash_') || 
-                f.id.startsWith('hydrant_')
-            )
+            customFurniture: this.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'))
         };
     }
 
-    // [新增] 导入地图数据
     static importMapData(data: any) {
-        if (!data.worldLayout) {
-            this.showToast("❌ 文件格式错误：缺少地图数据");
-            return;
-        }
-
+        if (!data.worldLayout) { this.showToast("❌ 文件格式错误：缺少地图数据"); return; }
         try {
-            // 1. 设置布局
             this.worldLayout = data.worldLayout;
-            
-            // 2. 基于布局重建世界基础 (生成地皮自带的房间和家具)
-            // 传入 true 以清除所有旧实体
             this.rebuildWorld(true);
-
-            // 3. 添加自定义房间
-            if (data.rooms) {
-                this.rooms = [...this.rooms, ...data.rooms];
-            }
-
-            // 4. 添加自定义家具
-            if (data.customFurniture) {
-                // rebuildWorld(true) 会将 furniture 重置为 STREET_PROPS
-                // 我们需要将导入的自定义家具追加进去
-                this.furniture = [...this.furniture, ...data.customFurniture];
-            }
-
-            // 5. 重建索引和归属权
+            if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
+            if (data.customFurniture) this.furniture = [...this.furniture, ...data.customFurniture];
             this.initIndex();
             this.refreshFurnitureOwnership();
-            
             this.showToast("✅ 地图导入成功！");
             this.notify();
         } catch (e) {
@@ -398,7 +317,7 @@ export class GameStore {
         this.snapshot = {
             worldLayout: JSON.parse(JSON.stringify(this.worldLayout)),
             furniture: JSON.parse(JSON.stringify(this.furniture)),
-            rooms: JSON.parse(JSON.stringify(this.rooms.filter(r => r.isCustom))) // Snapshot custom rooms
+            rooms: JSON.parse(JSON.stringify(this.rooms.filter(r => r.isCustom))) 
         };
         this.history = [];
         this.redoStack = [];
@@ -418,15 +337,10 @@ export class GameStore {
     static cancelEditorChanges() {
         if (this.snapshot) {
             this.worldLayout = this.snapshot.worldLayout;
-            
-            // Restore Furniture
             const snapshotCustom = this.snapshot.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
             this.furniture = [...this.furniture.filter(f => !f.id.startsWith('custom_')), ...snapshotCustom];
-            
-            // Restore Custom Rooms
             const existingSystemRooms = this.rooms.filter(r => !r.isCustom);
             this.rooms = [...existingSystemRooms, ...this.snapshot.rooms];
-
             this.rebuildWorld(false); 
         }
         this.snapshot = null;
@@ -506,7 +420,6 @@ export class GameStore {
             if (action.entityType === 'plot' && data) {
                 const plot = this.worldLayout.find(p => p.id === action.id);
                 if (plot) {
-                    // 支持模板修改和属性修改
                     if (data.templateId) plot.templateId = data.templateId;
                     this.rebuildWorld(false);
                 }
@@ -514,16 +427,6 @@ export class GameStore {
         }
         this.initIndex();
         this.notify();
-    }
-
-    static isColliding(rect1: {x:number, y:number, w:number, h:number}, rect2: {x:number, y:number, w:number, h:number}) {
-        const m = 5;
-        return (
-            rect1.x + m < rect2.x + rect2.w - m &&
-            rect1.x + rect1.w - m > rect2.x + m &&
-            rect1.y + m < rect2.y + rect2.h - m &&
-            rect1.y + rect1.h - m > rect2.y + m
-        );
     }
 
     // === Actions ===
@@ -543,16 +446,12 @@ export class GameStore {
             if (tpl) { w = tpl.width; h = tpl.height; }
         }
         this.editor.dragOffset = { x: w / 2, y: h / 2 };
-
         this.notify();
     }
 
     static startDrawingPlot(templateId: string = 'default_empty') {
         this.editor.mode = 'plot';
-        this.editor.drawingPlot = {
-            startX: 0, startY: 0, currX: 0, currY: 0,
-            templateId
-        };
+        this.editor.drawingPlot = { startX: 0, startY: 0, currX: 0, currY: 0, templateId };
         this.editor.placingTemplateId = null;
         this.editor.placingFurniture = null;
         this.editor.drawingFloor = null;
@@ -570,22 +469,13 @@ export class GameStore {
         this.editor.selectedPlotId = null;
         this.editor.selectedFurnitureId = null;
         this.editor.isDragging = true;
-
-        this.editor.dragOffset = { 
-            x: (template.w || 0) / 2, 
-            y: (template.h || 0) / 2 
-        };
-
+        this.editor.dragOffset = { x: (template.w || 0) / 2, y: (template.h || 0) / 2 };
         this.notify();
     }
 
-    // [修改] 增加 hasWall 参数
     static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean = false) {
         this.editor.mode = 'floor';
-        this.editor.drawingFloor = {
-            startX: 0, startY: 0, currX: 0, currY: 0,
-            pattern, color, label, hasWall
-        };
+        this.editor.drawingFloor = { startX: 0, startY: 0, currX: 0, currY: 0, pattern, color, label, hasWall };
         this.editor.placingTemplateId = null;
         this.editor.placingFurniture = null;
         this.editor.drawingPlot = null;
@@ -599,7 +489,6 @@ export class GameStore {
         const templateId = this.editor.placingTemplateId || 'default_empty';
         const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
         const newId = `${prefix}${Date.now()}`;
-
         const newPlot: WorldPlot = { id: newId, templateId: templateId, x: x, y: y };
         this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
         this.worldLayout.push(newPlot);
@@ -612,33 +501,19 @@ export class GameStore {
 
     static createCustomPlot(rect: {x: number, y: number, w: number, h: number}, templateId: string) {
         const newId = `plot_custom_${Date.now()}`;
-        const newPlot: WorldPlot = {
-            id: newId,
-            templateId: templateId,
-            x: rect.x,
-            y: rect.y,
-            width: rect.w,
-            height: rect.h
-        };
+        const newPlot: WorldPlot = { id: newId, templateId: templateId, x: rect.x, y: rect.y, width: rect.w, height: rect.h };
         this.recordAction({ type: 'add', entityType: 'plot', id: newId, newData: newPlot });
         this.worldLayout.push(newPlot);
         this.instantiatePlot(newPlot);
         this.initIndex();
-        
-        // [修复] 自动选中新创建的地皮，确保设置弹窗立即弹出
         this.editor.selectedPlotId = newId;
-        
         this.notify();
     }
 
     static placeFurniture(x: number, y: number) {
         const tpl = this.editor.placingFurniture;
         if (!tpl) return;
-        const newItem = {
-            ...tpl,
-            id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
-            x: x, y: y
-        } as Furniture;
+        const newItem = { ...tpl, id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, x: x, y: y } as Furniture;
         this.recordAction({ type: 'add', entityType: 'furniture', id: newItem.id, newData: newItem });
         this.furniture.push(newItem);
         this.initIndex();
@@ -648,16 +523,11 @@ export class GameStore {
         this.notify();
     }
 
-    // [修改] 增加 hasWall 参数
     static createCustomRoom(rect: {x: number, y: number, w: number, h: number}, pattern: string, color: string, label: string, hasWall: boolean) {
         const newRoom: RoomDef = {
             id: `custom_room_${Date.now()}`,
             x: rect.x, y: rect.y, w: rect.w, h: rect.h,
-            label: label,
-            color: color,
-            pixelPattern: pattern,
-            isCustom: true,
-            hasWall: hasWall
+            label: label, color: color, pixelPattern: pattern, isCustom: true, hasWall: hasWall
         };
         this.recordAction({ type: 'add', entityType: 'room', id: newRoom.id, newData: newRoom });
         this.rooms.push(newRoom);
@@ -691,30 +561,17 @@ export class GameStore {
     static changePlotTemplate(plotId: string, newTemplateId: string) {
         const plot = this.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
-        
         const oldTemplate = plot.templateId;
-        
-        this.recordAction({ 
-            type: 'modify', 
-            entityType: 'plot', 
-            id: plotId, 
-            prevData: { templateId: oldTemplate },
-            newData: { templateId: newTemplateId }
-        });
-
+        this.recordAction({ type: 'modify', entityType: 'plot', id: plotId, prevData: { templateId: oldTemplate }, newData: { templateId: newTemplateId } });
         plot.templateId = newTemplateId;
-        
         this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
         this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
         this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
-        
         this.instantiatePlot(plot);
-        
         this.initIndex();
         this.notify();
     }
 
-    // [修复] 参数类型支持 room, 以及增加 room 移动逻辑
     static finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
         if (!this.editor.previewPos) return;
         const { x, y } = this.editor.previewPos;
@@ -726,35 +583,25 @@ export class GameStore {
                 const dx = x - plot.x;
                 const dy = y - plot.y;
                 plot.x = x; plot.y = y; 
-                
                 this.rooms.forEach(r => { if(r.id.startsWith(`${id}_`)) { r.x += dx; r.y += dy; } });
                 this.furniture.forEach(f => { if(f.id.startsWith(`${id}_`)) { f.x += dx; f.y += dy; } });
                 this.housingUnits.forEach(u => { 
-                    if(u.id.startsWith(`${id}_`)) { 
-                        u.x += dx; u.y += dy; 
-                        if(u.maxX) u.maxX += dx;
-                        if(u.maxY) u.maxY += dy;
-                    } 
+                    if(u.id.startsWith(`${id}_`)) { u.x += dx; u.y += dy; if(u.maxX) u.maxX += dx; if(u.maxY) u.maxY += dy; } 
                 });
                 hasChange = true; 
             }
         } else if (entityType === 'furniture') {
             const furn = this.furniture.find(f => f.id === id);
-            if (furn && (furn.x !== x || furn.y !== y)) {
-                furn.x = x; furn.y = y; hasChange = true;
-            }
+            if (furn && (furn.x !== x || furn.y !== y)) { furn.x = x; furn.y = y; hasChange = true; }
         } else if (entityType === 'room') {
             const room = this.rooms.find(r => r.id === id);
-            if (room && (room.x !== x || room.y !== y)) {
-                room.x = x; room.y = y; hasChange = true;
-            }
+            if (room && (room.x !== x || room.y !== y)) { room.x = x; room.y = y; hasChange = true; }
         }
 
         if (hasChange) {
             this.recordAction({ type: 'move', entityType, id, prevData: startPos, newData: { x, y } });
             this.initIndex();
             this.refreshFurnitureOwnership();
-            
             if (entityType === 'furniture') {
                 this.sims.forEach(sim => {
                     if (sim.interactionTarget && sim.interactionTarget.id === id) {
@@ -788,42 +635,20 @@ export class GameStore {
         const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole', 'grass', 'concrete', 'tile', 'wood', 'run_track', 'water'];
 
         this.furniture.forEach(f => {
-            if (!this.furnitureIndex.has(f.utility)) {
-                this.furnitureIndex.set(f.utility, []);
-            }
+            if (!this.furnitureIndex.has(f.utility)) { this.furnitureIndex.set(f.utility, []); }
             this.furnitureIndex.get(f.utility)!.push(f);
-
-            this.worldGrid.insert({
-                id: f.id,
-                x: f.x,
-                y: f.y,
-                w: f.w,
-                h: f.h,
-                type: 'furniture',
-                ref: f
-            });
+            this.worldGrid.insert({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, type: 'furniture', ref: f });
 
             const padding = 4;
             const isPassable = f.pixelPattern && passableTypes.some(t => f.pixelPattern?.includes(t));
-            
             if (!isPassable && f.utility !== 'none' && !f.label.includes('地毯')) {
-                this.pathFinder.setObstacle(
-                    f.x + padding, 
-                    f.y + padding, 
-                    Math.max(1, f.w - padding * 2), 
-                    Math.max(1, f.h - padding * 2)
-                );
+                this.pathFinder.setObstacle(f.x + padding, f.y + padding, Math.max(1, f.w - padding * 2), Math.max(1, f.h - padding * 2));
             }
         });
 
         this.rooms.forEach(r => {
             if (r.isCustom) {
-                this.worldGrid.insert({
-                    id: r.id,
-                    x: r.x, y: r.y, w: r.w, h: r.h,
-                    type: 'room',
-                    ref: r
-                });
+                this.worldGrid.insert({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h, type: 'room', ref: r });
             }
         });
     }
@@ -854,9 +679,7 @@ export class GameStore {
         this.notify();
     }
 
-    // ==========================================
     // 💾 存档系统
-    // ==========================================
     static getSaveSlots(): (SaveMetadata | null)[] {
         const slots: (SaveMetadata | null)[] = [];
         for (let i = 1; i <= 5; i++) {
@@ -871,12 +694,8 @@ export class GameStore {
                         pop: data.sims?.length || 0,
                         realTime: new Date(data.timestamp).toLocaleString()
                     });
-                } else {
-                    slots.push(null);
-                }
-            } catch (e) {
-                slots.push(null);
-            }
+                } else { slots.push(null); }
+            } catch (e) { slots.push(null); }
         }
         return slots;
     }
@@ -885,12 +704,9 @@ export class GameStore {
         const safeSims = this.sims.map(sim => {
             const s = Object.assign({}, sim);
             if (s.interactionTarget && (s.interactionTarget as any).ref) {
-                s.interactionTarget = null;
-                s.action = 'idle';
-                s.target = null;
+                s.interactionTarget = null; s.action = 'idle'; s.target = null;
                 // @ts-ignore
-                s.path = []; 
-                s.bubble = { text: null, timer: 0, type: 'normal' };
+                s.path = []; s.bubble = { text: null, timer: 0, type: 'normal' };
             }
             return s;
         });
@@ -922,22 +738,13 @@ export class GameStore {
             if (!json) return false;
             const data = JSON.parse(json);
 
-            // [修改] 先设置布局，再调用 rebuildWorld(true)
-            // 由于我们修改了 rebuildWorld，它会尊重现有的 worldLayout
             if (data.worldLayout) this.worldLayout = data.worldLayout;
             else this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT)); 
 
             this.rebuildWorld(true);
 
-            if (data.rooms) {
-                this.rooms = [...this.rooms, ...data.rooms];
-            }
-
+            if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
             if (data.customFurniture) {
-                // rebuildWorld(true) 会将 furniture 设置为默认 STREET_PROPS
-                // 我们需要追加自定义家具
-                // 注意：如果 customFurniture 里包含 STREET_PROPS 的修改版，可能需要去重逻辑
-                // 但目前简化处理，假设 customFurniture 是纯新增
                 const staticFurniture = this.furniture; 
                 this.furniture = [...staticFurniture, ...data.customFurniture];
             }
@@ -972,105 +779,26 @@ export class GameStore {
             if (!sim.childrenIds) sim.childrenIds = [];
             if (!sim.health) sim.health = 100;
             if (!sim.ageStage) sim.ageStage = 'Adult';
-            
             if (sim.interactionTarget) sim.interactionTarget = null;
-            
             const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
             if (currentJobDefinition) {
                 sim.job = { ...currentJobDefinition };
             }
-
             return sim;
         });
     }
 
     static spawnFamily() {
         const size = 1 + Math.floor(Math.random() * 4); 
-        const fam = generateFamily(size);
+        // [Refactor] 使用独立的 FamilyGenerator
+        const fam = FamilyGenerator.generate(size, this.housingUnits, this.sims);
         this.sims.push(...fam);
         this.addLog(null, `新家庭搬入城市！共 ${fam.length} 人。`, "sys");
         this.notify();
     }
 }
 
-// ---------------- Helper Functions ----------------
-function generateFamily(count: number) {
-    const familyId = Math.random().toString(36).substring(2, 8);
-    const r = Math.random();
-    let wealthClass: 'poor' | 'middle' | 'rich';
-    let baseMoney = 0;
-
-    if (r < 0.15) { wealthClass = 'rich'; baseMoney = 10000 + Math.floor(Math.random() * 20000); } 
-    else if (r < 0.8) { wealthClass = 'middle'; baseMoney = 2500 + Math.floor(Math.random() * 6500); } 
-    else { wealthClass = 'poor'; baseMoney = 1000 + Math.floor(Math.random() * 500); }
-
-    let targetHomeTypes: string[] = wealthClass === 'rich' ? ['villa', 'apartment'] : (wealthClass === 'middle' ? ['apartment', 'public_housing'] : ['public_housing']); 
-
-    const availableHomes = GameStore.housingUnits.filter(unit => {
-        const occupants = GameStore.sims.filter(s => s.homeId === unit.id).length;
-        return targetHomeTypes.includes(unit.type) && (occupants + count <= unit.capacity);
-    });
-
-    availableHomes.sort((a, b) => targetHomeTypes.indexOf(a.type) - targetHomeTypes.indexOf(b.type));
-
-    let homeId: string | null = null;
-    let homeX = 100 + Math.random() * (CONFIG.CANVAS_W - 200);
-    let homeY = 400 + Math.random() * (CONFIG.CANVAS_H - 500);
-
-    if (availableHomes.length > 0) {
-        const bestType = availableHomes[0].type;
-        const bestHomes = availableHomes.filter(h => h.type === bestType);
-        const home = bestHomes[Math.floor(Math.random() * bestHomes.length)];
-        homeId = home.id;
-        homeX = home.x + home.area.w / 2;
-        homeY = home.y + home.area.h / 2;
-    }
-
-    const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
-    const members: Sim[] = [];
-    const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
-    const isSameSex = parentCount === 2 && Math.random() < 0.1; 
-    
-    const p1Gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
-    let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
-    if (isSameSex) p2Gender = p1Gender;
-
-    const p1Surname = getSurname();
-    const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId, money: baseMoney });
-    members.push(parent1);
-
-    let parent2: Sim | null = null;
-    if (parentCount === 2) {
-        const p2Surname = getSurname(); 
-        parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId, money: 0 });
-        members.push(parent2);
-        SocialLogic.marry(parent1, parent2, true); 
-    }
-
-    const childCount = count - parentCount;
-    for (let i = 0; i < childCount; i++) {
-        const r = Math.random();
-        const ageStage = r > 0.6 ? 'Child' : (r > 0.3 ? 'Teen' : 'Toddler');
-        let childSurname = p1Surname;
-        if (parent2 && Math.random() > 0.5) childSurname = parent2.surname;
-        const child = new Sim({ 
-            x: homeX + (i+1)*15, y: homeY + 15, surname: childSurname, familyId, ageStage, homeId, 
-            fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
-            motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined),
-            money: 0
-        });
-        
-        members.forEach(p => {
-            if (p.ageStage === 'Adult') {
-                SocialLogic.setKinship(p, child, 'child'); SocialLogic.setKinship(child, p, 'parent'); p.childrenIds.push(child.id);
-            } else {
-                SocialLogic.setKinship(p, child, 'sibling'); SocialLogic.setKinship(child, p, 'sibling');
-            }
-        });
-        members.push(child);
-    }
-    return members;
-}
+// ---------------- Game Loop Functions ----------------
 
 export function initGame() {
     GameStore.sims = [];
@@ -1086,7 +814,8 @@ export function initGame() {
         const familyCount = 4 + Math.floor(Math.random() * 3);
         for (let i = 0; i < familyCount; i++) {
             const size = 1 + Math.floor(Math.random() * 4); 
-            const fam = generateFamily(size);
+            // [Refactor] 使用独立的 FamilyGenerator
+            const fam = FamilyGenerator.generate(size, GameStore.housingUnits, GameStore.sims);
             GameStore.sims.push(...fam);
         }
         GameStore.addLog(null, `新世界已生成。共 ${familyCount} 个家庭，${GameStore.sims.length} 位市民。`, "sys");
@@ -1112,8 +841,9 @@ export function updateTime() {
 
             if (GameStore.time.hour >= 24) {
                 GameStore.time.hour = 0;
-                const currentSimMonth = GameStore.time.totalDays; 
-                handleDailyDiaries(currentSimMonth);
+                
+                // [Refactor] 使用独立的 NarrativeSystem
+                NarrativeSystem.handleDailyDiaries(GameStore.sims, GameStore.time, (msg) => GameStore.addLog(null, msg, 'sys', true));
 
                 GameStore.time.totalDays++;
                 GameStore.time.month++;
@@ -1141,26 +871,6 @@ export function updateTime() {
         }
         GameStore.notify();
     }
-}
-
-async function handleDailyDiaries(monthIndex: number) {
-    const allSimsData = GameStore.sims.map(sim => sim.getDaySummary(monthIndex));
-    const currentMonth = GameStore.time.month;
-    const holiday = HOLIDAYS[currentMonth];
-    let contextStr = `现在的季节是 ${currentMonth}月。`;
-    if (holiday) contextStr += ` 本月是【${holiday.name}】(${holiday.type})，全城都在过节！`;
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < allSimsData.length; i += BATCH_SIZE) {
-        const batch = allSimsData.slice(i, i + BATCH_SIZE);
-        try {
-            const diariesMap = await batchGenerateDiaries(batch, contextStr);
-            Object.entries(diariesMap).forEach(([simId, diaryContent]) => {
-                const sim = GameStore.sims.find(s => s.id === simId);
-                if (sim) sim.addDiary(diaryContent);
-            });
-        } catch (error) { console.error("[AI] 批次生成失败:", error); }
-    }
-    GameStore.addLog(null, `第 ${monthIndex} 月的市民日记已生成完毕。`, 'sys', true);
 }
 
 export function getActivePalette() {

@@ -278,3 +278,12 @@ export interface GameTime {
   minute: number;
   speed: number;
 }
+
+// [新增] 存档元数据接口，解决 simulation.ts 的导入错误
+export interface SaveMetadata {
+    slot: number;
+    timestamp: number;
+    timeLabel: string;
+    pop: number;
+    realTime: string;
+}
