@@ -139,17 +139,24 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
     }
 };
 
-const FLOOR_TYPES = [
+// 1. 地皮/户外材质 (Plot Mode)
+const SURFACE_TYPES = [
+    { label: '草地', color: '#8cb393', pattern: 'grass' },
     { label: '柏油路', color: '#3d404b', pattern: 'stripes' },
     { label: '斑马线', color: 'rgba(255,255,255,0.2)', pattern: 'zebra' },
-    { label: '地砖', color: '#9ca6b4', pattern: 'pave_fancy' },
-    { label: '草地', color: '#8cb393', pattern: 'grass' },
     { label: '水池', color: '#5a8fff', pattern: 'water' },
+];
+
+// 2. 室内房间材质 (Room Mode) - 默认带墙
+const ROOM_TYPES = [
+    { label: '基础房间', color: '#dfe6e9', pattern: 'simple' }, // 纯色
     { label: '木地板', color: '#dce4f0', pattern: 'wood' },
     { label: '瓷砖', color: '#dfe6e9', pattern: 'tile' },
+    { label: '地砖', color: '#9ca6b4', pattern: 'pave_fancy' },
 ];
 
 const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
+    // [修改] mode: 'floor' 现在代表 "房间模式"
     const [mode, setMode] = useState<'plot' | 'furniture' | 'floor'>('plot');
     const [category, setCategory] = useState('office');
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -263,9 +270,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         GameStore.startPlacingFurniture({ ...tpl, id: '', x: 0, y: 0, color: initialColor });
     };
 
-    const handleStartDrawingFloor = (floorType: any) => {
-        const initialColor = selectedColor || floorType.color;
-        GameStore.startDrawingFloor(floorType.pattern, initialColor, floorType.label);
+    const handleStartDrawingFloor = (type: any, hasWall: boolean) => {
+        const initialColor = selectedColor || type.color;
+        GameStore.startDrawingFloor(type.pattern, initialColor, type.label, hasWall);
     };
 
     const handleDelete = () => {
@@ -449,7 +456,7 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                     onClick={() => handleSetMode('floor')}
                     className={`flex-1 py-2 text-xs font-bold transition-colors ${mode === 'floor' ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    施工
+                    房间 {/* [修改] 文字改为房间 */}
                 </button>
                 <button 
                     onClick={() => handleSetMode('furniture')}
@@ -460,8 +467,7 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
-                
+            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">  
                 {/* Current Selection Info & Delete */}
                 <div className="bg-white/5 p-2 rounded border border-white/5">
                     <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">当前操作</div>
@@ -507,24 +513,38 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                 <div className="flex flex-col gap-2 h-full">
                     {mode === 'plot' ? (
                         <>
-                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">自定</div>
-                            {/* [修改] 恢复“自定义空地”的框选行为 */}
-                            <button
-                                onClick={handleStartDrawingPlot}
-                                className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95 ${GameStore.editor.drawingPlot ? 'border-accent bg-white/10' : ''}`}
-                            >
-                                <span className="text-xs font-bold text-gray-200">⬜ 框选自定义空地</span>
-                                <span className="text-[9px] text-gray-500">按住拖拽框选任意大小</span>
-                            </button>
+                            {/* [新增] 户外地形绘制 */}
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">地表材质</div>
+                            <div className="grid grid-cols-2 gap-2 pb-2">
+                                {/* 自定义空地保留 */}
+                                <button
+                                    onClick={handleStartDrawingPlot}
+                                    className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingPlot ? 'border-accent bg-white/10' : ''}`}
+                                >
+                                    <span className="text-xs font-bold text-gray-200">⬜ 框选空地</span>
+                                </button>
+                                {/* 移植过来的户外材质 */}
+                                {SURFACE_TYPES.map((type, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleStartDrawingFloor(type, false)} // hasWall = false
+                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-accent bg-white/10' : ''}`}
+                                    >
+                                        <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>
+                                        <span className="text-xs font-bold text-gray-200">{type.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                             
-                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-2">预设模板</div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-2">建筑模板</div>
                             <div className="grid grid-cols-2 gap-2 pb-2">
                                 {Object.entries(PLOTS).filter(([k]) => !k.startsWith('road') && !k.startsWith('default')).map(([key, template]) => (
                                     <button
                                         key={key}
-                                        onClick={() => handleStartPlacingPlot(key)}
+                                        onClick={() => GameStore.startPlacingPlot(key)}
                                         className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95"
                                     >
+                                        {/* ... (按钮内容保持不变) */}
                                         <span className="text-xs font-bold text-gray-200 truncate w-full">
                                             {PLOT_NAMES[key.replace('_template', '')] || key.replace('_template', '')}
                                         </span>
@@ -535,12 +555,12 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                         </>
                     ) : mode === 'floor' ? (
                         <>
-                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">框选建造</div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">框选建造房间</div>
                             <div className="grid grid-cols-2 gap-2 pb-2">
-                                {FLOOR_TYPES.map((type, idx) => (
+                                {ROOM_TYPES.map((type, idx) => (
                                     <button
                                         key={idx}
-                                        onClick={() => handleStartDrawingFloor(type)}
+                                        onClick={() => handleStartDrawingFloor(type, true)} // hasWall = true
                                         className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-accent bg-white/10' : ''}`}
                                     >
                                         <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>

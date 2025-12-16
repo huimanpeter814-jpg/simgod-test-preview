@@ -52,7 +52,7 @@ export class GameStore {
         placingTemplateId: null,
         placingFurniture: null,
         drawingFloor: null,
-        drawingPlot: null, // [新增]
+        drawingPlot: null,
         previewPos: null
     };
 
@@ -62,7 +62,7 @@ export class GameStore {
     static snapshot: {
         worldLayout: WorldPlot[];
         furniture: Furniture[];
-        rooms: RoomDef[]; // 新增：保存房间/地板快照
+        rooms: RoomDef[]; 
     } | null = null;
 
     static rooms: RoomDef[] = [];
@@ -104,7 +104,6 @@ export class GameStore {
         this.notify();
     }
 
-    // [新增] 为市民分配住址
     static assignRandomHome(sim: Sim) {
         const availableHomes = this.housingUnits.filter(unit => {
             const residents = this.sims.filter(s => s.homeId === unit.id).length;
@@ -180,18 +179,27 @@ export class GameStore {
     static instantiatePlot(plot: WorldPlot) {
         let template = PLOTS[plot.templateId];
         
-        // [修改] 如果没有找到模板（可能是旧数据或者 default），或者明确是自定义空地
-        // 使用 plot.width 和 plot.height 来生成动态模板
+        // [修改] 如果没有找到模板，或者模板是 default_empty，使用自定义属性构建模板
         if (!template || plot.templateId === 'default_empty') {
             const w = plot.width || 300;
             const h = plot.height || 300;
+            
             template = {
                 id: 'default_empty',
                 width: w,
                 height: h,
-                type: 'public',
+                type: (plot.customType as any) || 'public', 
                 rooms: [
-                    { id: 'base', x: 0, y: 0, w: w, h: h, label: '空地皮', color: '#dcdcdc', pixelPattern: 'simple' }
+                    { 
+                        id: 'base', 
+                        x: 0, 
+                        y: 0, 
+                        w: w, 
+                        h: h, 
+                        label: plot.customName || '空地皮', // 使用自定义名称
+                        color: plot.customColor || '#dcdcdc', // 使用自定义颜色
+                        pixelPattern: 'simple' 
+                    }
                 ],
                 furniture: []
             };
@@ -245,6 +253,38 @@ export class GameStore {
                 homeId: ownerUnit ? ownerUnit.id : undefined
             });
         });
+    }
+
+    // [新增] 更新地皮属性
+    static updatePlotAttributes(plotId: string, attrs: { name?: string, color?: string, type?: string }) {
+        const plot = this.worldLayout.find(p => p.id === plotId);
+        if (!plot) return;
+
+        let hasChange = false;
+        if (attrs.name !== undefined && plot.customName !== attrs.name) {
+            plot.customName = attrs.name;
+            hasChange = true;
+        }
+        if (attrs.color !== undefined && plot.customColor !== attrs.color) {
+            plot.customColor = attrs.color;
+            hasChange = true;
+        }
+        if (attrs.type !== undefined && plot.customType !== attrs.type) {
+            plot.customType = attrs.type;
+            hasChange = true;
+        }
+
+        if (hasChange) {
+            // 清除旧的实体
+            this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
+            this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
+            this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+            
+            // 重新实例化
+            this.instantiatePlot(plot);
+            this.initIndex();
+            this.notify();
+        }
     }
 
     static refreshFurnitureOwnership() {
@@ -358,9 +398,12 @@ export class GameStore {
             if (action.entityType === 'plot') {
                 const plot = this.worldLayout.find(p => p.id === action.id);
                 if (plot && data) { plot.x = data.x; plot.y = data.y; this.rebuildWorld(false); }
-            } else {
+            } else if (action.entityType === 'furniture') {
                 const furn = this.furniture.find(f => f.id === action.id);
                 if (furn && data) { furn.x = data.x; furn.y = data.y; }
+            } else if (action.entityType === 'room') {
+                const room = this.rooms.find(r => r.id === action.id);
+                if (room && data) { room.x = data.x; room.y = data.y; }
             }
         } else if (type === 'add') {
             if (action.entityType === 'plot' && data) { this.worldLayout.push(data); this.rebuildWorld(false); }
@@ -374,7 +417,8 @@ export class GameStore {
             if (action.entityType === 'plot' && data) {
                 const plot = this.worldLayout.find(p => p.id === action.id);
                 if (plot) {
-                    plot.templateId = data.templateId;
+                    // 支持模板修改和属性修改
+                    if (data.templateId) plot.templateId = data.templateId;
                     this.rebuildWorld(false);
                 }
             }
@@ -414,7 +458,6 @@ export class GameStore {
         this.notify();
     }
 
-    // [新增] 开始绘制地皮 (框选)
     static startDrawingPlot(templateId: string = 'default_empty') {
         this.editor.mode = 'plot';
         this.editor.drawingPlot = {
@@ -447,11 +490,12 @@ export class GameStore {
         this.notify();
     }
 
-    static startDrawingFloor(pattern: string, color: string, label: string) {
+    // [修改] 增加 hasWall 参数
+    static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean = false) {
         this.editor.mode = 'floor';
         this.editor.drawingFloor = {
             startX: 0, startY: 0, currX: 0, currY: 0,
-            pattern, color, label
+            pattern, color, label, hasWall
         };
         this.editor.placingTemplateId = null;
         this.editor.placingFurniture = null;
@@ -477,7 +521,6 @@ export class GameStore {
         this.notify();
     }
 
-    // [新增] 创建自定义尺寸的地皮
     static createCustomPlot(rect: {x: number, y: number, w: number, h: number}, templateId: string) {
         const newId = `plot_custom_${Date.now()}`;
         const newPlot: WorldPlot = {
@@ -512,14 +555,16 @@ export class GameStore {
         this.notify();
     }
 
-    static createCustomRoom(rect: {x: number, y: number, w: number, h: number}, pattern: string, color: string, label: string) {
+    // [修改] 增加 hasWall 参数
+    static createCustomRoom(rect: {x: number, y: number, w: number, h: number}, pattern: string, color: string, label: string, hasWall: boolean) {
         const newRoom: RoomDef = {
             id: `custom_room_${Date.now()}`,
             x: rect.x, y: rect.y, w: rect.w, h: rect.h,
             label: label,
             color: color,
             pixelPattern: pattern,
-            isCustom: true
+            isCustom: true,
+            hasWall: hasWall
         };
         this.recordAction({ type: 'add', entityType: 'room', id: newRoom.id, newData: newRoom });
         this.rooms.push(newRoom);
@@ -576,10 +621,12 @@ export class GameStore {
         this.notify();
     }
 
-    static finalizeMove(entityType: 'plot' | 'furniture', id: string, startPos: {x:number, y:number}) {
+    // [修复] 参数类型支持 room, 以及增加 room 移动逻辑
+    static finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
         if (!this.editor.previewPos) return;
         const { x, y } = this.editor.previewPos;
         let hasChange = false;
+        
         if (entityType === 'plot') {
             const plot = this.worldLayout.find(p => p.id === id);
             if (plot && (plot.x !== x || plot.y !== y)) {
@@ -598,12 +645,18 @@ export class GameStore {
                 });
                 hasChange = true; 
             }
-        } else {
+        } else if (entityType === 'furniture') {
             const furn = this.furniture.find(f => f.id === id);
             if (furn && (furn.x !== x || furn.y !== y)) {
                 furn.x = x; furn.y = y; hasChange = true;
             }
+        } else if (entityType === 'room') {
+            const room = this.rooms.find(r => r.id === id);
+            if (room && (room.x !== x || room.y !== y)) {
+                room.x = x; room.y = y; hasChange = true;
+            }
         }
+
         if (hasChange) {
             this.recordAction({ type: 'move', entityType, id, prevData: startPos, newData: { x, y } });
             this.initIndex();

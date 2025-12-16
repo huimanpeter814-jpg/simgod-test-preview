@@ -63,57 +63,60 @@ export interface WorldPlot {
     templateId: string;
     x: number;
     y: number;
-    // [修改] 增加可选的宽高，用于自定义框选的地皮
     width?: number; 
     height?: number;
+    customName?: string;  // 自定义地皮名称
+    customColor?: string; // 自定义地皮颜色
+    customType?: string;  // 自定义功能类型 (如 tech, park 等，但不改变外观)
 }
 
 export interface EditorState {
-    mode: 'none' | 'plot' | 'furniture' | 'floor';
-    selectedPlotId: string | null;
-    selectedFurnitureId: string | null;
-    selectedRoomId: string | null;
-    
-    isDragging: boolean;
-    dragOffset: { x: number, y: number };
-    
-    placingTemplateId: string | null;
-    placingFurniture: Partial<Furniture> | null;
-    
-    // [修改] 增加地皮绘制状态
-    drawingPlot: {
-        startX: number;
-        startY: number;
-        currX: number;
-        currY: number;
-        templateId: string;
-    } | null;
+  mode: 'none' | 'plot' | 'furniture' | 'floor'; // floor 模式现在实际上是“房间建造模式”
+  selectedPlotId: string | null;
+  selectedFurnitureId: string | null;
+  selectedRoomId: string | null;
+  
+  isDragging: boolean;
+  dragOffset: { x: number, y: number };
+  
+  placingTemplateId: string | null;
+  placingFurniture: Partial<Furniture> | null;
+  
+  drawingPlot: {
+      startX: number;
+      startY: number;
+      currX: number;
+      currY: number;
+      templateId: string;
+  } | null;
 
-    drawingFloor: {
-        startX: number;
-        startY: number;
-        currX: number;
-        currY: number;
-        pattern: string;
-        color: string;
-        label: string;
-    } | null;
+  drawingFloor: {
+      startX: number;
+      startY: number;
+      currX: number;
+      currY: number;
+      pattern: string;
+      color: string;
+      label: string;
+      hasWall: boolean; // [新增] 是否带墙
+  } | null;
 
-    previewPos: { x: number, y: number } | null;
+  previewPos: { x: number, y: number } | null;
 }
 
 export interface RoomDef {
-    id: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    label: string;
-    color: string;
-    pixelPattern?: string;
-    imagePath?: string;
-    homeId?: string;
-    isCustom?: boolean;
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+  color: string;
+  pixelPattern?: string;
+  imagePath?: string;
+  homeId?: string;
+  isCustom?: boolean;
+  hasWall?: boolean; 
 }
 
 export interface Needs {

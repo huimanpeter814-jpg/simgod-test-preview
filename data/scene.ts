@@ -7,8 +7,8 @@ const PALETTE = {
     ground_concrete: '#e0e4e8', 
     ground_asphalt: '#2a2f3c',  
     ground_pave: '#9ca6b4',     
-    ground_grass_light: '#8cb393', // [修改] 更柔和的草地颜色 (Sage Green)
-    ground_grass_dark: '#5a8264',  // 深草绿
+    ground_grass_light: '#6cff8c',
+    ground_grass_dark: '#28c75d',
     ground_water: '#5a8fff',    
     
     // 建筑色
@@ -29,7 +29,7 @@ export const PALETTES: any = {
         zone2: '#e6f0fa', 
         zone3: '#dce8f5', 
         wall: '#7fa5b8', 
-        bg: '#8cb393', // [修改] 统一使用新草地色
+        bg: '#2a3240', 
         overlay: 'rgba(163, 203, 255, 0.25)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.3)',
         pixel_glow: 'rgba(100, 150, 255, 0.1)' 
@@ -39,7 +39,7 @@ export const PALETTES: any = {
         zone2: '#f5f7fa', 
         zone3: '#ebf0f5', 
         wall: '#8a9ca6', 
-        bg: '#8cb393', 
+        bg: '#2a3240', 
         overlay: 'rgba(255, 250, 240, 0.1)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.25)',
         pixel_glow: 'rgba(255, 255, 200, 0.05)'
@@ -49,7 +49,7 @@ export const PALETTES: any = {
         zone2: '#faf0e6', 
         zone3: '#f5e8dc', 
         wall: '#9ca6b4', 
-        bg: '#8cb393', 
+        bg: '#2a3240', 
         overlay: 'rgba(255, 200, 150, 0.15)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.25)',
         pixel_glow: 'rgba(255, 180, 100, 0.1)'
@@ -59,7 +59,7 @@ export const PALETTES: any = {
         zone2: '#ffd89c', 
         zone3: '#ffb894', 
         wall: '#5a6572', 
-        bg: '#5a8264', // 黄昏草地变深
+        bg: '#2a3240',
         overlay: 'rgba(140, 100, 255, 0.3)', 
         furniture_shadow: 'rgba(35, 40, 50, 0.4)',
         pixel_glow: 'rgba(255, 100, 100, 0.2)'
@@ -69,7 +69,7 @@ export const PALETTES: any = {
         zone2: '#2a3240', 
         zone3: '#242a35', 
         wall: '#1a1e2c', 
-        bg: '#2d4030', // 晚上草地变暗
+        bg: '#2a3240', 
         overlay: 'rgba(20, 35, 70, 0.5)', 
         furniture_shadow: 'rgba(0, 0, 0, 0.6)',
         pixel_glow: 'rgba(0, 100, 255, 0.3)'
@@ -79,7 +79,7 @@ export const PALETTES: any = {
         zone2: '#252a36', 
         zone3: '#202530', 
         wall: '#000010', 
-        bg: '#1a261c', 
+        bg: '#2a3240', 
         overlay: 'rgba(0, 0, 20, 0.7)', 
         furniture_shadow: 'rgba(0, 0, 0, 0.7)',
         pixel_glow: 'rgba(50, 0, 100, 0.4)'
