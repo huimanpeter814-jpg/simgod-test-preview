@@ -264,7 +264,13 @@ const GameCanvas: React.FC = () => {
             const h = ageConfig.height || 42;
             const headSize = ageConfig.headSize || 13;
 
-            // 绘制小人身体
+            const headY = -h + (headSize * 0.4);
+
+            // === A. 绘制后发 (Back Hair) === 
+            // 在身体之前绘制，防止遮挡
+            drawAvatarHead(ctx, 0, headY, headSize, sim, 'back');
+
+            // === B. 绘制小人身体 ===
             // [修复] 婴儿穿纸尿裤，其他人穿彩色裤子
             if (sim.ageStage === 'Infant') {
                 // 纸尿裤 (白色)
@@ -302,8 +308,9 @@ const GameCanvas: React.FC = () => {
             ctx.fillRect(-w/2, shoulderY, armW, armH); // Left
             ctx.fillRect(w/2 - armW, shoulderY, armW, armH); // Right
 
-            // 绘制头部 (位置根据高度动态计算)
-            drawAvatarHead(ctx, 0, -h + (headSize * 0.4), headSize, sim);
+            // === C. 绘制前脸和前发 (Front Head) ===
+            // 在身体之后绘制，确保脸和刘海在身体前面
+            drawAvatarHead(ctx, 0, headY, headSize, sim, 'front');
 
             if (sim.action === 'phone') {
                 ctx.fillStyle = '#ECEFF1'; ctx.fillRect(w/2 - 2, shoulderY + 5, 6, 9);
