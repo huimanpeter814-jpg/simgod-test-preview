@@ -146,9 +146,11 @@ export class GameStore {
         this.notify();
     }
 
-    // 重建世界
+    // [修改] 重建世界逻辑
+    // 修复：如果 worldLayout 已经有数据（比如来自 LoadGame），不要强制覆盖为默认值
     static rebuildWorld(initial = false) {
-        if (initial || this.worldLayout.length === 0) {
+        // 仅当布局为空时，才加载默认布局
+        if (this.worldLayout.length === 0) {
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
         }
 
@@ -301,6 +303,61 @@ export class GameStore {
                 else delete f.homeId;
             }
         });
+    }
+
+    // [新增] 获取可导出的地图数据
+    static getMapData() {
+        return {
+            version: "1.0",
+            timestamp: Date.now(),
+            worldLayout: this.worldLayout,
+            rooms: this.rooms.filter(r => r.isCustom),
+            customFurniture: this.furniture.filter(f => 
+                f.id.startsWith('custom_') || 
+                f.id.startsWith('vending_') || 
+                f.id.startsWith('trash_') || 
+                f.id.startsWith('hydrant_')
+            )
+        };
+    }
+
+    // [新增] 导入地图数据
+    static importMapData(data: any) {
+        if (!data.worldLayout) {
+            this.showToast("❌ 文件格式错误：缺少地图数据");
+            return;
+        }
+
+        try {
+            // 1. 设置布局
+            this.worldLayout = data.worldLayout;
+            
+            // 2. 基于布局重建世界基础 (生成地皮自带的房间和家具)
+            // 传入 true 以清除所有旧实体
+            this.rebuildWorld(true);
+
+            // 3. 添加自定义房间
+            if (data.rooms) {
+                this.rooms = [...this.rooms, ...data.rooms];
+            }
+
+            // 4. 添加自定义家具
+            if (data.customFurniture) {
+                // rebuildWorld(true) 会将 furniture 重置为 STREET_PROPS
+                // 我们需要将导入的自定义家具追加进去
+                this.furniture = [...this.furniture, ...data.customFurniture];
+            }
+
+            // 5. 重建索引和归属权
+            this.initIndex();
+            this.refreshFurnitureOwnership();
+            
+            this.showToast("✅ 地图导入成功！");
+            this.notify();
+        } catch (e) {
+            console.error("Import failed", e);
+            this.showToast("❌ 导入失败，请查看控制台");
+        }
     }
 
     // === Editor Logic ===
@@ -833,6 +890,8 @@ export class GameStore {
             if (!json) return false;
             const data = JSON.parse(json);
 
+            // [修改] 先设置布局，再调用 rebuildWorld(true)
+            // 由于我们修改了 rebuildWorld，它会尊重现有的 worldLayout
             if (data.worldLayout) this.worldLayout = data.worldLayout;
             else this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT)); 
 
@@ -843,6 +902,10 @@ export class GameStore {
             }
 
             if (data.customFurniture) {
+                // rebuildWorld(true) 会将 furniture 设置为默认 STREET_PROPS
+                // 我们需要追加自定义家具
+                // 注意：如果 customFurniture 里包含 STREET_PROPS 的修改版，可能需要去重逻辑
+                // 但目前简化处理，假设 customFurniture 是纯新增
                 const staticFurniture = this.furniture; 
                 this.furniture = [...staticFurniture, ...data.customFurniture];
             }
