@@ -171,12 +171,40 @@ export const CareerLogic = {
             } else if (sim.job.companyType === 'library') {
                 searchLabels = ['管理员'];
             }
+            // [新增] 学校相关职位
+            else if (sim.job.companyType === 'school') {
+                if (sim.job.id === 'teacher_kg') {
+                    searchLabels = ['教师桌', '婴儿床', '滑梯']; // 幼师照顾孩子
+                } else if (sim.job.id === 'teacher_elem') {
+                    searchLabels = ['黑板']; // 小学老师站讲台
+                } else if (sim.job.id === 'teacher_high') {
+                    searchLabels = ['黑板']; // 中学老师站讲台
+                } else if (sim.job.id === 'teacher_pe') {
+                    searchLabels = ['篮筐', '旗杆']; // 体育老师在操场
+                } else if (sim.job.id === 'school_security') {
+                    searchLabels = ['保安岗']; // 保安
+                } else if (sim.job.id === 'school_chef') {
+                    searchLabels = ['食堂灶台', '后厨']; // 厨师
+                }
+            } 
+            // [新增] 夜生活相关职位
+            else if (sim.job.companyType === 'nightlife') {
+                if (sim.job.id === 'dj') {
+                    searchLabels = ['DJ台'];
+                }
+            }
 
             let candidateFurniture: Furniture[] = [];
             searchCategories.forEach(cat => {
                 const list = GameStore.furnitureIndex.get(cat);
                 if (list) candidateFurniture = candidateFurniture.concat(list);
             });
+
+            // 如果是黑板，可能不是 'work' utility，需要从全部家具里找
+            if (searchLabels.includes('黑板') || searchLabels.includes('旗杆')) {
+                const allF = GameStore.furniture.filter(f => searchLabels.some(l => f.label.includes(l)));
+                candidateFurniture = candidateFurniture.concat(allF);
+            }
 
             const validDesks = candidateFurniture.filter(f =>
                 searchLabels.some(l => f.label.includes(l))

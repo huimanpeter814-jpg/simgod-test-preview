@@ -441,6 +441,8 @@ const PLOT_KINDERGARTEN: PlotTemplate = {
         ...createGrid('kg_crib', 30, 250, 4, 2, 60, 60, { w: 40, h: 40, color: '#ff9ff3', label: '婴儿床', utility: 'nap_crib', pixelPattern: 'bed_crib' }),
         ...createGrid('kg_mat', 30, 30, 4, 3, 60, 60, { w: 44, h: 44, color: '#74b9ff', label: '游戏垫', utility: 'play_blocks', pixelPattern: 'play_mat' }),
         { id: 'kg_slide', x: 310, y: 40, w: 60, h: 100, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'slide' },
+        // [新增] 教师工位
+        { id: 'kg_teacher_desk', x: 200, y: 150, w: 48, h: 32, color: '#fab1a0', label: '教师桌', utility: 'work', pixelPattern: 'desk_pixel' },
     ]
 };
 
@@ -463,6 +465,10 @@ const PLOT_ELEMENTARY: PlotTemplate = {
         ...createGrid('elem_desk_2', 250, 40, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
         { id: 'elem_blackboard_1', x: 70, y: 10, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
         { id: 'elem_blackboard_2', x: 290, y: 10, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
+        // [新增] 操场设施 (体育老师)
+        { id: 'elem_flag', x: 650, y: 220, w: 20, h: 20, color: '#d63031', label: '旗杆', utility: 'none', pixelPattern: 'simple' },
+        // [新增] 校门口保安岗
+        { id: 'school_gate_guard_elem', x: 450, y: 450, w: 34, h: 34, color: '#2c3e50', label: '保安岗', utility: 'work', pixelPattern: 'chair_pixel' },
     ]
 };
 
@@ -486,6 +492,12 @@ const PLOT_HIGHSCHOOL: PlotTemplate = {
         ...createGrid('high_book', 460, 40, 5, 2, 50, 80, { w: 40, h: 60, color: '#0984e3', label: '藏书', utility: 'read', pixelPattern: 'bookshelf_sci' }),
         ...createGrid('high_lunch', 40, 260, 4, 2, 70, 80, { w: 60, h: 60, color: '#fab1a0', label: '餐桌', utility: 'eat_canteen', pixelPattern: 'table_dining', cost: 10 }),
         { id: 'high_hoop', x: 830, y: 50, w: 20, h: 60, color: '#e17055', label: '篮筐', utility: 'play', pixelPattern: 'hoop' },
+        // [新增] 教师黑板
+        { id: 'high_blackboard', x: 180, y: 30, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
+        // [新增] 饭堂厨师工位
+        { id: 'high_stove', x: 300, y: 260, w: 44, h: 64, color: '#d63031', label: '食堂灶台', utility: 'work', pixelPattern: 'stove' },
+        // [新增] 校门口保安岗
+        { id: 'school_gate_guard_high', x: 650, y: 450, w: 34, h: 34, color: '#2c3e50', label: '保安岗', utility: 'work', pixelPattern: 'chair_pixel' },
     ]
 };
 

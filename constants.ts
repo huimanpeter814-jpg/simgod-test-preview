@@ -135,7 +135,18 @@ export const JOBS: Job[] = [
     { id: 'head_chef', title: '行政主厨', level: 4, salary: 1200, startHour: 10, endHour: 19, companyType: 'restaurant' },
 
     // Library
-    { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: 'library', vacationMonths: [2, 7] }
+    { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: 'library', vacationMonths: [2, 7] },
+
+    // [新增] Education (School)
+    { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: 'school', vacationMonths: [2, 7] },
+    { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: 'school', vacationMonths: [2, 7] },
+    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: 'school', vacationMonths: [2, 7] },
+    { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: 'school', vacationMonths: [2, 7] },
+    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: 'school' },
+    { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 550, startHour: 6, endHour: 14, companyType: 'school' },
+
+    // [新增] Nightlife
+    { id: 'dj', title: 'DJ', level: 3, salary: 1000, startHour: 20, endHour: 4, companyType: 'nightlife' },
 ];
 
 export const BUFFS = {
