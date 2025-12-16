@@ -1,13 +1,14 @@
 import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
 import { FamilyGenerator } from './logic/genetics';
 import { NarrativeSystem } from './logic/narrative';
 import { EditorManager } from '../managers/EditorManager';
+import { SaveManager, GameSaveData } from '../managers/SaveManager'; // [新增] 引入 SaveManager
 
 // Re-exports
 export { Sim } from './Sim';
@@ -255,7 +256,10 @@ export class GameStore {
         });
     }
 
+    // === 🗺️ 地图数据管理 (Delegated to SaveManager) ===
+
     static getMapData() {
+        // 构建 MapData 对象，由 SaveManager 决定如何处理（这里直接返回对象供 UI 下载）
         return {
             version: "1.0",
             timestamp: Date.now(),
@@ -265,20 +269,29 @@ export class GameStore {
         };
     }
 
-    static importMapData(data: any) {
-        if (!data.worldLayout) { this.showToast("❌ 文件格式错误：缺少地图数据"); return; }
+    static importMapData(rawJson: any) {
+        // [新增] 使用 SaveManager 进行解析和校验
+        const validData = SaveManager.parseMapData(rawJson);
+        
+        if (!validData) {
+            this.showToast("❌ 导入失败：文件格式无效");
+            return;
+        }
+
         try {
-            this.worldLayout = data.worldLayout;
+            this.worldLayout = validData.worldLayout;
             this.rebuildWorld(true);
-            if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
-            if (data.customFurniture) this.furniture = [...this.furniture, ...data.customFurniture];
+            
+            if (validData.rooms) this.rooms = [...this.rooms, ...validData.rooms];
+            if (validData.customFurniture) this.furniture = [...this.furniture, ...validData.customFurniture];
+            
             this.initIndex();
             this.refreshFurnitureOwnership();
             this.showToast("✅ 地图导入成功！");
             this.notify();
         } catch (e) {
-            console.error("Import failed", e);
-            this.showToast("❌ 导入失败，请查看控制台");
+            console.error("Import execution failed", e);
+            this.showToast("❌ 导入过程出错，请重试");
         }
     }
 
@@ -360,30 +373,17 @@ export class GameStore {
         this.notify();
     }
 
-    // 💾 存档系统
-    static getSaveSlots(): (SaveMetadata | null)[] {
-        const slots: (SaveMetadata | null)[] = [];
-        for (let i = 1; i <= 5; i++) {
-            try {
-                const json = localStorage.getItem(`simgod_save_${i}`);
-                if (json) {
-                    const data = JSON.parse(json);
-                    slots.push({
-                        slot: i,
-                        timestamp: data.timestamp || 0,
-                        timeLabel: `Y${data.time?.year || 1} M${data.time?.month || 1}`,
-                        pop: data.sims?.length || 0,
-                        realTime: new Date(data.timestamp).toLocaleString()
-                    });
-                } else { slots.push(null); }
-            } catch (e) { slots.push(null); }
-        }
-        return slots;
+    // === 💾 存档系统 (Delegated to SaveManager) ===
+
+    static getSaveSlots() {
+        return SaveManager.getSaveSlots();
     }
 
     static saveGame(slotIndex: number = 1) {
+        // 1. 准备 Sims 数据 (处理引用和循环依赖)
         const safeSims = this.sims.map(sim => {
             const s = Object.assign({}, sim);
+            // 清理临时状态，避免序列化问题
             if (s.interactionTarget && (s.interactionTarget as any).ref) {
                 s.interactionTarget = null; s.action = 'idle'; s.target = null;
                 // @ts-ignore
@@ -392,7 +392,8 @@ export class GameStore {
             return s;
         });
 
-        const saveData = {
+        // 2. 构建存档数据包
+        const saveData: GameSaveData = {
             version: 3.2, 
             timestamp: Date.now(),
             time: this.time,
@@ -403,37 +404,48 @@ export class GameStore {
             customFurniture: this.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_')) 
         };
 
-        try {
-            localStorage.setItem(`simgod_save_${slotIndex}`, JSON.stringify(saveData));
-            console.log(`Game Saved to Slot ${slotIndex}.`);
+        // 3. 调用 SaveManager 执行保存
+        const success = SaveManager.saveToSlot(slotIndex, saveData);
+        
+        if (success) {
             this.showToast(`✅ 存档 ${slotIndex} 保存成功！`);
-        } catch (e) {
-            console.error("Save failed", e);
+        } else {
             this.showToast(`❌ 保存失败: 存储空间不足?`);
         }
     }
 
     static loadGame(slotIndex: number = 1): boolean {
-        try {
-            const json = localStorage.getItem(`simgod_save_${slotIndex}`);
-            if (!json) return false;
-            const data = JSON.parse(json);
+        // 1. 调用 SaveManager 读取数据
+        const data = SaveManager.loadFromSlot(slotIndex);
+        
+        if (!data) {
+            this.showToast(`❌ 读取存档失败`);
+            return false;
+        }
 
+        try {
+            // 2. 恢复世界布局
             if (data.worldLayout) this.worldLayout = data.worldLayout;
             else this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT)); 
 
-            this.rebuildWorld(true);
+            this.rebuildWorld(true); // 此时 furniture 被重置为初始状态
 
+            // 3. 恢复自定义建筑和家具
             if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
             if (data.customFurniture) {
+                // 将加载的自定义家具追加到当前家具列表中
                 const staticFurniture = this.furniture; 
                 this.furniture = [...staticFurniture, ...data.customFurniture];
             }
 
+            // 4. 恢复游戏时间与日志
             this.time = { ...data.time, speed: 1 };
             this.logs = data.logs || [];
+
+            // 5. 恢复市民 (反序列化)
             this.loadSims(data.sims);
 
+            // 6. 重建索引和关系
             this.initIndex();
             this.refreshFurnitureOwnership();
             
@@ -441,26 +453,34 @@ export class GameStore {
             this.notify();
             return true;
         } catch (e) {
-            console.error("Load failed", e);
-            this.showToast(`❌ 读取存档失败`);
+            console.error("[GameStore] Hydration failed:", e);
+            // 发生严重错误时尝试回滚或重置（此处简单提示）
+            this.showToast(`❌ 存档数据损坏，无法恢复`);
             return false;
         }
     }
 
     static deleteSave(slotIndex: number) {
-        localStorage.removeItem(`simgod_save_${slotIndex}`);
+        SaveManager.deleteSlot(slotIndex);
         this.notify();
         this.showToast(`🗑️ 存档 ${slotIndex} 已删除`);
     }
 
     static loadSims(simsData: any[]) {
         this.sims = simsData.map((sData: any) => {
+            // 需要重新实例化 Sim 类，而不是仅仅使用纯对象
             const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); 
+            
+            // 覆盖属性
             Object.assign(sim, sData);
+            
+            // 数据补全/兼容性处理
             if (!sim.childrenIds) sim.childrenIds = [];
             if (!sim.health) sim.health = 100;
             if (!sim.ageStage) sim.ageStage = 'Adult';
             if (sim.interactionTarget) sim.interactionTarget = null;
+            
+            // 恢复职业对象 (确保引用的是常量中的 Job 对象)
             const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
             if (currentJobDefinition) {
                 sim.job = { ...currentJobDefinition };
@@ -489,6 +509,7 @@ export function initGame() {
 
     GameStore.rebuildWorld(true); 
 
+    // 尝试自动读取存档 1
     if (GameStore.loadGame(1)) {
         GameStore.addLog(null, "自动读取存档 1 成功", "sys");
     } else {
@@ -547,6 +568,7 @@ export function updateTime() {
                     s.dailyExpense = 0; s.dailyIncome = 0; s.payRent(); s.calculateDailyBudget(); s.applyMonthlyEffects(currentMonth, holiday);
                 });
                 
+                // 自动保存逻辑也通过 GameStore 调用 SaveManager
                 GameStore.saveGame(1);
             }
         }
