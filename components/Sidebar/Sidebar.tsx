@@ -3,6 +3,7 @@ import Roster from './Roster';
 import LogPanel from './LogPanel';
 import Inspector from './Inspector';
 import StatisticsPanel from './StatisticsPanel';
+import EditorPanel from './EditorPanel'; // [New]
 import { GameStore, Sim } from '../../utils/simulation';
 
 // Full Screen Overlay managing HUD elements
@@ -10,6 +11,7 @@ const GameOverlay: React.FC = () => {
     const [sims, setSims] = useState<Sim[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showStats, setShowStats] = useState(false);
+    const [showEditor, setShowEditor] = useState(false); // [New] Editor State
 
     useEffect(() => {
         // Initial fetch
@@ -27,6 +29,17 @@ const GameOverlay: React.FC = () => {
         GameStore.spawnFamily();
     };
 
+    // Toggle Editor Logic
+    const toggleEditor = () => {
+        const newState = !showEditor;
+        setShowEditor(newState);
+        // Update global store state for GameCanvas to read
+        GameStore.editor.mode = newState ? 'plot' : 'none';
+        GameStore.editor.selectedPlotId = null;
+        GameStore.editor.selectedFurnitureId = null;
+        GameStore.notify();
+    };
+
     return (
         <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
 
@@ -36,14 +49,19 @@ const GameOverlay: React.FC = () => {
             </div>
 
             {/* Right Panel: Inspector (Floating) */}
-            {selectedId && (
+            {selectedId && !showEditor && (
                 <div className="absolute right-4 top-20 bottom-4 pointer-events-none flex flex-col justify-start">
                     <Inspector selectedId={selectedId} sims={sims} />
                 </div>
             )}
 
+            {/* Editor Panel */}
+            {showEditor && (
+                <EditorPanel onClose={toggleEditor} />
+            )}
+
             {/* Floating Log Panel (Self-managed positioning) */}
-            <LogPanel />
+            {!showEditor && <LogPanel />}
 
             {/* Statistics Modal */}
             {showStats && <StatisticsPanel onClose={() => setShowStats(false)} />}
@@ -51,6 +69,24 @@ const GameOverlay: React.FC = () => {
             {/* Bottom Right: Controls */}
             <div className="absolute right-8 bottom-8 pointer-events-auto flex gap-4 items-end">
                 
+                {/* Editor Button */}
+                <button
+                    onClick={toggleEditor}
+                    className={`
+                        group flex items-center justify-center
+                        w-14 h-14 rounded-full
+                        shadow-lg border-2 
+                        transition-all duration-300 transform hover:scale-105 active:scale-95
+                        ${showEditor 
+                            ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
+                            : 'bg-[#636e72] hover:bg-[#b2bec3] text-white border-white/20 hover:border-white'
+                        }
+                    `}
+                    title="Toggle Map Editor"
+                >
+                    <span className="text-2xl">🛠️</span>
+                </button>
+
                 {/* Statistics Button */}
                 <button
                     onClick={() => setShowStats(true)}

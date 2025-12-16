@@ -1,7 +1,7 @@
 import { PALETTES, HOLIDAYS, BUFFS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, ROADS, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, EditorState } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
@@ -23,9 +23,21 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
+    // [New] Editor State
+    static editor: EditorState = {
+        mode: 'none',
+        selectedPlotId: null,
+        selectedFurnitureId: null,
+        isDragging: false,
+        dragOffset: { x: 0, y: 0 }
+    };
+
     static rooms: RoomDef[] = [];
     static furniture: Furniture[] = [];
     static housingUnits: (HousingUnit & { x: number, y: number })[] = [];
+    
+    // [New] Dynamic World Layout State
+    static worldLayout: WorldPlot[] = [];
 
     static furnitureIndex: Map<string, Furniture[]> = new Map();
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
@@ -47,7 +59,12 @@ export class GameStore {
     }
 
     // 重建世界：将地皮数据转化为绝对坐标数据
-    static rebuildWorld() {
+    static rebuildWorld(initial = false) {
+        if (initial) {
+            // 首次加载时，从 data/world.ts 复制一份到内存
+            this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
+        }
+
         this.rooms = [];
         this.furniture = [];
         this.housingUnits = [];
@@ -58,77 +75,178 @@ export class GameStore {
         // @ts-ignore
         this.furniture.push(...STREET_PROPS);
 
-        // 2. 遍历地皮配置
-        WORLD_LAYOUT.forEach(plot => {
-            const template = PLOTS[plot.templateId];
-            if (!template) {
-                console.error(`Plot template not found: ${plot.templateId}`);
-                return;
-            }
-
-            // 临时存储该地皮的 HousingUnits 绝对坐标，供后续家具查找归属
-            const plotUnits: (HousingUnit & { x: number, y: number, maxX: number, maxY: number })[] = [];
-
-            if (template.housingUnits) {
-                template.housingUnits.forEach(u => {
-                    const unitAbs = {
-                        ...u,
-                        id: `${plot.id}_${u.id}`,
-                        x: u.area.x + plot.x,
-                        y: u.area.y + plot.y,
-                        maxX: u.area.x + plot.x + u.area.w,
-                        maxY: u.area.y + plot.y + u.area.h
-                    };
-                    this.housingUnits.push(unitAbs);
-                    plotUnits.push(unitAbs);
-                });
-            }
-
-            // 转换房间坐标
-            template.rooms.forEach(r => {
-                const absX = r.x + plot.x;
-                const absY = r.y + plot.y;
-                
-                // 检查房间是否属于某个 HousingUnit
-                const ownerUnit = plotUnits.find(u => 
-                    absX >= u.x && absX < u.maxX && 
-                    absY >= u.y && absY < u.maxY
-                );
-
-                this.rooms.push({
-                    ...r,
-                    id: `${plot.id}_${r.id}`,
-                    x: absX,
-                    y: absY,
-                    homeId: ownerUnit ? ownerUnit.id : undefined // 标记归属
-                });
-            });
-
-            // 转换家具坐标
-            template.furniture.forEach(f => {
-                const absX = f.x + plot.x;
-                const absY = f.y + plot.y;
-
-                // 检查家具是否属于某个 HousingUnit
-                const ownerUnit = plotUnits.find(u => 
-                    absX >= u.x && absX < u.maxX && 
-                    absY >= u.y && absY < u.maxY
-                );
-
-                this.furniture.push({
-                    ...f,
-                    id: `${plot.id}_${f.id}`,
-                    x: absX,
-                    y: absY,
-                    homeId: ownerUnit ? ownerUnit.id : undefined // 标记归属
-                });
-            });
+        // 2. 遍历地皮配置 (使用内存中的 worldLayout)
+        this.worldLayout.forEach(plot => {
+            GameStore.instantiatePlot(plot);
         });
 
         console.log(`[System] World Rebuilt. Rooms: ${this.rooms.length}, Furniture: ${this.furniture.length}, Homes: ${this.housingUnits.length}`);
         
         // 3. 重建索引
         this.initIndex();
+    }
+
+    // [New] 实例化单个地皮 (用于 AddPlot 或 Rebuild)
+    static instantiatePlot(plot: WorldPlot) {
+        const template = PLOTS[plot.templateId];
+        if (!template) {
+            console.error(`Plot template not found: ${plot.templateId}`);
+            return;
+        }
+
+        const plotUnits: (HousingUnit & { x: number, y: number, maxX: number, maxY: number })[] = [];
+
+        if (template.housingUnits) {
+            template.housingUnits.forEach(u => {
+                const unitAbs = {
+                    ...u,
+                    id: `${plot.id}_${u.id}`,
+                    x: u.area.x + plot.x,
+                    y: u.area.y + plot.y,
+                    maxX: u.area.x + plot.x + u.area.w,
+                    maxY: u.area.y + plot.y + u.area.h
+                };
+                this.housingUnits.push(unitAbs);
+                plotUnits.push(unitAbs);
+            });
+        }
+
+        template.rooms.forEach(r => {
+            const absX = r.x + plot.x;
+            const absY = r.y + plot.y;
+            
+            const ownerUnit = plotUnits.find(u => 
+                absX >= u.x && absX < u.maxX && 
+                absY >= u.y && absY < u.maxY
+            );
+
+            this.rooms.push({
+                ...r,
+                id: `${plot.id}_${r.id}`, // Room ID linked to Plot ID
+                x: absX,
+                y: absY,
+                homeId: ownerUnit ? ownerUnit.id : undefined
+            });
+        });
+
+        template.furniture.forEach(f => {
+            const absX = f.x + plot.x;
+            const absY = f.y + plot.y;
+
+            const ownerUnit = plotUnits.find(u => 
+                absX >= u.x && absX < u.maxX && 
+                absY >= u.y && absY < u.maxY
+            );
+
+            this.furniture.push({
+                ...f,
+                id: `${plot.id}_${f.id}`, // Furniture ID linked to Plot ID
+                x: absX,
+                y: absY,
+                homeId: ownerUnit ? ownerUnit.id : undefined
+            });
+        });
+    }
+
+    // [New] 编辑器功能：添加地皮
+    static addPlot(templateId: string, x: number, y: number) {
+        const newId = `plot_${Date.now()}`;
+        const newPlot: WorldPlot = {
+            id: newId,
+            templateId: templateId,
+            x: x,
+            y: y
+        };
+        this.worldLayout.push(newPlot);
+        this.instantiatePlot(newPlot); // 增量实例化，不完全重建
+        this.initIndex(); // 必须重建索引
+        this.notify();
+    }
+
+    // [New] 编辑器功能：移除地皮
+    static removePlot(plotId: string) {
+        // 1. Remove from Layout
+        this.worldLayout = this.worldLayout.filter(p => p.id !== plotId);
+        
+        // 2. Remove associated entities (prefix match)
+        this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
+        this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
+        this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+
+        this.editor.selectedPlotId = null;
+        this.initIndex();
+        this.notify();
+    }
+
+    // [New] 编辑器功能：移动地皮 (平移所有组件，不重建)
+    static movePlot(plotId: string, dx: number, dy: number) {
+        const plot = this.worldLayout.find(p => p.id === plotId);
+        if (!plot) return;
+
+        plot.x += dx;
+        plot.y += dy;
+
+        // Move Rooms
+        this.rooms.forEach(r => {
+            if (r.id.startsWith(`${plotId}_`)) {
+                r.x += dx;
+                r.y += dy;
+            }
+        });
+
+        // Move Furniture
+        this.furniture.forEach(f => {
+            if (f.id.startsWith(`${plotId}_`)) {
+                f.x += dx;
+                f.y += dy;
+            }
+        });
+
+        // Move Housing Units
+        this.housingUnits.forEach(h => {
+            if (h.id.startsWith(`${plotId}_`)) {
+                h.x += dx;
+                h.y += dy;
+                // @ts-ignore
+                if(h.maxX) h.maxX += dx;
+                // @ts-ignore
+                if(h.maxY) h.maxY += dy;
+            }
+        });
+
+        // Don't rebuild index every frame while dragging, just notify redraw
+        this.notify();
+    }
+
+    // [New] 编辑器功能：添加家具
+    static addFurniture(itemTemplate: Furniture, x: number, y: number) {
+        const newItem = {
+            ...itemTemplate,
+            id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
+            x: x,
+            y: y
+        };
+        this.furniture.push(newItem);
+        this.initIndex();
+        this.notify();
+    }
+
+    // [New] 编辑器功能：移除家具
+    static removeFurniture(id: string) {
+        this.furniture = this.furniture.filter(f => f.id !== id);
+        this.editor.selectedFurnitureId = null;
+        this.initIndex();
+        this.notify();
+    }
+
+    // [New] 编辑器功能：移动家具
+    static moveFurniture(id: string, x: number, y: number) {
+        const item = this.furniture.find(f => f.id === id);
+        if (item) {
+            item.x = x;
+            item.y = y;
+            this.notify();
+        }
     }
 
     static initIndex() {
@@ -412,7 +530,7 @@ export function initGame() {
     GameStore.logs = []; 
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
-    GameStore.rebuildWorld();
+    GameStore.rebuildWorld(true); // true = initial build, copy from constants
 
     if (GameStore.loadGame()) {
         GameStore.addLog(null, "存档读取成功", "sys");
@@ -431,6 +549,9 @@ export function initGame() {
 }
 
 export function updateTime() {
+    // [Mod] Pause game if in editor mode
+    if (GameStore.editor.mode !== 'none') return;
+
     if (GameStore.time.speed === 0) return;
 
     GameStore.timeAccumulator += GameStore.time.speed;
@@ -532,7 +653,10 @@ export function getActivePalette() {
 export function gameLoopStep() {
     try {
         updateTime();
-        GameStore.sims.forEach(s => s.update(GameStore.time.speed, false));
+        // [Mod] Pause updates in editor mode
+        if (GameStore.editor.mode === 'none') {
+            GameStore.sims.forEach(s => s.update(GameStore.time.speed, false));
+        }
     } catch (error) {
         console.error("Game Loop Error:", error);
         GameStore.time.speed = 0; 

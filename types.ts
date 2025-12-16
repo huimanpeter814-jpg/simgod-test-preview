@@ -44,6 +44,9 @@ export interface HousingUnit {
     cost: number;     
     type: 'public_housing' | 'apartment' | 'villa'; 
     area: { x: number, y: number, w: number, h: number }; 
+    // Add optional max bounds for runtime calculation convenience
+    maxX?: number;
+    maxY?: number;
 }
 
 export interface PlotTemplate {
@@ -61,6 +64,15 @@ export interface WorldPlot {
     templateId: string;
     x: number;
     y: number;
+}
+
+// [New] Editor State Interface
+export interface EditorState {
+    mode: 'none' | 'plot' | 'furniture';
+    selectedPlotId: string | null;
+    selectedFurnitureId: string | null;
+    isDragging: boolean;
+    dragOffset: { x: number, y: number };
 }
 
 export interface RoomDef {
@@ -171,7 +183,7 @@ export interface SimData {
   skinColor: string;
   hairColor: string;
   clothesColor: string;
-  pantsColor: string; // [新增]
+  pantsColor: string; 
   appearance: SimAppearance;
   mbti: string;
   zodiac: Zodiac;
