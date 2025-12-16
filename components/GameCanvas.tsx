@@ -42,6 +42,9 @@ const GameCanvas: React.FC = () => {
         zoom: 0.8 
     });
 
+    // 用于存储当前悬停的物品
+    const hoveredTarget = useRef<any>(null);
+
     const [windowSize, setWindowSize] = useState({
         width: window.innerWidth,
         height: window.innerHeight
@@ -425,6 +428,45 @@ const GameCanvas: React.FC = () => {
             ctx.textAlign = 'left';
             if (p.life <= 0) GameStore.particles.splice(i, 1);
         }
+        // 7. 绘制悬停家具名称 (放在最上层绘制)
+        if (hoveredTarget.current && GameStore.editor.mode === 'none') {
+            const t = hoveredTarget.current;
+            const label = t.label;
+            
+            if (label) {
+                const cx = t.x + t.w / 2;
+                const topY = t.y - 12; // 显示在家具上方
+
+                ctx.save();
+                ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
+                const padding = 6;
+                const metrics = ctx.measureText(label);
+                const textW = metrics.width;
+                const textH = 14;
+
+                // 绘制背景框 (半透明黑底 + 白边)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(cx - textW / 2 - padding, topY - textH - padding, textW + padding * 2, textH + padding * 2, 4);
+                ctx.fill();
+                ctx.stroke();
+
+                // 绘制文字
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, cx, topY - textH / 2);
+                
+                // 可选：给家具加一个高亮边框，表示选中
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(t.x, t.y, t.w, t.h);
+
+                ctx.restore();
+            }
+        }
 
         ctx.restore();
     };
@@ -587,6 +629,22 @@ const GameCanvas: React.FC = () => {
         else if (isDragging.current) {
             cameraRef.current.x -= dx;
             cameraRef.current.y -= dy;
+        }else {
+            // 非拖拽状态下的悬停检测 (仅在观察模式下生效)
+            if (GameStore.editor.mode === 'none') {
+                // 使用 SpatialHashGrid 进行快速查询
+                const hit = GameStore.worldGrid.queryHit(mouseX, mouseY);
+                
+                // 我们只关心家具 (type === 'furniture')
+                if (hit && hit.type === 'furniture') {
+                    hoveredTarget.current = hit.ref;
+                    // 设置鼠标样式为“可点击/查看”
+                    if(canvasRef.current) canvasRef.current.style.cursor = 'auto'; 
+                } else {
+                    hoveredTarget.current = null;
+                    if(canvasRef.current) canvasRef.current.style.cursor = 'auto';
+                }
+            }
         }
         
         lastMousePos.current = { x: e.clientX, y: e.clientY };
