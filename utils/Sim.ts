@@ -648,17 +648,27 @@ export class Sim {
             this.health += 0.01 * f;
         }
 
+        // [修复] 优化婴幼儿行为逻辑，防止与幼儿园托管逻辑冲突
         if (['Infant', 'Toddler'].includes(this.ageStage)) {
-            if (this.homeId && !this.isAtHome() && this.action !== 'schooling' && this.action !== 'commuting_school') {
-                if (!this.target || this.action !== 'moving_home') {
-                    const homePos = this.getHomeLocation();
-                    if (homePos) {
-                        this.target = homePos;
-                        this.action = 'moving_home';
-                        this.path = []; 
+            // [新增] 检查当前是否为上学时间 (8点到18点)
+            const isSchoolTime = GameStore.time.hour >= 8 && GameStore.time.hour < 18;
+
+            // 1. 如果不在家
+            if (this.homeId && !this.isAtHome()) {
+                // 如果不是上学时间 (或没去上学)，且不在家，才尝试回家
+                // 如果是上学时间，SchoolLogic 会负责传送，Sim.ts 里的回家逻辑会被屏蔽
+                if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') {
+                    if (!this.target || this.action !== 'moving_home') {
+                        const homePos = this.getHomeLocation();
+                        if (homePos) {
+                            this.target = homePos;
+                            this.action = 'moving_home';
+                            this.path = []; 
+                        }
                     }
                 }
             } 
+            // 2. 如果在家
             else if (this.homeId && this.isAtHome()) {
                 if (!this.target && Math.random() > 0.95) {
                     const home = GameStore.housingUnits.find(u => u.id === this.homeId);
@@ -679,7 +689,9 @@ export class Sim {
                     }
                 }
             }
-            else if (this.action !== 'schooling' && this.action !== 'commuting_school') { 
+            // 3. 其他情况 (比如无家可归，跟随父母)
+            // [修复] 同样增加 !isSchoolTime 限制，上学期间不跟随
+            else if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') { 
                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                 if (parent) {
                     const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));

@@ -359,11 +359,26 @@ export const SocialLogic = {
         let rel = sim.relationships[partner.id];
         let oldLabel = SocialLogic.getRelLabel(rel);
 
+        // [新增] 年龄限制逻辑 (Age Restrictions)
+        const minors = ['Infant', 'Toddler', 'Child'];
+        const isSimMinor = minors.includes(sim.ageStage);
+        const isPartnerMinor = minors.includes(partner.ageStage);
+        const isSimTeen = sim.ageStage === 'Teen';
+        const isPartnerTeen = partner.ageStage === 'Teen';
+
+        let allowRomance = true;
+        if (isSimMinor || isPartnerMinor) allowRomance = false; // 未成年人禁止浪漫
+        if (isSimTeen && !isPartnerTeen) allowRomance = false; // 青少年只能和青少年
+        if (!isSimTeen && isPartnerTeen) allowRomance = false; // 成年人不能和青少年 (反向检查)
+
         // 筛选可用行为
         let availableActions: SocialType[] = SOCIAL_TYPES.filter(type => {
             if (type.type === 'friendship') {
                 return rel.friendship >= type.minVal && rel.friendship <= type.maxVal;
             } else if (type.type === 'romance') {
+                // 如果年龄限制未通过，直接屏蔽浪漫选项
+                if (!allowRomance) return false;
+
                 let romantic = rel.romance >= type.minVal && rel.romance <= type.maxVal;
                 if (type.special === 'confess') return !rel.isLover && rel.romance >= 40;
                 if (type.special === 'breakup') return rel.isLover && rel.romance < -60;

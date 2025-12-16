@@ -271,16 +271,16 @@ const GameCanvas: React.FC = () => {
             drawAvatarHead(ctx, 0, headY, headSize, sim, 'back');
 
             // === B. 绘制小人身体 ===
-            // [修复] 婴儿穿纸尿裤，其他人穿彩色裤子
-            if (sim.ageStage === 'Infant') {
+            // [修复] 婴儿和幼儿穿纸尿裤，其他人穿彩色裤子
+            if (sim.ageStage === 'Infant' || sim.ageStage === 'Toddler') {
                 // 纸尿裤 (白色)
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
                 // 绘制一个类似尿布的形状
-                ctx.roundRect(-w / 2 + 1, -h * 0.4, w - 2, h * 0.4, 4);
+                ctx.roundRect(-w / 2 + 1, -h * 0.45, w - 2, h * 0.45, 4);
                 ctx.fill();
                 // 衣服 (Baby shirt)
-                const shoulderY = -h + (headSize * 0.6); 
+                const shoulderY = -h + (headSize * 1); 
                 ctx.fillStyle = sim.clothesColor;
                 ctx.fillRect(-w / 2, shoulderY, w, h * 0.4); 
             } else {
@@ -516,4 +516,4 @@ const GameCanvas: React.FC = () => {
     );
 };
 
-export default GameCanvas;
+export default GameCanvas; 
