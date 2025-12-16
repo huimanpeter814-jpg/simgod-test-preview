@@ -535,6 +535,10 @@ export class GameStore {
         this.worldLayout.push(newPlot);
         this.instantiatePlot(newPlot);
         this.initIndex();
+        
+        // [修复] 自动选中新创建的地皮，确保设置弹窗立即弹出
+        this.editor.selectedPlotId = newId;
+        
         this.notify();
     }
 

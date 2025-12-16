@@ -513,25 +513,28 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                 <div className="flex flex-col gap-2 h-full">
                     {mode === 'plot' ? (
                         <>
-                            {/* [新增] 户外地形绘制 */}
-                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">地表材质</div>
-                            <div className="grid grid-cols-2 gap-2 pb-2">
-                                {/* 自定义空地保留 */}
+                            {/* [修改] 独立显示：建造空地 */}
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">建造空地</div>
+                            <div className="mb-3">
                                 <button
                                     onClick={handleStartDrawingPlot}
-                                    className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingPlot ? 'border-accent bg-white/10' : ''}`}
+                                    className={`w-full bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-center flex justify-center items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingPlot ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' : ''}`}
                                 >
-                                    <span className="text-xs font-bold text-gray-200">⬜ 框选空地</span>
+                                    <span className={`text-xs font-bold ${GameStore.editor.drawingPlot ? 'text-yellow-400' : 'text-gray-200'}`}>⬜ 框选空地 (自定义)</span>
                                 </button>
-                                {/* 移植过来的户外材质 */}
+                            </div>
+
+                            {/* [修改] 独立显示：地表材质 */}
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">地表材质 (笔刷)</div>
+                            <div className="grid grid-cols-2 gap-2 pb-2">
                                 {SURFACE_TYPES.map((type, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => handleStartDrawingFloor(type, false)} // hasWall = false
-                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-accent bg-white/10' : ''}`}
+                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-yellow-400 bg-yellow-400/10' : ''}`}
                                     >
                                         <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>
-                                        <span className="text-xs font-bold text-gray-200">{type.label}</span>
+                                        <span className={`text-xs font-bold ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'text-yellow-400' : 'text-gray-200'}`}>{type.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -544,7 +547,6 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                                         onClick={() => GameStore.startPlacingPlot(key)}
                                         className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95"
                                     >
-                                        {/* ... (按钮内容保持不变) */}
                                         <span className="text-xs font-bold text-gray-200 truncate w-full">
                                             {PLOT_NAMES[key.replace('_template', '')] || key.replace('_template', '')}
                                         </span>
@@ -561,10 +563,10 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                                     <button
                                         key={idx}
                                         onClick={() => handleStartDrawingFloor(type, true)} // hasWall = true
-                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-accent bg-white/10' : ''}`}
+                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-yellow-400 bg-yellow-400/10' : ''}`}
                                     >
                                         <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>
-                                        <span className="text-xs font-bold text-gray-200">{type.label}</span>
+                                        <span className={`text-xs font-bold ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'text-yellow-400' : 'text-gray-200'}`}>{type.label}</span>
                                     </button>
                                 ))}
                             </div>

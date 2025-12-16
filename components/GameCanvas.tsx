@@ -95,6 +95,9 @@ const GameCanvas: React.FC = () => {
     const lastTimePaletteRef = useRef<string>('');
     const lastStaticUpdateRef = useRef<number>(0); 
 
+    // [新增] 用于强制刷新 UI (当 drawingPlot 等状态变化时)
+    const [editorRefresh, setEditorRefresh] = useState(0);
+
     useEffect(() => {
         const handleResize = () => {
             setWindowSize({ width: window.innerWidth, height: window.innerHeight });
@@ -112,6 +115,9 @@ const GameCanvas: React.FC = () => {
     // 订阅 GameStore 更新以同步选中地皮状态
     useEffect(() => {
         const unsub = GameStore.subscribe(() => {
+            // 强制刷新组件以更新 overlay 提示
+            setEditorRefresh(prev => prev + 1);
+
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
@@ -1048,6 +1054,13 @@ const GameCanvas: React.FC = () => {
                     >
                         ✅ 确认
                     </button>
+                </div>
+            )}
+
+            {/* [新增] 框选模式下的引导提示 Overlay */}
+            {(GameStore.editor.drawingPlot || GameStore.editor.drawingFloor) && !GameStore.editor.isDragging && (
+                <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-full pointer-events-none text-xs font-bold border border-white/20 shadow-lg backdrop-blur-sm animate-pulse z-40 flex items-center gap-2">
+                    <span className="text-lg">🖱️</span> 按住鼠标左键拖拽以框选区域
                 </div>
             )}
         </div>
