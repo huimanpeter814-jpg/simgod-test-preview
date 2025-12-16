@@ -4,17 +4,17 @@
 // 基础颜色定义
 const PALETTE = {
     // 基础环境色 (像素风常用色)
-    ground_concrete: '#e0e4e8', // 干净的水泥 (加亮)
-    ground_asphalt: '#2a2f3c',  // 深色柏油路 (更深)
-    ground_pave: '#9ca6b4',     // 人行道铺装
-    ground_grass_light: '#6cff8c', // 鲜艳草绿
-    ground_grass_dark: '#28c75d',  // 深草绿
-    ground_water: '#5a8fff',    // 像素湖水蓝
+    ground_concrete: '#e0e4e8', 
+    ground_asphalt: '#2a2f3c',  
+    ground_pave: '#9ca6b4',     
+    ground_grass_light: '#8cb393', // [修改] 更柔和的草地颜色 (Sage Green)
+    ground_grass_dark: '#5a8264',  // 深草绿
+    ground_water: '#5a8fff',    
     
     // 建筑色
-    build_glass: '#cff2f5',     // 玻璃幕墙
-    build_brick_red: '#ff6b6b', // 红砖
-    build_brick_white: '#fff9e8', // 白墙
+    build_glass: '#cff2f5',     
+    build_brick_red: '#ff6b6b', 
+    build_brick_white: '#fff9e8', 
     
     // 功能色
     shadow_dark: '#1e222e',
@@ -23,14 +23,13 @@ const PALETTE = {
 };
 
 // 像素风光影氛围配置 (Time of Day System)
-// 这个配置被渲染引擎用来改变全屏的色调
 export const PALETTES: any = {
     earlyMorning: { 
         zone1: '#f0f8ff', 
         zone2: '#e6f0fa', 
         zone3: '#dce8f5', 
         wall: '#7fa5b8', 
-        bg: '#2a3240', 
+        bg: '#8cb393', // [修改] 统一使用新草地色
         overlay: 'rgba(163, 203, 255, 0.25)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.3)',
         pixel_glow: 'rgba(100, 150, 255, 0.1)' 
@@ -40,7 +39,7 @@ export const PALETTES: any = {
         zone2: '#f5f7fa', 
         zone3: '#ebf0f5', 
         wall: '#8a9ca6', 
-        bg: '#2a3240', 
+        bg: '#8cb393', 
         overlay: 'rgba(255, 250, 240, 0.1)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.25)',
         pixel_glow: 'rgba(255, 255, 200, 0.05)'
@@ -50,7 +49,7 @@ export const PALETTES: any = {
         zone2: '#faf0e6', 
         zone3: '#f5e8dc', 
         wall: '#9ca6b4', 
-        bg: '#2a3240', 
+        bg: '#8cb393', 
         overlay: 'rgba(255, 200, 150, 0.15)', 
         furniture_shadow: 'rgba(40, 45, 60, 0.25)',
         pixel_glow: 'rgba(255, 180, 100, 0.1)'
@@ -60,7 +59,7 @@ export const PALETTES: any = {
         zone2: '#ffd89c', 
         zone3: '#ffb894', 
         wall: '#5a6572', 
-        bg: '#252a36', 
+        bg: '#5a8264', // 黄昏草地变深
         overlay: 'rgba(140, 100, 255, 0.3)', 
         furniture_shadow: 'rgba(35, 40, 50, 0.4)',
         pixel_glow: 'rgba(255, 100, 100, 0.2)'
@@ -70,7 +69,7 @@ export const PALETTES: any = {
         zone2: '#2a3240', 
         zone3: '#242a35', 
         wall: '#1a1e2c', 
-        bg: '#0a0a14', 
+        bg: '#2d4030', // 晚上草地变暗
         overlay: 'rgba(20, 35, 70, 0.5)', 
         furniture_shadow: 'rgba(0, 0, 0, 0.6)',
         pixel_glow: 'rgba(0, 100, 255, 0.3)'
@@ -80,12 +79,9 @@ export const PALETTES: any = {
         zone2: '#252a36', 
         zone3: '#202530', 
         wall: '#000010', 
-        bg: '#000000', 
+        bg: '#1a261c', 
         overlay: 'rgba(0, 0, 20, 0.7)', 
         furniture_shadow: 'rgba(0, 0, 0, 0.7)',
         pixel_glow: 'rgba(50, 0, 100, 0.4)'
     }
 };
-
-// 旧的 ROOMS 和 FURNITURE 导出已移除
-// 现在的世界生成逻辑请参考 data/world.ts 和 data/plots.ts

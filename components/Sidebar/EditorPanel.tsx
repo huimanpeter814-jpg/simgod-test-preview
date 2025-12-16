@@ -7,16 +7,18 @@ interface EditorPanelProps {
     onClose: () => void; 
 }
 
-// 调色板
+// 扩充调色板
 const COLORS = [
     '#ff7675', '#74b9ff', '#55efc4', '#fdcb6e', '#a29bfe', 
     '#e17055', '#0984e3', '#00b894', '#6c5ce7', '#d63031',
     '#2d3436', '#636e72', '#b2bec3', '#dfe6e9', '#ffffff',
-    '#8b4513', '#cd84f1', '#ffcccc', '#182C61', '#2C3A47'
+    '#8b4513', '#cd84f1', '#ffcccc', '#182C61', '#2C3A47',
+    '#8cb393', '#5a8fff', '#303952', '#f7d794', '#ea8685'
 ];
 
 // 地皮中文映射
 const PLOT_NAMES: Record<string, string> = {
+    'default_empty': '自定义空地',
     'tech': '科技大厦',
     'finance': '金融中心',
     'design': '创意园区',
@@ -32,12 +34,10 @@ const PLOT_NAMES: Record<string, string> = {
     'nightlife': '娱乐不夜城',
     'gallery': '美术馆',
     'netcafe': '网咖',
-    'road_h': '横向道路',
-    'road_v': '纵向道路',
-    'road_cross': '十字路口'
+    // Roads removed from here as they are now in Construction
 };
 
-// 全面的家具分类目录
+// 家具分类目录
 const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furniture>[] }> = {
     'office': {
         label: '办公',
@@ -108,15 +108,10 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
         label: '户外',
         items: [
             { label: '公园长椅', w: 54, h: 24, color: '#e17055', utility: 'comfort', pixelPattern: 'bench_park' },
-            { label: '梧桐树', w: 42, h: 42, color: '#253048', utility: 'none', pixelPattern: 'tree_pixel', pixelOutline: true },
-            { label: '灌木丛', w: 34, h: 34, color: '#00b894', utility: 'gardening', pixelPattern: 'bush' },
-            { label: '花坛(红)', w: 44, h: 44, color: '#ff6b81', utility: 'gardening', pixelPattern: 'flower_rose' },
             { label: '喷泉池', w: 126, h: 126, color: '#a8b4c8', utility: 'none', pixelPattern: 'fountain_base' },
             { label: '小黄鸭船', w: 44, h: 34, color: '#ffdd59', utility: 'play', pixelPattern: 'boat_duck' },
             { label: '野餐垫', w: 108, h: 84, color: '#ff6b81', utility: 'hunger', pixelPattern: 'picnic_mat' },
             { label: '冰淇淋车', w: 64, h: 44, color: '#ffd166', utility: 'buy_food', pixelPattern: 'icecream_cart' },
-            { label: '消防栓', w: 18, h: 18, color: '#ff5252', utility: 'none', pixelOutline: true },
-            { label: '垃圾桶', w: 24, h: 24, color: '#2c3e50', utility: 'none', pixelPattern: 'trash' },
         ]
     },
     'bathroom': {
@@ -135,12 +130,27 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '雕像', w: 34, h: 34, color: '#ffffff', utility: 'art', pixelPattern: 'statue' },
             { label: '画架', w: 44, h: 54, color: '#ff5252', utility: 'paint', pixelPattern: 'easel' },
             { label: '展示柜', w: 40, h: 40, color: '#00d2d3', utility: 'art', pixelPattern: 'display_case', pixelGlow: true },
+            { label: '梧桐树', w: 42, h: 42, color: '#253048', utility: 'none', pixelPattern: 'tree_pixel', pixelOutline: true },
+            { label: '灌木丛', w: 34, h: 34, color: '#00b894', utility: 'gardening', pixelPattern: 'bush' },
+            { label: '花坛(红)', w: 44, h: 44, color: '#ff6b81', utility: 'gardening', pixelPattern: 'flower_rose' },
+            { label: '消防栓', w: 18, h: 18, color: '#ff5252', utility: 'none', pixelOutline: true },
+            { label: '垃圾桶', w: 24, h: 24, color: '#2c3e50', utility: 'none', pixelPattern: 'trash' },
         ]
     }
 };
 
+const FLOOR_TYPES = [
+    { label: '柏油路', color: '#3d404b', pattern: 'stripes' },
+    { label: '斑马线', color: 'rgba(255,255,255,0.2)', pattern: 'zebra' },
+    { label: '地砖', color: '#9ca6b4', pattern: 'pave_fancy' },
+    { label: '草地', color: '#8cb393', pattern: 'grass' },
+    { label: '水池', color: '#5a8fff', pattern: 'water' },
+    { label: '木地板', color: '#dce4f0', pattern: 'wood' },
+    { label: '瓷砖', color: '#dfe6e9', pattern: 'tile' },
+];
+
 const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
-    const [mode, setMode] = useState<'plot' | 'furniture'>('plot');
+    const [mode, setMode] = useState<'plot' | 'furniture' | 'floor'>('plot');
     const [category, setCategory] = useState('office');
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
     
@@ -172,6 +182,23 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         const unsub = GameStore.subscribe(updateState);
         updateState();
         return unsub;
+    }, []);
+
+    // 键盘删除事件
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (GameStore.editor.selectedPlotId) {
+                    GameStore.removePlot(GameStore.editor.selectedPlotId);
+                } else if (GameStore.editor.selectedFurnitureId) {
+                    GameStore.removeFurniture(GameStore.editor.selectedFurnitureId);
+                } else if (GameStore.editor.selectedRoomId) {
+                    GameStore.removeRoom(GameStore.editor.selectedRoomId);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // 面板拖拽逻辑
@@ -207,10 +234,23 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         }
     };
     
-    const handleSetMode = (m: 'plot' | 'furniture') => {
+    const handleSetMode = (m: 'plot' | 'furniture' | 'floor') => {
         setMode(m);
         GameStore.editor.mode = m;
+        // 重置选中状态
+        GameStore.editor.selectedPlotId = null;
+        GameStore.editor.selectedFurnitureId = null;
+        GameStore.editor.selectedRoomId = null;
+        GameStore.editor.placingTemplateId = null;
+        GameStore.editor.placingFurniture = null;
+        GameStore.editor.drawingFloor = null;
+        GameStore.editor.drawingPlot = null;
         GameStore.notify();
+    };
+
+    // 切换为“框选空地”模式
+    const handleStartDrawingPlot = () => {
+        GameStore.startDrawingPlot('default_empty');
     };
 
     const handleStartPlacingPlot = (templateId: string) => {
@@ -223,11 +263,18 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         GameStore.startPlacingFurniture({ ...tpl, id: '', x: 0, y: 0, color: initialColor });
     };
 
+    const handleStartDrawingFloor = (floorType: any) => {
+        const initialColor = selectedColor || floorType.color;
+        GameStore.startDrawingFloor(floorType.pattern, initialColor, floorType.label);
+    };
+
     const handleDelete = () => {
-        if (mode === 'plot' && GameStore.editor.selectedPlotId) {
+        if (GameStore.editor.selectedPlotId) {
             GameStore.removePlot(GameStore.editor.selectedPlotId);
-        } else if (mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
+        } else if (GameStore.editor.selectedFurnitureId) {
             GameStore.removeFurniture(GameStore.editor.selectedFurnitureId);
+        } else if (GameStore.editor.selectedRoomId) {
+            GameStore.removeRoom(GameStore.editor.selectedRoomId);
         }
     };
 
@@ -245,6 +292,19 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             const f = GameStore.furniture.find(i => i.id === GameStore.editor.selectedFurnitureId);
             if (f) {
                 f.color = color;
+                GameStore.notify();
+            }
+        }
+        // 3. 如果在画地板模式
+        else if (GameStore.editor.drawingFloor) {
+            GameStore.editor.drawingFloor.color = color;
+            GameStore.notify();
+        }
+        // 4. 如果选中了现有地板
+        else if (GameStore.editor.selectedRoomId) {
+            const r = GameStore.rooms.find(rm => rm.id === GameStore.editor.selectedRoomId);
+            if (r) {
+                r.color = color;
                 GameStore.notify();
             }
         }
@@ -267,19 +327,16 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             id: p.id,
             templateId: p.templateId,
             x: p.x,
-            y: p.y
+            y: p.y,
+            width: p.width,
+            height: p.height
         }));
 
-        // 2. 导出散放家具 (street props)
-        // 注意：GameStore.furniture 包含了所有家具（包括地皮自带的）。
-        // 我们只导出那些不属于任何地皮（即手动放置或原有的街道装饰）的家具。
-        // 地皮自带家具的ID通常以 `plotID_` 开头。
         const plotIds = layoutData.map(p => p.id);
         const propsData = GameStore.furniture.filter(f => {
             const belongsToPlot = plotIds.some(pid => f.id.startsWith(`${pid}_`));
             return !belongsToPlot; // 只保留不属于地皮的家具
         }).map(f => ({
-            // 精简数据，去除运行时添加的属性
             id: f.id,
             x: f.x,
             y: f.y,
@@ -305,7 +362,7 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
 `;
 
         navigator.clipboard.writeText(tsContent).then(() => {
-            alert("✅ 地图数据已生成并复制到剪贴板！\n\n请打开代码中的 [data/world.ts] 文件，\n全选并粘贴覆盖原有内容即可永久保存。");
+            alert("✅ 地图数据已生成并复制到剪贴板！");
         }).catch(err => {
             console.error("Copy failed", err);
             alert("复制失败，请查看控制台输出");
@@ -336,7 +393,7 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                             className="bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded hover:bg-purple-500 transition-colors border border-purple-400/30"
                             title="复制配置代码到剪贴板"
                         >
-                            导出代码
+                            导出
                         </button>
                         <button 
                             onMouseDown={(e) => e.stopPropagation()} 
@@ -386,41 +443,50 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                     onClick={() => handleSetMode('plot')}
                     className={`flex-1 py-2 text-xs font-bold transition-colors ${mode === 'plot' ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    🗺️ 地皮
+                    地皮
+                </button>
+                <button 
+                    onClick={() => handleSetMode('floor')}
+                    className={`flex-1 py-2 text-xs font-bold transition-colors ${mode === 'floor' ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                    施工
                 </button>
                 <button 
                     onClick={() => handleSetMode('furniture')}
                     className={`flex-1 py-2 text-xs font-bold transition-colors ${mode === 'furniture' ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    🪑 家具
+                    家具
                 </button>
             </div>
 
-            {/* Content Area (Existing content) */}
+            {/* Content Area */}
             <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
-                {/* ... (Current Selection Info, Color Picker, List, etc. remain the same) ... */}
                 
                 {/* Current Selection Info & Delete */}
                 <div className="bg-white/5 p-2 rounded border border-white/5">
                     <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">当前操作</div>
                     <div className="text-xs text-gray-300 truncate mb-2">
                         {mode === 'plot' 
-                            ? (GameStore.editor.selectedPlotId ? `选中地皮: ${GameStore.editor.selectedPlotId}` : "拖拽地皮或选择下方模板")
-                            : (GameStore.editor.selectedFurnitureId ? `选中家具: ${selectedFurniture?.label}` : "拖拽家具或选择下方物品")
+                            ? (GameStore.editor.selectedPlotId 
+                                ? `选中地皮: ${GameStore.editor.selectedPlotId}` 
+                                : (GameStore.editor.drawingPlot ? "正在框选区域..." : "拖拽地皮或选择下方模板"))
+                            : mode === 'floor'
+                                ? (GameStore.editor.selectedRoomId ? `选中区域: ${GameStore.editor.selectedRoomId}` : "框选区域以建造")
+                                : (GameStore.editor.selectedFurnitureId ? `选中家具: ${selectedFurniture?.label}` : "拖拽家具或选择下方物品")
                         }
                     </div>
-                    {(GameStore.editor.selectedPlotId || GameStore.editor.selectedFurnitureId) && (
+                    {(GameStore.editor.selectedPlotId || GameStore.editor.selectedFurnitureId || GameStore.editor.selectedRoomId) && (
                         <button 
                             onClick={handleDelete}
                             className="w-full bg-danger/20 hover:bg-danger/40 text-danger border border-danger/30 rounded py-1 px-2 text-xs transition-colors"
                         >
-                            移除选中项
+                            移除 (Del)
                         </button>
                     )}
                 </div>
 
-                {/* Color Picker (Only for Furniture mode) */}
-                {mode === 'furniture' && (
+                {/* Color Picker (Shared for Furniture and Floor) */}
+                {(mode === 'furniture' || mode === 'floor') && (
                     <div className="bg-white/5 p-2 rounded border border-white/5">
                         <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">更改颜色</div>
                         <div className="flex flex-wrap gap-1.5">
@@ -440,20 +506,49 @@ export const WORLD_LAYOUT: WorldPlot[] = ${JSON.stringify(layoutData, null, 4)};
                 {/* List */}
                 <div className="flex flex-col gap-2 h-full">
                     {mode === 'plot' ? (
-                        <div className="grid grid-cols-2 gap-2 pb-2">
-                            {Object.entries(PLOTS).map(([key, template]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => handleStartPlacingPlot(key)}
-                                    className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95"
-                                >
-                                    <span className="text-xs font-bold text-gray-200 truncate w-full">
-                                        {PLOT_NAMES[key.replace('_template', '')] || key.replace('_template', '')}
-                                    </span>
-                                    <span className="text-[9px] text-gray-500">{template.width}x{template.height}</span>
-                                </button>
-                            ))}
-                        </div>
+                        <>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">自定</div>
+                            {/* [修改] 恢复“自定义空地”的框选行为 */}
+                            <button
+                                onClick={handleStartDrawingPlot}
+                                className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95 ${GameStore.editor.drawingPlot ? 'border-accent bg-white/10' : ''}`}
+                            >
+                                <span className="text-xs font-bold text-gray-200">⬜ 框选自定义空地</span>
+                                <span className="text-[9px] text-gray-500">按住拖拽框选任意大小</span>
+                            </button>
+                            
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-2">预设模板</div>
+                            <div className="grid grid-cols-2 gap-2 pb-2">
+                                {Object.entries(PLOTS).filter(([k]) => !k.startsWith('road') && !k.startsWith('default')).map(([key, template]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => handleStartPlacingPlot(key)}
+                                        className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95"
+                                    >
+                                        <span className="text-xs font-bold text-gray-200 truncate w-full">
+                                            {PLOT_NAMES[key.replace('_template', '')] || key.replace('_template', '')}
+                                        </span>
+                                        <span className="text-[9px] text-gray-500">{template.width}x{template.height}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    ) : mode === 'floor' ? (
+                        <>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">框选建造</div>
+                            <div className="grid grid-cols-2 gap-2 pb-2">
+                                {FLOOR_TYPES.map((type, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleStartDrawingFloor(type)}
+                                        className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-accent bg-white/10' : ''}`}
+                                    >
+                                        <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>
+                                        <span className="text-xs font-bold text-gray-200">{type.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </>
                     ) : (
                         <>
                             {/* Category Tabs */}

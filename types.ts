@@ -44,7 +44,6 @@ export interface HousingUnit {
     cost: number;     
     type: 'public_housing' | 'apartment' | 'villa'; 
     area: { x: number, y: number, w: number, h: number }; 
-    // Add optional max bounds for runtime calculation convenience
     maxX?: number;
     maxY?: number;
 }
@@ -64,23 +63,42 @@ export interface WorldPlot {
     templateId: string;
     x: number;
     y: number;
+    // [修改] 增加可选的宽高，用于自定义框选的地皮
+    width?: number; 
+    height?: number;
 }
 
-// [修改] 增强的编辑器状态接口
 export interface EditorState {
-    mode: 'none' | 'plot' | 'furniture';
+    mode: 'none' | 'plot' | 'furniture' | 'floor';
     selectedPlotId: string | null;
     selectedFurnitureId: string | null;
+    selectedRoomId: string | null;
     
-    // 拖拽状态
     isDragging: boolean;
     dragOffset: { x: number, y: number };
     
-    // 新增放置状态
-    placingTemplateId: string | null; // 正在放置的地皮模板ID
-    placingFurniture: Partial<Furniture> | null; // 正在放置的家具数据
+    placingTemplateId: string | null;
+    placingFurniture: Partial<Furniture> | null;
     
-    // 预览坐标 (用于 Canvas 渲染预览框)
+    // [修改] 增加地皮绘制状态
+    drawingPlot: {
+        startX: number;
+        startY: number;
+        currX: number;
+        currY: number;
+        templateId: string;
+    } | null;
+
+    drawingFloor: {
+        startX: number;
+        startY: number;
+        currX: number;
+        currY: number;
+        pattern: string;
+        color: string;
+        label: string;
+    } | null;
+
     previewPos: { x: number, y: number } | null;
 }
 
@@ -95,6 +113,7 @@ export interface RoomDef {
     pixelPattern?: string;
     imagePath?: string;
     homeId?: string;
+    isCustom?: boolean;
 }
 
 export interface Needs {
@@ -243,7 +262,6 @@ export interface LogEntry {
   time: string;
   text: string;
   type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family';
-  // [修改] 更新后的分类
   category: 'sys' | 'chat' | 'rel' | 'life';
   isAI: boolean;
   simName?: string;
