@@ -114,6 +114,7 @@ export const SchoolLogic = {
             else if (inKindergarten) {
                 // 在学校里保持状态
                 if (sim.action === 'idle') sim.action = 'schooling';
+                if (sim.needs.social < 80) sim.needs.social += 1; 
                 SchoolLogic.autoReplenishNeeds(sim);
                 
                 // 找点事做，防止呆站着

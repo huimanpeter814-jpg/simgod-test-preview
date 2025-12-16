@@ -75,7 +75,7 @@ export const DecisionLogic = {
 
         scores.push({ id: 'social', score: socialScore, type: 'social' });
 
-        if (sim.job.id === 'unemployed') {
+        if (sim.job.id === 'unemployed' && !['Infant', 'Toddler', 'Child'].includes(sim.ageStage)) {
             let moneyDesire = 0;
             if (sim.money < 500) moneyDesire = 200; 
             else if (sim.money < 2000) moneyDesire = 100;

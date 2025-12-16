@@ -341,6 +341,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs.fun += getRate(60);
             sim.creativity += 0.05 * f; // 启蒙
+            sim.needs.social += getRate(180); // 恢复速度比真人聊天慢一些
         }
     },
     'study': {
