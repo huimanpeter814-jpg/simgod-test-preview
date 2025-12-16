@@ -3,7 +3,7 @@ import Roster from './Roster';
 import LogPanel from './LogPanel';
 import Inspector from './Inspector';
 import StatisticsPanel from './StatisticsPanel';
-import EditorPanel from './EditorPanel'; // [New]
+import EditorPanel from './EditorPanel'; 
 import { GameStore, Sim } from '../../utils/simulation';
 
 // Full Screen Overlay managing HUD elements
@@ -11,7 +11,7 @@ const GameOverlay: React.FC = () => {
     const [sims, setSims] = useState<Sim[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showStats, setShowStats] = useState(false);
-    const [showEditor, setShowEditor] = useState(false); // [New] Editor State
+    const [showEditor, setShowEditor] = useState(false); 
 
     useEffect(() => {
         // Initial fetch
@@ -33,10 +33,14 @@ const GameOverlay: React.FC = () => {
     const toggleEditor = () => {
         const newState = !showEditor;
         setShowEditor(newState);
-        // Update global store state for GameCanvas to read
-        GameStore.editor.mode = newState ? 'plot' : 'none';
-        GameStore.editor.selectedPlotId = null;
-        GameStore.editor.selectedFurnitureId = null;
+        
+        if (newState) {
+            GameStore.editor.mode = 'plot';
+        } else {
+            GameStore.editor.mode = 'none';
+            GameStore.editor.selectedPlotId = null;
+            GameStore.editor.selectedFurnitureId = null;
+        }
         GameStore.notify();
     };
 
@@ -44,9 +48,12 @@ const GameOverlay: React.FC = () => {
         <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
 
             {/* Left Strip: Roster (Widened for names) */}
-            <div className="absolute left-4 top-20 bottom-24 w-[80px] pointer-events-auto flex flex-col gap-2">
-                <Roster sims={sims} selectedId={selectedId} />
-            </div>
+            {/* [Requirement] Hide Roster when Editor is active */}
+            {!showEditor && (
+                <div className="absolute left-4 top-20 bottom-24 w-[80px] pointer-events-auto flex flex-col gap-2 animate-[fadeIn_0.3s_ease-out]">
+                    <Roster sims={sims} selectedId={selectedId} />
+                </div>
+            )}
 
             {/* Right Panel: Inspector (Floating) */}
             {selectedId && !showEditor && (

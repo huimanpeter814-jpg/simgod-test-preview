@@ -3,6 +3,7 @@ import { CONFIG, AGE_CONFIG } from '../constants';
 import { GameStore, gameLoopStep, getActivePalette } from '../utils/simulation';
 import { getAsset } from '../utils/assetLoader';
 import { drawAvatarHead, drawPixelProp } from '../utils/render/pixelArt';
+import { PLOTS } from '../data/plots';
 
 // ==========================================
 // 🕒 后台保活核心：Worker Timer
@@ -47,7 +48,6 @@ const GameCanvas: React.FC = () => {
     const lastMousePos = useRef({ x: 0, y: 0 });
     const hasDragged = useRef(false);
     
-    // [New] Track drag start position for undo history
     const dragStartPos = useRef({ x: 0, y: 0 });
 
     // [优化] 静态层 Canvas 缓存
@@ -87,6 +87,11 @@ const GameCanvas: React.FC = () => {
 
         // 2. 绘制房间/区域 (读取 GameStore)
         GameStore.rooms.forEach((r: any) => {
+            // [Edit Mode] 如果是正在拖拽的地皮，跳过静态绘制
+            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
+                if (r.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
+            }
+
             // 外部阴影
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h);
@@ -128,6 +133,11 @@ const GameCanvas: React.FC = () => {
 
         // 3. 绘制家具 (读取 GameStore)
         GameStore.furniture.forEach((f: any) => {
+            // [Edit Mode] 如果是正在拖拽的家具，跳过静态绘制
+            if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId === f.id) return;
+            // [Edit Mode] 如果是正在拖拽的地皮上的家具，也跳过静态绘制
+            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && f.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
+
             if (f.pixelPattern !== 'zebra') {
                 ctx.fillStyle = p.furniture_shadow || 'rgba(0,0,0,0.2)';
                 ctx.fillRect(f.x + 4, f.y + 4, f.w, f.h);
@@ -171,18 +181,14 @@ const GameCanvas: React.FC = () => {
         const mouseWorldX = (lastMousePos.current.x) / zoom + camX;
         const mouseWorldY = (lastMousePos.current.y) / zoom + camY;
         
-        // 2. 检测环境光变化 OR Editor Mode Changes (Dragging) -> Redraw Static
         const p = getActivePalette();
         const paletteKey = JSON.stringify(p);
         
-        // 编辑模式下高频重绘静态层，确保拖拽流畅
-        if (GameStore.editor.isDragging || paletteKey !== lastTimePaletteRef.current || !staticCanvasRef.current || GameStore.editor.mode !== 'none') {
-             if (GameStore.editor.isDragging) {
-                 renderStaticLayer();
-             } else if (paletteKey !== lastTimePaletteRef.current) {
-                 renderStaticLayer();
-                 lastTimePaletteRef.current = paletteKey;
-             }
+        // 当光照改变 或 拖拽结束时 (需要重绘静态层将物体"烧录"回去) 重绘静态层
+        // 注意：拖拽过程中不重绘静态层，只在动态层绘制预览，性能更高
+        if (paletteKey !== lastTimePaletteRef.current || !staticCanvasRef.current) {
+             renderStaticLayer();
+             lastTimePaletteRef.current = paletteKey;
         }
 
         // 3. 绘制静态背景层
@@ -190,7 +196,7 @@ const GameCanvas: React.FC = () => {
             ctx.drawImage(staticCanvasRef.current, 0, 0);
         }
 
-        // 4. [New] Editor Overlays
+        // 4. [New] Editor Preview / Overlays
         if (GameStore.editor.mode !== 'none') {
             // Draw Grid
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -210,27 +216,127 @@ const GameCanvas: React.FC = () => {
             }
             ctx.stroke();
 
-            // Highlight Selected Plot
-            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
-                const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
-                if (plot) {
-                    ctx.strokeStyle = '#ffff00';
-                    ctx.lineWidth = 4;
-                    // Draw bounding box based on rooms
-                    GameStore.rooms.filter(r => r.id.startsWith(`${plot.id}_`)).forEach(r => {
-                        ctx.strokeRect(r.x, r.y, r.w, r.h);
-                    });
-                }
-            }
+            // === 预览渲染逻辑 (修复：确保图片和特效能渲染) ===
+            if (GameStore.editor.previewPos) {
+                const { x, y } = GameStore.editor.previewPos;
+                ctx.save();
+                ctx.globalAlpha = 0.9; // 预览层稍微透明一点，但不要太透
 
-            // Highlight Selected Furniture
-            if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
-                const f = GameStore.furniture.find(i => i.id === GameStore.editor.selectedFurnitureId);
-                if (f) {
-                    ctx.strokeStyle = '#00ff00';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(f.x - 2, f.y - 2, f.w + 4, f.h + 4);
+                if (GameStore.editor.mode === 'plot') {
+                    // [Improved] Plot Preview Rendering
+                    const drawPlotPreview = (plotId: string | null, templateId: string | null, dx: number, dy: number) => {
+                        let roomsToRender: any[] = [];
+                        
+                        if (plotId) {
+                            // Existing plot rooms
+                            roomsToRender = GameStore.rooms.filter(r => r.id.startsWith(`${plotId}_`)).map(r => ({ ...r, x: r.x + dx, y: r.y + dy }));
+                        } else if (templateId) {
+                            // New template rooms
+                            const tpl = PLOTS[templateId];
+                            if (tpl) {
+                                roomsToRender = tpl.rooms.map(r => ({ ...r, x: r.x + x, y: r.y + y }));
+                            }
+                        }
+
+                        roomsToRender.forEach(r => {
+                            // Draw Floor (Support Patterns/Images)
+                            const floorImg = getAsset(r.imagePath);
+                            if (floorImg) {
+                                const ptrn = ctx.createPattern(floorImg, 'repeat');
+                                if (ptrn) {
+                                    ctx.fillStyle = ptrn;
+                                    ctx.save();
+                                    ctx.translate(r.x, r.y);
+                                    ctx.fillRect(0, 0, r.w, r.h);
+                                    ctx.restore();
+                                } else {
+                                    ctx.drawImage(floorImg, r.x, r.y, r.w, r.h);
+                                }
+                            } else {
+                                ctx.fillStyle = r.color;
+                                ctx.fillRect(r.x, r.y, r.w, r.h);
+                                if (r.pixelPattern === 'grid' || r.pixelPattern === 'tile') {
+                                    ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+                                    ctx.strokeRect(r.x, r.y, r.w, r.h); 
+                                }
+                            }
+                            
+                            // Highlight Border
+                            ctx.strokeStyle = plotId ? '#ffff00' : '#00ff00';
+                            ctx.lineWidth = 3;
+                            ctx.strokeRect(r.x, r.y, r.w, r.h);
+                        });
+
+                        if (templateId) {
+                            ctx.fillStyle = '#00ff00';
+                            ctx.font = 'bold 14px "Microsoft YaHei"';
+                            ctx.fillText("✨ 新地皮", x, y - 10);
+                        }
+                    };
+
+                    if (GameStore.editor.selectedPlotId) {
+                        const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
+                        if (plot) {
+                            drawPlotPreview(plot.id, null, x - plot.x, y - plot.y);
+                        }
+                    } else if (GameStore.editor.placingTemplateId) {
+                        drawPlotPreview(null, GameStore.editor.placingTemplateId, 0, 0);
+                    }
+                } 
+                else if (GameStore.editor.mode === 'furniture') {
+                    // [Improved] Furniture Preview Rendering (Include Image & Glow)
+                    const drawFurnPreview = (f: any, isNew: boolean) => {
+                        const renderX = isNew ? x : x;
+                        const renderY = isNew ? y : y;
+                        
+                        // Override position for drawing
+                        const previewF = { ...f, x: renderX, y: renderY };
+
+                        // 1. Shadow (Optional)
+                        if (previewF.pixelPattern !== 'zebra') {
+                            ctx.fillStyle = p.furniture_shadow || 'rgba(0,0,0,0.2)';
+                            ctx.fillRect(previewF.x + 4, previewF.y + 4, previewF.w, previewF.h);
+                        }
+
+                        // 2. Image Check (Critical Fix: Check for imagePath!)
+                        const furnImg = getAsset(previewF.imagePath);
+                        if (furnImg) {
+                            ctx.drawImage(furnImg, previewF.x, previewF.y, previewF.w, previewF.h);
+                        } else {
+                            // 3. Pixel Prop Draw (Fallback)
+                            drawPixelProp(ctx, previewF, p);
+                            
+                            // 4. Glow
+                            if (previewF.pixelGlow) {
+                                ctx.shadowBlur = 10;
+                                ctx.shadowColor = previewF.glowColor || previewF.color;
+                                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                                ctx.fillRect(previewF.x, previewF.y, previewF.w, previewF.h);
+                                ctx.shadowBlur = 0;
+                            }
+                        }
+
+                        // Border Highlighting
+                        ctx.strokeStyle = isNew ? '#00ff00' : '#ffff00';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(previewF.x - 2, previewF.y - 2, previewF.w + 4, previewF.h + 4);
+                        
+                        if (isNew) {
+                            ctx.fillStyle = '#00ff00';
+                            ctx.font = 'bold 12px "Microsoft YaHei"';
+                            ctx.fillText("✨ 新增", renderX, renderY - 5);
+                        }
+                    };
+
+                    if (GameStore.editor.selectedFurnitureId) {
+                        const f = GameStore.furniture.find(i => i.id === GameStore.editor.selectedFurnitureId);
+                        if (f) drawFurnPreview(f, false);
+                    } 
+                    else if (GameStore.editor.placingFurniture) {
+                        drawFurnPreview(GameStore.editor.placingFurniture, true);
+                    }
                 }
+                ctx.restore();
             }
         }
 
@@ -239,8 +345,7 @@ const GameCanvas: React.FC = () => {
         renderSims.forEach(sim => {
             const renderX = sim.pos.x; 
             const renderY = sim.pos.y; 
-            if (sim.action === 'working' && renderX < 0) return;
-
+            
             ctx.save();
             ctx.translate(renderX, renderY);
 
@@ -362,7 +467,9 @@ const GameCanvas: React.FC = () => {
         renderStaticLayer();
 
         const unsub = GameStore.subscribe(() => {
-             if (GameStore.editor.mode !== 'none') {
+             // 当 Editor 模式切换或选中物体时，强制重绘一次 StaticLayer 以便"移除"被拖拽的物体
+             // 或者当拖拽结束时重绘
+             if (GameStore.editor.mode !== 'none' || !GameStore.editor.isDragging) {
                  renderStaticLayer();
              }
         });
@@ -384,23 +491,26 @@ const GameCanvas: React.FC = () => {
             const worldX = e.clientX / zoom + cameraRef.current.x;
             const worldY = e.clientY / zoom + cameraRef.current.y;
 
-            // [New] Editor Mode Selection Logic
+            // [Editor] Selection Logic
             if (GameStore.editor.mode !== 'none') {
                 if (GameStore.editor.mode === 'plot') {
-                    // Find clicked plot
+                    // 如果正在放置新地皮，无需选择现有地皮
+                    if (GameStore.editor.placingTemplateId) return;
+
                     const clickedRoom = GameStore.rooms.find(r => 
                         worldX >= r.x && worldX <= r.x + r.w &&
                         worldY >= r.y && worldY <= r.y + r.h
                     );
                     if (clickedRoom) {
                         const plot = GameStore.worldLayout.find(p => clickedRoom.id.startsWith(p.id + '_'));
-                        
                         if (plot) {
                             GameStore.editor.selectedPlotId = plot.id;
                             GameStore.editor.isDragging = true;
                             GameStore.editor.dragOffset = { x: worldX - plot.x, y: worldY - plot.y };
-                            // Record start pos
+                            GameStore.editor.previewPos = { x: plot.x, y: plot.y }; // 初始化预览位置
                             dragStartPos.current = { x: plot.x, y: plot.y };
+                            // 触发重绘以隐藏 Static Layer 中的选中地皮
+                            renderStaticLayer(); 
                             GameStore.notify();
                             return; 
                         }
@@ -409,7 +519,8 @@ const GameCanvas: React.FC = () => {
                     GameStore.notify();
 
                 } else if (GameStore.editor.mode === 'furniture') {
-                    // Find clicked furniture
+                    if (GameStore.editor.placingFurniture) return;
+
                     const clickedFurn = GameStore.furniture.find(f => 
                         worldX >= f.x && worldX <= f.x + f.w &&
                         worldY >= f.y && worldY <= f.y + f.h
@@ -418,8 +529,9 @@ const GameCanvas: React.FC = () => {
                         GameStore.editor.selectedFurnitureId = clickedFurn.id;
                         GameStore.editor.isDragging = true;
                         GameStore.editor.dragOffset = { x: worldX - clickedFurn.x, y: worldY - clickedFurn.y };
-                        // Record start pos
+                        GameStore.editor.previewPos = { x: clickedFurn.x, y: clickedFurn.y };
                         dragStartPos.current = { x: clickedFurn.x, y: clickedFurn.y };
+                        renderStaticLayer();
                         GameStore.notify();
                         return; 
                     }
@@ -431,7 +543,7 @@ const GameCanvas: React.FC = () => {
     };
     
     const handleMouseMove = (e: React.MouseEvent) => {
-        if (isDragging.current) {
+        if (isDragging.current || GameStore.editor.isDragging) {
             const zoom = cameraRef.current.zoom;
             const dx = (e.clientX - lastMousePos.current.x) / zoom;
             const dy = (e.clientY - lastMousePos.current.y) / zoom;
@@ -445,35 +557,15 @@ const GameCanvas: React.FC = () => {
 
             if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
                 const gridSize = 10; 
+                // 计算新的吸附位置
+                const rawX = mouseX - GameStore.editor.dragOffset.x;
+                const rawY = mouseY - GameStore.editor.dragOffset.y;
+                const newX = Math.round(rawX / gridSize) * gridSize;
+                const newY = Math.round(rawY / gridSize) * gridSize;
 
-                if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
-                    const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
-                    if (plot) {
-                        const rawX = mouseX - GameStore.editor.dragOffset.x;
-                        const rawY = mouseY - GameStore.editor.dragOffset.y;
-                        const newX = Math.round(rawX / gridSize) * gridSize;
-                        const newY = Math.round(rawY / gridSize) * gridSize;
-                        
-                        const moveX = newX - plot.x;
-                        const moveY = newY - plot.y;
-                        
-                        if (moveX !== 0 || moveY !== 0) {
-                            GameStore.movePlot(plot.id, moveX, moveY, false);
-                        }
-                    }
-                } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
-                    const furn = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
-                    if (furn) {
-                        const rawX = mouseX - GameStore.editor.dragOffset.x;
-                        const rawY = mouseY - GameStore.editor.dragOffset.y;
-                        const newX = Math.round(rawX / gridSize) * gridSize;
-                        const newY = Math.round(rawY / gridSize) * gridSize;
-                        
-                        if (newX !== furn.x || newY !== furn.y) {
-                            GameStore.moveFurniture(furn.id, newX, newY);
-                        }
-                    }
-                }
+                // [Optimization] 仅更新预览坐标，不修改真实数据，不触发 rebuildWorld
+                GameStore.editor.previewPos = { x: newX, y: newY };
+                // 此时 renderStaticLayer 已经被锁住（不绘制选中物体），draw 函数会绘制预览框
             } else {
                 cameraRef.current.x -= dx;
                 cameraRef.current.y -= dy;
@@ -483,22 +575,31 @@ const GameCanvas: React.FC = () => {
     };
     
     const handleMouseUp = (e: React.MouseEvent) => {
-        isDragging.current = false;
-        
-        // [New] Stop dragging object & Record Undo
+        // [New] 拖拽结束处理
         if (GameStore.editor.isDragging) {
             GameStore.editor.isDragging = false;
-            
-            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
+            const finalPos = GameStore.editor.previewPos || {x:0, y:0};
+
+            // 1. 放置新物体
+            if (GameStore.editor.placingTemplateId) {
+                GameStore.placePlot(finalPos.x, finalPos.y);
+            } else if (GameStore.editor.placingFurniture) {
+                GameStore.placeFurniture(finalPos.x, finalPos.y);
+            }
+            // 2. 确认移动现有物体
+            else if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
             } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
                 GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
             }
 
-            GameStore.initIndex(); 
+            // 强制重绘静态层 (将物体"烧录"回去)
             renderStaticLayer();
+            isDragging.current = false;
             return;
         }
+
+        isDragging.current = false;
 
         if (e.button === 0 && !hasDragged.current) {
             const rect = canvasRef.current!.getBoundingClientRect();
@@ -531,7 +632,7 @@ const GameCanvas: React.FC = () => {
         }
     };
 
-    const handleMouseLeave = () => { isDragging.current = false; GameStore.editor.isDragging = false; };
+    const handleMouseLeave = () => { isDragging.current = false; };
 
     const handleWheel = (e: React.WheelEvent) => {
         const zoomSpeed = 0.001;

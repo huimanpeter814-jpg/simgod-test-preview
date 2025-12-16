@@ -66,13 +66,22 @@ export interface WorldPlot {
     y: number;
 }
 
-// [New] Editor State Interface
+// [修改] 增强的编辑器状态接口
 export interface EditorState {
     mode: 'none' | 'plot' | 'furniture';
     selectedPlotId: string | null;
     selectedFurnitureId: string | null;
+    
+    // 拖拽状态
     isDragging: boolean;
     dragOffset: { x: number, y: number };
+    
+    // 新增放置状态
+    placingTemplateId: string | null; // 正在放置的地皮模板ID
+    placingFurniture: Partial<Furniture> | null; // 正在放置的家具数据
+    
+    // 预览坐标 (用于 Canvas 渲染预览框)
+    previewPos: { x: number, y: number } | null;
 }
 
 export interface RoomDef {
