@@ -42,7 +42,7 @@ export class Sim {
     skinColor: string;
     hairColor: string;
     clothesColor: string;
-    pantsColor: string; // [新增]
+    pantsColor: string;
     appearance: SimAppearance;
 
     mbti: string;
@@ -107,6 +107,9 @@ export class Sim {
     bubble: { text: string | null; timer: number; type: string } = { text: null, timer: 0, type: 'normal' };
 
     commuteTimer: number = 0;
+
+    // [优化] 决策冷却计时器，防止每帧都进行复杂寻路和决策
+    decisionTimer: number = 0; 
 
     constructor(config: SimInitConfig = {}) {
         this.job = JOBS.find(j => j.id === 'unemployed')!;
@@ -609,9 +612,16 @@ export class Sim {
         this.prevPos = { ...this.pos };
         const f = 0.0008 * dt;
 
+        // [优化] 分时处理逻辑，大量低频逻辑移入 minuteChanged
         if (minuteChanged) {
             SchoolLogic.checkKindergarten(this);
             this.updateBuffs(1);
+            this.updateMood(); // 心情计算不用每帧进行
+            this.checkDeath(dt); // 死亡判定每分钟一次足矣
+            
+            // [优化] 工作日程检查每分钟一次即可
+            this.checkSchedule();
+
             if (this.isPregnant) {
                 this.pregnancyTimer -= 1; 
                 if (this.pregnancyTimer <= 0) {
@@ -622,6 +632,20 @@ export class Sim {
             }
             if (GameStore.time.hour === 6 && GameStore.time.minute === 0) {
                 SchoolLogic.giveAllowance(this);
+            }
+
+            // 分钟级的状态检查
+            if (this.needs.social < 20 && !this.hasBuff('lonely')) {
+                this.addBuff(BUFFS.lonely);
+                this.say("好孤独...", 'bad');
+            }
+            if (this.needs.fun < 20 && !this.hasBuff('bored')) {
+                this.addBuff(BUFFS.bored);
+                this.say("无聊透顶...", 'bad');
+            }
+            if (this.needs.hygiene < 20 && !this.hasBuff('smelly')) {
+                this.addBuff(BUFFS.smelly);
+                this.say("身上有味了...", 'bad');
             }
         }
 
@@ -637,9 +661,8 @@ export class Sim {
             this.skills.logic += 0.002 * dt;
         }
 
-        this.checkSchedule();
-        this.updateMood();
-        this.checkDeath(dt); 
+        // [优化] 移除原本每帧调用的 checkSchedule / updateMood / checkDeath
+        // 这些已经移入 minuteChanged 块中
 
         if (this.needs.energy <= 0 || this.needs.hunger <= 0) {
             this.health -= 0.05 * f * 10; 
@@ -700,21 +723,6 @@ export class Sim {
                         this.action = 'following';
                     }
                 }
-            }
-        }
-
-        if (minuteChanged) { 
-            if (this.needs.social < 20 && !this.hasBuff('lonely')) {
-                this.addBuff(BUFFS.lonely);
-                this.say("好孤独...", 'bad');
-            }
-            if (this.needs.fun < 20 && !this.hasBuff('bored')) {
-                this.addBuff(BUFFS.bored);
-                this.say("无聊透顶...", 'bad');
-            }
-            if (this.needs.hygiene < 20 && !this.hasBuff('smelly')) {
-                this.addBuff(BUFFS.smelly);
-                this.say("身上有味了...", 'bad');
             }
         }
 
@@ -783,15 +791,23 @@ export class Sim {
             if (this.actionTimer <= 0) this.finishAction();
         } 
         else if (!this.target) {
-            if (this.job.id !== 'unemployed') {
-                if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
-                     if (this.action === 'moving') this.action = 'idle';
-                     DecisionLogic.decideAction(this);
-                }
+            // [优化] 决策冷却逻辑，防止每帧都在进行寻路计算
+            if (this.decisionTimer > 0) {
+                this.decisionTimer -= dt;
             } else {
-                if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
-                    if (this.action === 'moving') this.action = 'idle';
-                    DecisionLogic.decideAction(this);
+                // 只有当没有目标、没有正在进行动作、且冷却时间到了的时候，才做决策
+                if (this.job.id !== 'unemployed') {
+                    if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
+                         if (this.action === 'moving') this.action = 'idle';
+                         DecisionLogic.decideAction(this);
+                         this.decisionTimer = 30 + Math.random() * 30; // 决策后休息 1-2 秒 (30-60 ticks)
+                    }
+                } else {
+                    if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
+                        if (this.action === 'moving') this.action = 'idle';
+                        DecisionLogic.decideAction(this);
+                        this.decisionTimer = 30 + Math.random() * 30; // 决策后休息 1-2 秒
+                    }
                 }
             }
         }
@@ -818,7 +834,9 @@ export class Sim {
                     this.path = GameStore.pathFinder.findPath(this.pos.x, this.pos.y, this.target.x, this.target.y);
                     this.currentPathIndex = 0;
                     if (this.path.length === 0) {
-                        this.path.push({ x: this.target.x, y: this.target.y });
+                        // [优化] 如果寻路失败，稍微等待再重试，防止每帧都寻路
+                        this.decisionTimer = 60; 
+                        this.path.push({ x: this.target.x, y: this.target.y }); // 降级为直线
                     }
                 }
 

@@ -25,6 +25,7 @@ export class GameStore {
     static sims: Sim[] = [];
     static particles: { x: number; y: number; life: number }[] = [];
     
+    // [设置] 默认速度调整为 2 (30FPS下，每帧加2 -> 30帧加60 -> 1秒=1游戏分钟)
     static time: GameTime = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
     
     static timeAccumulator: number = 0;
@@ -756,6 +757,7 @@ export function initGame() {
     GameStore.sims = [];
     GameStore.particles = [];
     GameStore.logs = []; 
+    // 确保初始化时速度也是 2
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
     GameStore.rebuildWorld(true); 
@@ -786,6 +788,8 @@ export function updateTime() {
         GameStore.timeAccumulator = 0;
         GameStore.time.minute++;
 
+        // 触发市民的“分钟级”更新 (minuteChanged = true)
+        // 优化：将大量低频逻辑放入这里，而不是每一帧都执行
         GameStore.sims.forEach(s => s.update(1, true));
 
         if (GameStore.time.minute >= 60) {
