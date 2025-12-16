@@ -43,59 +43,85 @@ const createGrid = (baseId: string, startX: number, startY: number, cols: number
 };
 
 // ==========================================
-// 1. CBD 科技与金融区 (Work)
+// 1. 科技大厦 (Tech Tower) [拆分自 CBD]
 // ==========================================
-const PLOT_CBD: PlotTemplate = {
-    id: 'cbd_template',
-    width: 1460,
+const PLOT_TECH: PlotTemplate = {
+    id: 'tech_template',
+    width: 500,
     height: 400,
     type: 'work',
     rooms: [
-        { id: 'cbd_plaza_ground', x: 560, y: 0, w: 900, h: 360, label: '', color: '#f0f5ff', pixelPattern: 'grid' },
-        { id: 'office_tower_a', x: 0, y: 0, w: 460, h: 360, label: '科技大厦', color: '#d4e0f0', pixelPattern: 'windows' },
-        { id: 'office_carpet_work', x: 20, y: 20, w: 400, h: 300, label: '', color: '#c4d0e4', pixelPattern: 'dots' },
-        { id: 'office_tower_b', x: 600, y: 20, w: 450, h: 320, label: '环球金融中心', color: '#ffffff', pixelPattern: 'checker' },
-        { id: 'design_studio', x: 1080, y: 20, w: 380, h: 280, label: '像素艺术工作室', color: PALETTE.build_brick_white, pixelPattern: 'brush' },
+        { id: 'tech_ground', x: 0, y: 0, w: 500, h: 400, label: '', color: '#f0f5ff', pixelPattern: 'grid' },
+        { id: 'office_tower_a', x: 20, y: 20, w: 460, h: 360, label: '科技大厦', color: '#d4e0f0', pixelPattern: 'windows' },
+        { id: 'office_carpet_work', x: 40, y: 40, w: 420, h: 320, label: '', color: '#c4d0e4', pixelPattern: 'dots' },
     ],
     furniture: [
-        ...createGrid('tech_desk', 30, 30, 7, 4, 60, 65, { w: 48, h: 32, color: '#2c3e50', label: '升降办公桌', utility: 'none', dir: 'down', pixelPattern: 'desk_pixel' }),
-        ...createGrid('monitor_l', 40, 30, 7, 4, 60, 65, { w: 16, h: 6, color: PALETTE.deco_tech_glow, label: '', utility: 'none', pixelGlow: true }),
-        ...createGrid('monitor_r', 50, 30, 7, 4, 60, 65, { w: 16, h: 6, color: PALETTE.deco_tech_glow, label: '', utility: 'none', pixelGlow: true }),
-        ...createGrid('tech_chair', 45, 50, 7, 4, 60, 65, { w: 22, h: 22, color: '#8a9ca6', label: '码农工位', utility: 'work', pixelPattern: 'chair_pixel' }),
+        ...createGrid('tech_desk', 60, 60, 6, 4, 65, 70, { w: 48, h: 32, color: '#2c3e50', label: '升降办公桌', utility: 'none', dir: 'down', pixelPattern: 'desk_pixel' }),
+        ...createGrid('monitor_l', 70, 60, 6, 4, 65, 70, { w: 16, h: 6, color: PALETTE.deco_tech_glow, label: '', utility: 'none', pixelGlow: true }),
+        ...createGrid('monitor_r', 80, 60, 6, 4, 65, 70, { w: 16, h: 6, color: PALETTE.deco_tech_glow, label: '', utility: 'none', pixelGlow: true }),
+        ...createGrid('tech_chair', 75, 80, 6, 4, 65, 70, { w: 22, h: 22, color: '#8a9ca6', label: '码农工位', utility: 'work', pixelPattern: 'chair_pixel' }),
         
-        ...createRow('server_rack', 30, 280, 3, 75, 0, { w: 64, h: 38, color: '#253048', label: '服务器组', utility: 'none', dir: 'left', pixelPattern: 'server', pixelGlow: true, glowColor: '#00ffaa' }),
-        { id: 'boss_chair', x: 280, y: 280, w: 44, h: 44, color: '#253048', label: '老板椅', utility: 'work', pixelPattern: 'chair_boss' },
-        { id: 'server_console', x: 330, y: 290, w: 34, h: 24, color: '#a8b4c8', label: '控制台', utility: 'work', pixelPattern: 'console' },
-        { id: 'water_cooler', x: 390, y: 280, w: 24, h: 24, color: '#00d2d3', label: '饮水机', utility: 'drink', pixelPattern: 'water_cooler' },
-        { id: 'coffee_maker', x: 420, y: 280, w: 24, h: 24, color: '#ff6b6b', label: '意式咖啡机', utility: 'drink', pixelPattern: 'coffee_machine' },
-        { id: 'office_sofa_l', x: 370, y: 310, w: 84, h: 34, color: '#6c7a8a', label: '休息沙发', utility: 'comfort', pixelPattern: 'sofa_pixel' },
-        { id: 'office_plant_1', x: 10, y: 330, w: 18, h: 18, color: PALETTE.deco_plant, label: '龟背竹', utility: 'none', pixelPattern: 'plant_pixel' },
-
-        { id: 'conf_rug', x: 630, y: 45, w: 290, h: 180, color: '#a8b4c8', label: '地毯', utility: 'none', pixelPattern: 'rug_fancy' },
-        { id: 'conf_table', x: 700, y: 90, w: 168, h: 84, color: '#f0f5ff', label: '大理石会议桌', utility: 'work_group', dir: 'down', multiUser: true, pixelPattern: 'table_marble' },
-        { id: 'conf_projector', x: 660, y: 100, w: 12, h: 64, color: '#253048', label: '投影仪', utility: 'none', pixelPattern: 'tech' },
-        ...createRow('conf_chair_t', 710, 60, 4, 44, 0, { w: 22, h: 22, color: '#253048', label: '商务工位', utility: 'work', pixelPattern: 'chair_leather' }),
-        ...createRow('conf_chair_b', 710, 180, 4, 44, 0, { w: 22, h: 22, color: '#253048', label: '商务工位', utility: 'work', pixelPattern: 'chair_leather' }),
-        
-        { id: 'boss_area_rug', x: 810, y: 225, w: 230, h: 108, color: '#c23636', label: '波斯地毯', utility: 'none', pixelPattern: 'rug_persian' },
-        { id: 'boss_desk', x: 860, y: 230, w: 126, h: 54, color: PALETTE.deco_wood_red, label: '红木班台', utility: 'none', pixelPattern: 'desk_wood' },
-        { id: 'boss_pc', x: 880, y: 250, w: 44, h: 12, color: '#1a1e2c', label: '一体机', utility: 'none', pixelPattern: 'pc_pixel' },
-        { id: 'boss_chair_fin', x: 880, y: 280, w: 44, h: 44, color: '#253048', label: '老板椅', utility: 'work', pixelPattern: 'chair_boss' },
-        { id: 'boss_bookshelf', x: 1000, y: 230, w: 24, h: 80, color: PALETTE.deco_wood_red, label: '藏书架', utility: 'none', pixelPattern: 'bookshelf' },
-        { id: 'boss_safe', x: 820, y: 290, w: 34, h: 34, color: '#5a6572', label: '保险柜', utility: 'none', pixelPattern: 'safe' },
-
-        { id: 'messy_rug', x: 1330, y: 60, w: 108, h: 108, color: '#ff9c8a', label: '艺术地毯', utility: 'none', pixelPattern: 'rug_art' },
-        ...createGrid('art_easel', 1100, 60, 3, 3, 90, 80, { w: 44, h: 54, color: '#ff5252', label: '画架', utility: 'paint', pixelPattern: 'easel' }),
-        { id: 'plaster_statue', x: 1390, y: 60, w: 34, h: 34, color: '#ffffff', label: '石膏像', utility: 'none', pixelPattern: 'statue' },
-        { id: 'paint_buckets', x: 1250, y: 150, w: 24, h: 24, color: '#ff6b81', label: '颜料桶', utility: 'none', pixelPattern: 'paint' },
-        { id: 'coffee_corner', x: 1380, y: 230, w: 44, h: 44, color: '#ff5252', label: '咖啡角', utility: 'drink', pixelPattern: 'coffee_corner' },
-        { id: 'bean_bag_1', x: 1330, y: 80, w: 44, h: 44, color: '#ff7aa8', label: '懒人沙发', utility: 'comfort', pixelPattern: 'beanbag' },
-        { id: 'bean_bag_2', x: 1370, y: 100, w: 44, h: 44, color: '#8a7cff', label: '懒人沙发', utility: 'comfort', pixelPattern: 'beanbag' },
+        ...createRow('server_rack', 60, 300, 3, 75, 0, { w: 64, h: 38, color: '#253048', label: '服务器组', utility: 'none', dir: 'left', pixelPattern: 'server', pixelGlow: true, glowColor: '#00ffaa' }),
+        { id: 'boss_chair', x: 320, y: 300, w: 44, h: 44, color: '#253048', label: '老板椅', utility: 'work', pixelPattern: 'chair_boss' },
+        { id: 'server_console', x: 370, y: 310, w: 34, h: 24, color: '#a8b4c8', label: '控制台', utility: 'work', pixelPattern: 'console' },
+        { id: 'water_cooler', x: 420, y: 300, w: 24, h: 24, color: '#00d2d3', label: '饮水机', utility: 'drink', pixelPattern: 'water_cooler' },
+        { id: 'office_plant_1', x: 40, y: 330, w: 18, h: 18, color: PALETTE.deco_plant, label: '龟背竹', utility: 'none', pixelPattern: 'plant_pixel' },
     ]
 };
 
 // ==========================================
-// 2. 宿舍/公寓区 (Residential - Public Housing)
+// 2. 环球金融中心 (Finance Center) [拆分自 CBD]
+// ==========================================
+const PLOT_FINANCE: PlotTemplate = {
+    id: 'finance_template',
+    width: 500,
+    height: 400,
+    type: 'work',
+    rooms: [
+        { id: 'finance_ground', x: 0, y: 0, w: 500, h: 400, label: '', color: '#f0f5ff', pixelPattern: 'grid' },
+        { id: 'office_tower_b', x: 20, y: 20, w: 460, h: 360, label: '环球金融中心', color: '#ffffff', pixelPattern: 'checker' },
+    ],
+    furniture: [
+        { id: 'conf_rug', x: 50, y: 45, w: 290, h: 180, color: '#a8b4c8', label: '地毯', utility: 'none', pixelPattern: 'rug_fancy' },
+        { id: 'conf_table', x: 120, y: 90, w: 168, h: 84, color: '#f0f5ff', label: '大理石会议桌', utility: 'work_group', dir: 'down', multiUser: true, pixelPattern: 'table_marble' },
+        { id: 'conf_projector', x: 80, y: 100, w: 12, h: 64, color: '#253048', label: '投影仪', utility: 'none', pixelPattern: 'tech' },
+        ...createRow('conf_chair_t', 130, 60, 4, 44, 0, { w: 22, h: 22, color: '#253048', label: '商务工位', utility: 'work', pixelPattern: 'chair_leather' }),
+        ...createRow('conf_chair_b', 130, 180, 4, 44, 0, { w: 22, h: 22, color: '#253048', label: '商务工位', utility: 'work', pixelPattern: 'chair_leather' }),
+        
+        { id: 'boss_area_rug', x: 130, y: 245, w: 230, h: 108, color: '#c23636', label: '波斯地毯', utility: 'none', pixelPattern: 'rug_persian' },
+        { id: 'boss_desk', x: 180, y: 250, w: 126, h: 54, color: PALETTE.deco_wood_red, label: '红木班台', utility: 'none', pixelPattern: 'desk_wood' },
+        { id: 'boss_pc', x: 200, y: 270, w: 44, h: 12, color: '#1a1e2c', label: '一体机', utility: 'none', pixelPattern: 'pc_pixel' },
+        { id: 'boss_chair_fin', x: 200, y: 300, w: 44, h: 44, color: '#253048', label: '老板椅', utility: 'work', pixelPattern: 'chair_boss' },
+        { id: 'boss_bookshelf', x: 320, y: 250, w: 24, h: 80, color: PALETTE.deco_wood_red, label: '藏书架', utility: 'none', pixelPattern: 'bookshelf' },
+        { id: 'boss_safe', x: 140, y: 310, w: 34, h: 34, color: '#5a6572', label: '保险柜', utility: 'none', pixelPattern: 'safe' },
+    ]
+};
+
+// ==========================================
+// 3. 创意园区 (Creative Park) [拆分自 CBD]
+// ==========================================
+const PLOT_DESIGN: PlotTemplate = {
+    id: 'design_template',
+    width: 440,
+    height: 340,
+    type: 'work',
+    rooms: [
+        { id: 'design_ground', x: 0, y: 0, w: 440, h: 340, label: '', color: '#f0f5ff', pixelPattern: 'grid' },
+        { id: 'design_studio', x: 20, y: 20, w: 400, h: 300, label: '像素艺术工作室', color: PALETTE.build_brick_white, pixelPattern: 'brush' },
+    ],
+    furniture: [
+        { id: 'messy_rug', x: 250, y: 60, w: 108, h: 108, color: '#ff9c8a', label: '艺术地毯', utility: 'none', pixelPattern: 'rug_art' },
+        ...createGrid('art_easel', 40, 60, 3, 3, 90, 80, { w: 44, h: 54, color: '#ff5252', label: '画架', utility: 'paint', pixelPattern: 'easel' }),
+        { id: 'plaster_statue', x: 310, y: 60, w: 34, h: 34, color: '#ffffff', label: '石膏像', utility: 'none', pixelPattern: 'statue' },
+        { id: 'paint_buckets', x: 170, y: 150, w: 24, h: 24, color: '#ff6b81', label: '颜料桶', utility: 'none', pixelPattern: 'paint' },
+        { id: 'coffee_corner', x: 300, y: 230, w: 44, h: 44, color: '#ff5252', label: '咖啡角', utility: 'drink', pixelPattern: 'coffee_corner' },
+        { id: 'bean_bag_1', x: 250, y: 80, w: 44, h: 44, color: '#ff7aa8', label: '懒人沙发', utility: 'comfort', pixelPattern: 'beanbag' },
+        { id: 'bean_bag_2', x: 290, y: 100, w: 44, h: 44, color: '#8a7cff', label: '懒人沙发', utility: 'comfort', pixelPattern: 'beanbag' },
+    ]
+};
+
+// ==========================================
+// 4. 宿舍/公寓区 (Residential)
 // ==========================================
 const PLOT_DORM: PlotTemplate = {
     id: 'dorm_template',
@@ -125,7 +151,7 @@ const PLOT_DORM: PlotTemplate = {
 };
 
 // ==========================================
-// 3. 豪华独栋别墅 (Villa)
+// 5. 豪华独栋别墅 (Villa)
 // ==========================================
 const PLOT_VILLA: PlotTemplate = {
     id: 'villa_template',
@@ -163,7 +189,7 @@ const PLOT_VILLA: PlotTemplate = {
 };
 
 // ==========================================
-// 4. 公寓楼 (Apartment Complex)
+// 6. 公寓楼 (Apartment Complex)
 // ==========================================
 const PLOT_APARTMENT: PlotTemplate = {
     id: 'apt_complex_template',
@@ -214,7 +240,7 @@ const PLOT_APARTMENT: PlotTemplate = {
 };
 
 // ==========================================
-// 5. 中央公园 (Public)
+// 7. 中央公园 (Public)
 // ==========================================
 const PLOT_PARK: PlotTemplate = {
     id: 'park_template',
@@ -254,7 +280,7 @@ const PLOT_PARK: PlotTemplate = {
 };
 
 // ==========================================
-// 6. 商业娱乐区 (Commercial)
+// 8. 商业娱乐区 (Commercial)
 // ==========================================
 const PLOT_COMMERCIAL: PlotTemplate = {
     id: 'commercial_template',
@@ -291,7 +317,7 @@ const PLOT_COMMERCIAL: PlotTemplate = {
 };
 
 // ==========================================
-// 7. 公共服务区 (Public)
+// 9. 公共服务区 (Public)
 // ==========================================
 const PLOT_SERVICE: PlotTemplate = {
     id: 'service_template',
@@ -316,7 +342,7 @@ const PLOT_SERVICE: PlotTemplate = {
 };
 
 // ==========================================
-// 8. 休闲与夜生活 (Public/Commercial)
+// 10. 休闲与夜生活 (Public/Commercial)
 // ==========================================
 const PLOT_NIGHTLIFE: PlotTemplate = {
     id: 'nightlife_template',
@@ -348,7 +374,7 @@ const PLOT_NIGHTLIFE: PlotTemplate = {
 };
 
 // ==========================================
-// 9. 远东新区拆分 - 美术馆 (Gallery)
+// 11. 美术馆 (Gallery)
 // ==========================================
 const PLOT_GALLERY: PlotTemplate = {
     id: 'gallery_template',
@@ -373,7 +399,7 @@ const PLOT_GALLERY: PlotTemplate = {
 };
 
 // ==========================================
-// 10. 远东新区拆分 - 网咖 (NetCafe)
+// 12. 网咖 (NetCafe)
 // ==========================================
 const PLOT_NETCAFE: PlotTemplate = {
     id: 'netcafe_template',
@@ -398,44 +424,73 @@ const PLOT_NETCAFE: PlotTemplate = {
 };
 
 // ==========================================
-// 11. 教育园区 (Education District)
+// 13. 向日葵幼儿园 (Kindergarten) [拆分自 Education]
 // ==========================================
-const PLOT_EDUCATION: PlotTemplate = {
-    id: 'education_template',
-    width: 1400,
-    height: 1000,
+const PLOT_KINDERGARTEN: PlotTemplate = {
+    id: 'kindergarten_template',
+    width: 440,
+    height: 440,
     type: 'public',
     rooms: [
-        { id: 'kg_ground', x: 20, y: 20, w: 400, h: 400, label: '向日葵幼儿园', color: '#fff0f5', pixelPattern: 'simple' },
-        { id: 'kg_playroom', x: 40, y: 40, w: 260, h: 200, label: '活动室', color: '#ffeaa7', pixelPattern: 'carpet' },
-        { id: 'kg_nap_room', x: 40, y: 260, w: 260, h: 140, label: '午睡室', color: '#dff9fb', pixelPattern: 'wood' },
-        { id: 'kg_yard', x: 310, y: 40, w: 100, h: 360, label: '', color: '#55efc4', pixelPattern: 'grass' },
-        { id: 'elem_ground', x: 460, y: 20, w: 900, h: 450, label: '第一小学', color: '#f0f2f8', pixelPattern: 'concrete' },
-        { id: 'elem_class_1', x: 480, y: 40, w: 200, h: 180, label: '一年级', color: '#dcede6', pixelPattern: 'wood' },
-        { id: 'elem_class_2', x: 700, y: 40, w: 200, h: 180, label: '二年级', color: '#dcede6', pixelPattern: 'wood' },
-        { id: 'elem_playground', x: 920, y: 40, w: 400, h: 400, label: '操场', color: '#e55039', pixelPattern: 'run_track' },
-        { id: 'high_ground', x: 20, y: 500, w: 1340, h: 480, label: '星海中学', color: '#dfe6e9', pixelPattern: 'concrete' },
-        { id: 'high_class_main', x: 40, y: 520, w: 400, h: 200, label: '教学楼', color: '#ffffff', pixelPattern: 'tile' },
-        { id: 'high_library', x: 460, y: 520, w: 300, h: 200, label: '图书馆', color: '#81ecec', pixelPattern: 'library' },
-        { id: 'high_canteen', x: 40, y: 740, w: 300, h: 200, label: '食堂', color: '#fab1a0', pixelPattern: 'kitchen' },
-        { id: 'high_gym', x: 800, y: 520, w: 500, h: 400, label: '体育馆', color: '#a29bfe', pixelPattern: 'gym' },
+        { id: 'kg_ground', x: 0, y: 0, w: 440, h: 440, label: '向日葵幼儿园', color: '#fff0f5', pixelPattern: 'simple' },
+        { id: 'kg_playroom', x: 20, y: 20, w: 260, h: 200, label: '活动室', color: '#ffeaa7', pixelPattern: 'carpet' },
+        { id: 'kg_nap_room', x: 20, y: 240, w: 260, h: 140, label: '午睡室', color: '#dff9fb', pixelPattern: 'wood' },
+        { id: 'kg_yard', x: 290, y: 20, w: 100, h: 360, label: '', color: '#55efc4', pixelPattern: 'grass' },
     ],
     furniture: [
-        ...createGrid('kg_crib', 50, 270, 4, 2, 60, 60, { w: 40, h: 40, color: '#ff9ff3', label: '婴儿床', utility: 'nap_crib', pixelPattern: 'bed_crib' }),
-        ...createGrid('kg_mat', 50, 50, 4, 3, 60, 60, { w: 44, h: 44, color: '#74b9ff', label: '游戏垫', utility: 'play_blocks', pixelPattern: 'play_mat' }),
-        { id: 'kg_slide', x: 330, y: 60, w: 60, h: 100, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'slide' },
-        ...createGrid('elem_desk_1', 490, 60, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
-        ...createGrid('elem_desk_2', 710, 60, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
-        { id: 'elem_blackboard_1', x: 530, y: 30, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
-        ...createGrid('high_desk', 60, 540, 8, 3, 45, 50, { w: 34, h: 24, color: '#b2bec3', label: '书桌', utility: 'study_high', pixelPattern: 'desk_simple' }),
-        ...createGrid('high_book', 480, 540, 5, 2, 50, 80, { w: 40, h: 60, color: '#0984e3', label: '藏书', utility: 'read', pixelPattern: 'bookshelf_sci' }),
-        ...createGrid('high_lunch', 60, 760, 4, 2, 70, 80, { w: 60, h: 60, color: '#fab1a0', label: '餐桌', utility: 'eat_canteen', pixelPattern: 'table_dining', cost: 10 }),
-        { id: 'high_hoop', x: 850, y: 550, w: 20, h: 60, color: '#e17055', label: '篮筐', utility: 'play', pixelPattern: 'hoop' },
+        ...createGrid('kg_crib', 30, 250, 4, 2, 60, 60, { w: 40, h: 40, color: '#ff9ff3', label: '婴儿床', utility: 'nap_crib', pixelPattern: 'bed_crib' }),
+        ...createGrid('kg_mat', 30, 30, 4, 3, 60, 60, { w: 44, h: 44, color: '#74b9ff', label: '游戏垫', utility: 'play_blocks', pixelPattern: 'play_mat' }),
+        { id: 'kg_slide', x: 310, y: 40, w: 60, h: 100, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'slide' },
     ]
 };
 
 // ==========================================
-// 12. 道路模板 (Road Templates) [NEW]
+// 14. 第一小学 (Elementary School) [拆分自 Education]
+// ==========================================
+const PLOT_ELEMENTARY: PlotTemplate = {
+    id: 'elementary_template',
+    width: 900,
+    height: 480,
+    type: 'public',
+    rooms: [
+        { id: 'elem_ground', x: 0, y: 0, w: 900, h: 480, label: '第一小学', color: '#f0f2f8', pixelPattern: 'concrete' },
+        { id: 'elem_class_1', x: 20, y: 20, w: 200, h: 180, label: '一年级', color: '#dcede6', pixelPattern: 'wood' },
+        { id: 'elem_class_2', x: 240, y: 20, w: 200, h: 180, label: '二年级', color: '#dcede6', pixelPattern: 'wood' },
+        { id: 'elem_playground', x: 460, y: 20, w: 400, h: 400, label: '操场', color: '#e55039', pixelPattern: 'run_track' },
+    ],
+    furniture: [
+        ...createGrid('elem_desk_1', 30, 40, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
+        ...createGrid('elem_desk_2', 250, 40, 4, 3, 45, 50, { w: 34, h: 24, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school' }),
+        { id: 'elem_blackboard_1', x: 70, y: 10, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
+        { id: 'elem_blackboard_2', x: 290, y: 10, w: 100, h: 10, color: '#2d3436', label: '黑板', utility: 'none' },
+    ]
+};
+
+// ==========================================
+// 15. 星海中学 (High School) [拆分自 Education]
+// ==========================================
+const PLOT_HIGHSCHOOL: PlotTemplate = {
+    id: 'high_school_template',
+    width: 1340,
+    height: 480,
+    type: 'public',
+    rooms: [
+        { id: 'high_ground', x: 0, y: 0, w: 1340, h: 480, label: '星海中学', color: '#dfe6e9', pixelPattern: 'concrete' },
+        { id: 'high_class_main', x: 20, y: 20, w: 400, h: 200, label: '教学楼', color: '#ffffff', pixelPattern: 'tile' },
+        { id: 'high_library', x: 440, y: 20, w: 300, h: 200, label: '图书馆', color: '#81ecec', pixelPattern: 'library' },
+        { id: 'high_canteen', x: 20, y: 240, w: 300, h: 200, label: '食堂', color: '#fab1a0', pixelPattern: 'kitchen' },
+        { id: 'high_gym', x: 780, y: 20, w: 500, h: 400, label: '体育馆', color: '#a29bfe', pixelPattern: 'gym' },
+    ],
+    furniture: [
+        ...createGrid('high_desk', 40, 40, 8, 3, 45, 50, { w: 34, h: 24, color: '#b2bec3', label: '书桌', utility: 'study_high', pixelPattern: 'desk_simple' }),
+        ...createGrid('high_book', 460, 40, 5, 2, 50, 80, { w: 40, h: 60, color: '#0984e3', label: '藏书', utility: 'read', pixelPattern: 'bookshelf_sci' }),
+        ...createGrid('high_lunch', 40, 260, 4, 2, 70, 80, { w: 60, h: 60, color: '#fab1a0', label: '餐桌', utility: 'eat_canteen', pixelPattern: 'table_dining', cost: 10 }),
+        { id: 'high_hoop', x: 830, y: 50, w: 20, h: 60, color: '#e17055', label: '篮筐', utility: 'play', pixelPattern: 'hoop' },
+    ]
+};
+
+// ==========================================
+// 16. 道路模板 (Road Templates)
 // ==========================================
 const PLOT_ROAD_H: PlotTemplate = {
     id: 'road_h_template',
@@ -473,7 +528,12 @@ const PLOT_ROAD_CROSS: PlotTemplate = {
 
 // 汇总导出
 export const PLOTS: Record<string, PlotTemplate> = {
-    'cbd': PLOT_CBD,
+    'tech': PLOT_TECH,       // 科技大厦
+    'finance': PLOT_FINANCE, // 环球金融中心
+    'design': PLOT_DESIGN,   // 创意园区
+    'kindergarten': PLOT_KINDERGARTEN, // 幼儿园
+    'elementary': PLOT_ELEMENTARY,     // 小学
+    'high_school': PLOT_HIGHSCHOOL,    // 中学
     'dorm': PLOT_DORM,
     'villa': PLOT_VILLA,
     'apartment': PLOT_APARTMENT,
@@ -481,10 +541,9 @@ export const PLOTS: Record<string, PlotTemplate> = {
     'commercial': PLOT_COMMERCIAL,
     'service': PLOT_SERVICE,
     'nightlife': PLOT_NIGHTLIFE,
-    'gallery': PLOT_GALLERY,  // 分拆出的美术馆
-    'netcafe': PLOT_NETCAFE,  // 分拆出的网咖
-    'education': PLOT_EDUCATION,
-    'road_h': PLOT_ROAD_H,    // 横向道路
-    'road_v': PLOT_ROAD_V,    // 纵向道路
-    'road_cross': PLOT_ROAD_CROSS // 十字路口
+    'gallery': PLOT_GALLERY,
+    'netcafe': PLOT_NETCAFE,
+    'road_h': PLOT_ROAD_H,
+    'road_v': PLOT_ROAD_V,
+    'road_cross': PLOT_ROAD_CROSS
 };
