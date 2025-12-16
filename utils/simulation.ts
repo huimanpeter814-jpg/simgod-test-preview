@@ -100,6 +100,60 @@ export class GameStore {
         this.notify();
     }
 
+    // [新增] 为市民分配住址
+    static assignRandomHome(sim: Sim) {
+        // 1. 筛选有空位的房源
+        const availableHomes = this.housingUnits.filter(unit => {
+            const residents = this.sims.filter(s => s.homeId === unit.id).length;
+            return residents < unit.capacity;
+        });
+
+        if (availableHomes.length === 0) {
+            this.showToast("❌ 没有空闲的住处了！");
+            return;
+        }
+
+        // 2. 简单的财富匹配逻辑 (富人优先住好房，穷人住公租房)
+        let candidates = availableHomes;
+        if (sim.money > 5000) {
+            // 优先别墅或公寓
+            const luxury = availableHomes.filter(h => h.type === 'villa' || h.type === 'apartment');
+            if (luxury.length > 0) candidates = luxury;
+        } else if (sim.money < 2000) {
+            // 优先公租房
+            const budget = availableHomes.filter(h => h.type === 'public_housing');
+            if (budget.length > 0) candidates = budget;
+        }
+
+        // 3. 随机选择一个
+        const newHome = candidates[Math.floor(Math.random() * candidates.length)];
+        
+        // 4. 执行搬家
+        sim.homeId = newHome.id;
+        this.addLog(sim, `搬进了新家：${newHome.name}`, 'life');
+        this.showToast(`✅ 已分配住址：${newHome.name}`);
+
+        // 5. 连带搬迁逻辑 (配偶和未成年子女一起搬)
+        // 查找配偶
+        const partner = this.sims.find(s => s.id === sim.partnerId && sim.relationships[s.id]?.isSpouse);
+        if (partner && partner.homeId !== newHome.id) {
+            partner.homeId = newHome.id;
+            this.addLog(partner, `随配偶搬进了新家`, 'family');
+        }
+
+        // 查找未成年子女
+        const children = this.sims.filter(s => sim.childrenIds.includes(s.id) && ['Infant', 'Toddler', 'Child', 'Teen'].includes(s.ageStage));
+        children.forEach(child => {
+            if (child.homeId !== newHome.id) {
+                child.homeId = newHome.id;
+            }
+        });
+
+        // 6. 刷新家具归属权
+        this.refreshFurnitureOwnership();
+        this.notify();
+    }
+
     // 重建世界：根据代码中的 WORLD_LAYOUT 生成静态地图
     static rebuildWorld(initial = false) {
         // [修复] 仅在初始化或地图为空时重置布局，防止运行时修改被覆盖

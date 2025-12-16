@@ -170,6 +170,10 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
     else if (sim.ageStage === 'Child') jobTitle = '小学生';
     else if (sim.ageStage === 'Teen') jobTitle = '中学生';
 
+    // [新增] 获取家庭住址名称
+    const homeUnit = GameStore.housingUnits.find(u => u.id === sim.homeId);
+    const homeName = homeUnit ? homeUnit.name : '无家可归';
+
     return (
         <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
             {/* Header */}
@@ -441,6 +445,25 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         <div>
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">个人特征</div>
                             <div className="bg-white/5 rounded-lg p-2 border border-white/5 grid grid-cols-2 gap-2 text-[11px]">
+                                
+                                {/* 家庭住址 */}
+                                <div className="flex flex-col gap-0.5 col-span-2 pb-2 mb-2 border-b border-white/5">
+                                    <span className="text-gray-500 text-[9px]">家庭住址</span>
+                                    <div className="flex justify-between items-center">
+                                        <span className={`${sim.homeId ? 'text-gray-200' : 'text-gray-500 italic'}`}>
+                                            {homeName}
+                                        </span>
+                                        {!sim.homeId && (
+                                            <button 
+                                                onClick={() => GameStore.assignRandomHome(sim)}
+                                                className="text-[9px] bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30 transition-colors"
+                                            >
+                                                分配住址
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <div className="flex flex-col gap-0.5">
                                     <span className="text-gray-500 text-[9px]">姓氏</span>
                                     <span className="text-gray-200 font-bold">{sim.surname}</span>
