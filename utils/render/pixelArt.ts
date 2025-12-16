@@ -427,7 +427,7 @@ export function drawAvatarHead(
     }
 }
 
-// 3. 绘制像素家具/物体 (从 GameCanvas 提取)
+// 3. 绘制像素家具/物体 (优化版：增加内部细节)
 export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => {
     const { x, y, w, h, color, pixelPattern } = f;
     
@@ -459,55 +459,69 @@ export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => 
         return;
     }
 
-    // --- 🛋️ 家具类 ---
+    // --- 🛋️ 家具类 (增加细节) ---
     if (pixelPattern && pixelPattern.startsWith('bed')) {
-        ctx.fillStyle = '#5D4037';
-        ctx.fillRect(x, y, w, 6);
-        ctx.fillStyle = '#ECEFF1';
-        ctx.fillRect(x, y + 6, w, h - 6);
+        // 床头板
+        ctx.fillStyle = '#5D4037'; 
+        ctx.fillRect(x, y, w, 8);
+        // 床体
+        ctx.fillStyle = color; 
+        ctx.fillRect(x + 2, y + 8, w - 4, h - 8);
+        // 被子 (覆盖下半部分)
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillRect(x + 2, y + 30, w - 4, h - 32);
+        // 枕头
         ctx.fillStyle = '#FFFFFF';
         if (pixelPattern === 'bed_king' || pixelPattern === 'bed_bunk') {
-            ctx.fillRect(x + 6, y + 10, w / 2 - 10, 14); 
-            ctx.fillRect(x + w / 2 + 4, y + 10, w / 2 - 10, 14); 
+            ctx.fillRect(x + 6, y + 12, w / 2 - 10, 12); 
+            ctx.fillRect(x + w / 2 + 4, y + 12, w / 2 - 10, 12); 
         } else {
-            ctx.fillRect(x + w/2 - 10, y + 10, 20, 14);
+            ctx.fillRect(x + w/2 - 10, y + 12, 20, 12);
         }
-        ctx.fillStyle = color;
-        ctx.fillRect(x + 2, y + 30, w - 4, h - 32);
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        ctx.fillRect(x + 2, y + 30, w - 4, 4);
         return;
     }
 
     if (pixelPattern === 'sofa_pixel' || pixelPattern === 'sofa_lazy' || pixelPattern === 'sofa_vip') {
         ctx.fillStyle = color;
-        ctx.fillRect(x, y + h/2, w, h/2); 
+        // 靠背
         ctx.fillRect(x, y, w, h); 
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(x, y + 10, 6, h - 10); 
-        ctx.fillRect(x + w - 6, y + 10, 6, h - 10); 
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillRect(x + 6, y + h/2, w - 12, h/2 - 2);
+        // 扶手阴影
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(x, y + 10, 8, h - 10); 
+        ctx.fillRect(x + w - 8, y + 10, 8, h - 10); 
+        // 坐垫高光
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x + 8, y + h/2, w - 16, h/2 - 2);
         return;
     }
 
-    // --- 💻 办公/科技类 ---
-    if (pixelPattern === 'desk_pixel' || pixelPattern === 'desk_simple') {
-        ctx.fillStyle = '#455A64';
-        ctx.fillRect(x + 2, y, 4, h);
-        ctx.fillRect(x + w - 6, y, 4, h);
+    // --- 💻 办公/科技类 (增加细节) ---
+    if (pixelPattern === 'desk_pixel' || pixelPattern === 'desk_simple' || pixelPattern === 'desk_wood') {
+        // 桌面
         ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+        
+        // 桌面高光
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
         ctx.fillRect(x, y, w, h * 0.8);
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(x, y + h * 0.8, w, 4);
+        
+        // 抽屉轮廓
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(x + w - 14, y + 4, 10, h - 8);
+        // 抽屉拉手
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(x + w - 10, y + h/2 - 1, 2, 2);
         return;
     }
     
     if (pixelPattern === 'pc_pixel' || pixelPattern === 'console') {
+        // 支架
         ctx.fillStyle = '#37474F';
-        ctx.fillRect(x + w/2 - 6, y + h - 4, 12, 4);
+        ctx.fillRect(x + w/2 - 6, y + h - 6, 12, 6);
+        // 屏幕边框
         ctx.fillStyle = '#263238';
         ctx.fillRect(x, y, w, h - 6);
+        // 屏幕发光内容
         const time = Date.now() % 2000;
         ctx.fillStyle = time < 1000 ? '#00BCD4' : '#0097A7';
         ctx.fillRect(x + 2, y + 2, w - 4, h - 10);
@@ -517,10 +531,12 @@ export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => 
     if (pixelPattern === 'server') {
         ctx.fillStyle = '#212121';
         ctx.fillRect(x, y, w, h);
+        // 闪烁指示灯
         for(let i=0; i<4; i++) {
              ctx.fillStyle = Math.random() > 0.5 ? '#00E676' : '#212121';
              ctx.fillRect(x + w - 8, y + 5 + i*8, 4, 4);
         }
+        // 散热槽
         ctx.fillStyle = '#424242';
         for(let i=0; i<h; i+=4) {
             ctx.fillRect(x + 4, y + i, w - 16, 2);
@@ -534,47 +550,40 @@ export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => 
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.fillRect(x + 2, y + 2, w - 4, 6);
+        // 内部饮料格
         ctx.fillStyle = '#81D4FA';
         ctx.fillRect(x + 4, y + 12, w * 0.6, h * 0.5);
-        ctx.fillStyle = '#FF5252';
-        ctx.fillRect(x + 6, y + 16, 4, 6);
-        ctx.fillStyle = '#FFD740';
-        ctx.fillRect(x + 12, y + 16, 4, 6);
-        ctx.fillStyle = '#263238';
-        ctx.fillRect(x + w * 0.7, y + 12, w * 0.2, h * 0.3);
-        ctx.fillStyle = '#212121';
+        ctx.fillStyle = '#263238'; // 取货口
         ctx.fillRect(x + 4, y + h - 10, w - 8, 8);
+        // 按钮
+        ctx.fillStyle = '#FF5252';
+        ctx.fillRect(x + w - 10, y + 16, 4, 4);
+        ctx.fillStyle = '#FFD740';
+        ctx.fillRect(x + w - 10, y + 22, 4, 4);
         return;
     }
 
-    if (pixelPattern === 'bench_park') {
-        ctx.fillStyle = '#A1887F';
-        for (let i = 0; i < h; i += 6) {
-            ctx.fillRect(x, y + i, w, 4);
-        }
-        ctx.fillStyle = '#5D4037';
-        ctx.fillRect(x, y - 2, 4, h + 4);
-        ctx.fillRect(x + w - 4, y - 2, 4, h + 4);
-        return;
-    }
-
-    // --- 🛍️ 商店货架 ---
+    // --- 🛍️ 商店货架 (增加商品色块) ---
     if (pixelPattern && pixelPattern.startsWith('shelf')) {
-        ctx.fillStyle = '#E0E0E0';
+        ctx.fillStyle = '#E0E0E0'; // 货架白底
         ctx.fillRect(x, y, w, h);
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        ctx.fillRect(x, y + h/3, w, 2);
-        ctx.fillRect(x, y + h*2/3, w, 2);
         
         const colors = pixelPattern === 'shelf_veg' ? ['#66BB6A', '#9CCC65'] : 
                        pixelPattern === 'shelf_meat' ? ['#EF5350', '#EC407A'] : 
                        ['#FFCA28', '#42A5F5', '#AB47BC'];
                        
+        // 绘制三层商品
         for (let r = 0; r < 3; r++) {
+            // 每层阴影
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
+            ctx.fillRect(x, y + (h/3)*r + (h/3)-2, w, 2);
+            
             for (let c = 0; c < 4; c++) {
                 ctx.fillStyle = colors[(r+c)%colors.length];
                 const itemW = w/4 - 2;
-                ctx.fillRect(x + 1 + c * (w/4), y + 2 + r * (h/3), itemW, h/3 - 4);
+                const itemH = h/3 - 6;
+                // 商品块
+                ctx.fillRect(x + 1 + c * (w/4), y + 2 + r * (h/3), itemW, itemH);
             }
         }
         return;
@@ -649,6 +658,7 @@ export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => 
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, h);
     
+    // 增加边缘立体感
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillRect(x, y, w, 4); 
     ctx.fillRect(x, y, 4, h); 
@@ -657,6 +667,7 @@ export const drawPixelProp = (ctx: CanvasRenderingContext2D, f: any, p: any) => 
     ctx.fillRect(x, y + h - 4, w, 4); 
     ctx.fillRect(x + w - 4, y, 4, h); 
 
+    // 如果是柜子或桌子，画个内框
     if (f.label.includes('柜') || f.label.includes('桌')) {
          ctx.fillStyle = 'rgba(0,0,0,0.1)';
          ctx.fillRect(x + 6, y + 6, w - 12, h - 12);

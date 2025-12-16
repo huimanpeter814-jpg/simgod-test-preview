@@ -588,7 +588,7 @@ export class GameStore {
         });
 
         const saveData = {
-            version: 2.5,
+            version: 2.6, // [修改] 升级存档版本以强制重置地图布局
             time: this.time,
             logs: this.logs,
             sims: safeSims,
@@ -609,9 +609,23 @@ export class GameStore {
             const json = localStorage.getItem('pixel_life_save_v1');
             if (!json) return false;
             const data = JSON.parse(json);
-            if (!data.version || data.version < 2.4) {
-                 console.warn("Save too old, resetting.");
-                 return false;
+            // [修改] 检查版本号，如果低于 2.6 则强制重置地图布局
+            if (!data.version || data.version < 2.6) {
+                 console.warn("Save version too old, migrating map layout...");
+                 // 仅保留角色数据和时间，丢弃旧的 worldLayout
+                 this.time = { ...data.time };
+                 this.logs = data.logs || [];
+                 // 强制使用新的默认布局
+                 this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
+                 // 保留用户自定义家具 (如果位置合理)
+                 if (data.customFurniture) {
+                     this.furniture = data.customFurniture;
+                 }
+                 // 加载角色
+                 this.loadSims(data.sims);
+                 
+                 this.rebuildWorld(false);
+                 return true;
             }
 
             this.time = { ...data.time };
@@ -625,28 +639,32 @@ export class GameStore {
                 this.rebuildWorld(false); 
             }
 
-            this.sims = data.sims.map((sData: any) => {
-                const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); 
-                Object.assign(sim, sData);
-                if (!sim.childrenIds) sim.childrenIds = [];
-                if (!sim.health) sim.health = 100;
-                if (!sim.ageStage) sim.ageStage = 'Adult';
-                
-                if (sim.interactionTarget) sim.interactionTarget = null;
-                
-                const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
-                if (currentJobDefinition) {
-                    sim.job = { ...currentJobDefinition };
-                }
-
-                return sim;
-            });
+            this.loadSims(data.sims);
             this.notify();
             return true;
         } catch (e) {
             console.error("Load failed", e);
             return false;
         }
+    }
+
+    static loadSims(simsData: any[]) {
+        this.sims = simsData.map((sData: any) => {
+            const sim = new Sim({ x: sData.pos.x, y: sData.pos.y }); 
+            Object.assign(sim, sData);
+            if (!sim.childrenIds) sim.childrenIds = [];
+            if (!sim.health) sim.health = 100;
+            if (!sim.ageStage) sim.ageStage = 'Adult';
+            
+            if (sim.interactionTarget) sim.interactionTarget = null;
+            
+            const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
+            if (currentJobDefinition) {
+                sim.job = { ...currentJobDefinition };
+            }
+
+            return sim;
+        });
     }
 
     static clearSave() {

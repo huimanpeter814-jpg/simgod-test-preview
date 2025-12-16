@@ -34,7 +34,13 @@ const GameCanvas: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number | null>(null);
 
-    const cameraRef = useRef({ x: 0, y: 0, zoom: 1 });
+    // [Fix] 初始相机位置：居中
+    // 假设地图中心大概在 (1800, 1000)，初始 Zoom 0.8
+    const cameraRef = useRef({ 
+        x: 1800 - window.innerWidth / 2, 
+        y: 800 - window.innerHeight / 2, 
+        zoom: 0.8 
+    });
 
     const [windowSize, setWindowSize] = useState({
         width: window.innerWidth,
@@ -65,6 +71,13 @@ const GameCanvas: React.FC = () => {
             });
         };
         window.addEventListener('resize', handleResize);
+        
+        // 初始化时稍微纠正一下相机中心，确保不偏
+        if (cameraRef.current.x === 0 && cameraRef.current.y === 0) {
+             cameraRef.current.x = 1800 - window.innerWidth / 2;
+             cameraRef.current.y = 800 - window.innerHeight / 2;
+        }
+
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
@@ -90,7 +103,6 @@ const GameCanvas: React.FC = () => {
         // 2. 绘制房间/区域 (读取 GameStore)
         GameStore.rooms.forEach((r: any) => {
             // [Edit Mode] 如果是正在拖拽的地皮，跳过静态绘制
-            // [Fix] 增加 isDragging 检查，只有在拖拽状态下才隐藏静态层物体
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && GameStore.editor.isDragging) {
                 if (r.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
             }
@@ -137,7 +149,6 @@ const GameCanvas: React.FC = () => {
         // 3. 绘制家具 (读取 GameStore)
         GameStore.furniture.forEach((f: any) => {
             // [Edit Mode] 如果是正在拖拽的家具，跳过静态绘制
-            // [Fix] 增加 isDragging 检查，确保放置后物体立即显示
             if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId === f.id && GameStore.editor.isDragging) return;
             // [Edit Mode] 如果是正在拖拽的地皮上的家具，也跳过静态绘制
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && f.id.startsWith(`${GameStore.editor.selectedPlotId}_`) && GameStore.editor.isDragging) return;
@@ -188,8 +199,6 @@ const GameCanvas: React.FC = () => {
         const p = getActivePalette();
         const paletteKey = JSON.stringify(p);
         
-        // 当光照改变 或 拖拽结束时 (需要重绘静态层将物体"烧录"回去) 重绘静态层
-        // 注意：拖拽过程中不重绘静态层，只在动态层绘制预览，性能更高
         if (paletteKey !== lastTimePaletteRef.current || !staticCanvasRef.current) {
              renderStaticLayer();
              lastTimePaletteRef.current = paletteKey;
@@ -200,9 +209,9 @@ const GameCanvas: React.FC = () => {
             ctx.drawImage(staticCanvasRef.current, 0, 0);
         }
 
-        // 4. [New] Editor Preview / Overlays
+        // 4. Editor Preview
         if (GameStore.editor.mode !== 'none') {
-            // Draw Grid
+            // Grid
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.lineWidth = 1;
             const gridSize = 100;
@@ -220,23 +229,18 @@ const GameCanvas: React.FC = () => {
             }
             ctx.stroke();
 
-            // === 预览渲染逻辑 (修复：确保图片和特效能渲染) ===
-            // 只要有 previewPos 就渲染，无论是否正在按下鼠标
             if (GameStore.editor.previewPos) {
                 const { x, y } = GameStore.editor.previewPos;
                 ctx.save();
-                ctx.globalAlpha = 0.9; // 预览层稍微透明一点，但不要太透
+                ctx.globalAlpha = 0.9; 
 
                 if (GameStore.editor.mode === 'plot') {
-                    // [Improved] Plot Preview Rendering
                     const drawPlotPreview = (plotId: string | null, templateId: string | null, dx: number, dy: number) => {
                         let roomsToRender: any[] = [];
                         
                         if (plotId) {
-                            // Existing plot rooms
                             roomsToRender = GameStore.rooms.filter(r => r.id.startsWith(`${plotId}_`)).map(r => ({ ...r, x: r.x + dx, y: r.y + dy }));
                         } else if (templateId) {
-                            // New template rooms
                             const tpl = PLOTS[templateId];
                             if (tpl) {
                                 roomsToRender = tpl.rooms.map(r => ({ ...r, x: r.x + x, y: r.y + y }));
@@ -244,7 +248,6 @@ const GameCanvas: React.FC = () => {
                         }
 
                         roomsToRender.forEach(r => {
-                            // Draw Floor (Support Patterns/Images)
                             const floorImg = getAsset(r.imagePath);
                             if (floorImg) {
                                 const ptrn = ctx.createPattern(floorImg, 'repeat');
@@ -265,8 +268,6 @@ const GameCanvas: React.FC = () => {
                                     ctx.strokeRect(r.x, r.y, r.w, r.h); 
                                 }
                             }
-                            
-                            // Highlight Border
                             ctx.strokeStyle = plotId ? '#ffff00' : '#00ff00';
                             ctx.lineWidth = 3;
                             ctx.strokeRect(r.x, r.y, r.w, r.h);
@@ -282,7 +283,6 @@ const GameCanvas: React.FC = () => {
                     if (GameStore.editor.selectedPlotId) {
                         const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                         if (plot) {
-                            // 预览位置减去当前地皮坐标，得到相对位移
                             drawPlotPreview(plot.id, null, x - plot.x, y - plot.y);
                         }
                     } else if (GameStore.editor.placingTemplateId) {
@@ -290,29 +290,22 @@ const GameCanvas: React.FC = () => {
                     }
                 } 
                 else if (GameStore.editor.mode === 'furniture') {
-                    // [Improved] Furniture Preview Rendering (Include Image & Glow)
                     const drawFurnPreview = (f: any, isNew: boolean) => {
                         const renderX = isNew ? x : x;
                         const renderY = isNew ? y : y;
                         
-                        // Override position for drawing
                         const previewF = { ...f, x: renderX, y: renderY };
 
-                        // 1. Shadow (Optional)
                         if (previewF.pixelPattern !== 'zebra') {
                             ctx.fillStyle = p.furniture_shadow || 'rgba(0,0,0,0.2)';
                             ctx.fillRect(previewF.x + 4, previewF.y + 4, previewF.w, previewF.h);
                         }
 
-                        // 2. Image Check (Critical Fix: Check for imagePath!)
                         const furnImg = getAsset(previewF.imagePath);
                         if (furnImg) {
                             ctx.drawImage(furnImg, previewF.x, previewF.y, previewF.w, previewF.h);
                         } else {
-                            // 3. Pixel Prop Draw (Fallback)
                             drawPixelProp(ctx, previewF, p);
-                            
-                            // 4. Glow
                             if (previewF.pixelGlow) {
                                 ctx.shadowBlur = 10;
                                 ctx.shadowColor = previewF.glowColor || previewF.color;
@@ -322,7 +315,6 @@ const GameCanvas: React.FC = () => {
                             }
                         }
 
-                        // Border Highlighting
                         ctx.strokeStyle = isNew ? '#00ff00' : '#ffff00';
                         ctx.lineWidth = 2;
                         ctx.strokeRect(previewF.x - 2, previewF.y - 2, previewF.w + 4, previewF.h + 4);
@@ -473,8 +465,6 @@ const GameCanvas: React.FC = () => {
         renderStaticLayer();
 
         const unsub = GameStore.subscribe(() => {
-             // 当 Editor 模式切换或选中物体时，强制重绘一次 StaticLayer 以便"移除"被拖拽的物体
-             // 或者当拖拽结束时重绘
              if (GameStore.editor.mode !== 'none' || !GameStore.editor.isDragging) {
                  renderStaticLayer();
              }
@@ -497,16 +487,8 @@ const GameCanvas: React.FC = () => {
             const worldX = e.clientX / zoom + cameraRef.current.x;
             const worldY = e.clientY / zoom + cameraRef.current.y;
 
-            // [Editor] Selection & Drag Logic
-            // 修复逻辑：支持点击拾取、点击放置，以及拖拽移动
             if (GameStore.editor.mode !== 'none') {
-                
-                // 情况A：如果已经在“携带”某个物体 (GameStore.editor.isDragging 为 true)
-                // 且这次点击不是刚把物体拿起来的那一次点击（通过 isPickingUp 判断）
-                // 那么这就是“放置”点击
                 if (GameStore.editor.isDragging && !isPickingUp.current) {
-                    // 执行放置
-                    // 逻辑统一在 finalizeMove 处理
                     GameStore.editor.isDragging = false;
                     const finalPos = GameStore.editor.previewPos || {x:0, y:0};
 
@@ -521,13 +503,12 @@ const GameCanvas: React.FC = () => {
                     }
                     
                     renderStaticLayer();
-                    return; // 结束本次事件处理
+                    return;
                 }
 
-                // 情况B：当前没有携带物体，试图拾取
                 if (!GameStore.editor.isDragging) {
                     if (GameStore.editor.mode === 'plot') {
-                        if (GameStore.editor.placingTemplateId) return; // 正在放置新模板时不选旧的
+                        if (GameStore.editor.placingTemplateId) return;
 
                         const clickedRoom = GameStore.rooms.find(r => 
                             worldX >= r.x && worldX <= r.x + r.w &&
@@ -538,16 +519,15 @@ const GameCanvas: React.FC = () => {
                             if (plot) {
                                 GameStore.editor.selectedPlotId = plot.id;
                                 GameStore.editor.isDragging = true;
-                                isPickingUp.current = true; // 标记：这是拾取动作的开始
+                                isPickingUp.current = true;
                                 GameStore.editor.dragOffset = { x: worldX - plot.x, y: worldY - plot.y };
                                 GameStore.editor.previewPos = { x: plot.x, y: plot.y };
                                 dragStartPos.current = { x: plot.x, y: plot.y };
-                                renderStaticLayer(); // 隐藏原始物体
+                                renderStaticLayer(); 
                                 GameStore.notify();
                                 return;
                             }
                         }
-                        // 点击空白处取消选择
                         if (GameStore.editor.selectedPlotId) {
                             GameStore.editor.selectedPlotId = null;
                             GameStore.notify();
@@ -563,15 +543,14 @@ const GameCanvas: React.FC = () => {
                         if (clickedFurn) {
                             GameStore.editor.selectedFurnitureId = clickedFurn.id;
                             GameStore.editor.isDragging = true;
-                            isPickingUp.current = true; // 标记：这是拾取动作的开始
+                            isPickingUp.current = true;
                             GameStore.editor.dragOffset = { x: worldX - clickedFurn.x, y: worldY - clickedFurn.y };
                             GameStore.editor.previewPos = { x: clickedFurn.x, y: clickedFurn.y };
                             dragStartPos.current = { x: clickedFurn.x, y: clickedFurn.y };
-                            renderStaticLayer(); // 隐藏原始物体
+                            renderStaticLayer();
                             GameStore.notify();
                             return;
                         }
-                        // 点击空白处取消选择
                         if (GameStore.editor.selectedFurnitureId) {
                             GameStore.editor.selectedFurnitureId = null;
                             GameStore.notify();
@@ -583,7 +562,6 @@ const GameCanvas: React.FC = () => {
     };
     
     const handleMouseMove = (e: React.MouseEvent) => {
-        // 更新鼠标位置记录
         const zoom = cameraRef.current.zoom;
         const dx = (e.clientX - lastMousePos.current.x) / zoom;
         const dy = (e.clientY - lastMousePos.current.y) / zoom;
@@ -591,26 +569,21 @@ const GameCanvas: React.FC = () => {
         const mouseY = e.clientY / zoom + cameraRef.current.y;
 
         if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
-            hasDragged.current = true; // 标记发生了移动
+            hasDragged.current = true;
             if (isDragging.current) {
                 isCameraLocked.current = false;
             }
         }
 
-        // [Fix] 核心修复：只要处于携带模式(isDragging=true)，就更新物体位置，无论是否按住鼠标
         if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
             const gridSize = 10; 
-            // 计算新的吸附位置
             const rawX = mouseX - GameStore.editor.dragOffset.x;
             const rawY = mouseY - GameStore.editor.dragOffset.y;
             const newX = Math.round(rawX / gridSize) * gridSize;
             const newY = Math.round(rawY / gridSize) * gridSize;
 
-            // 仅更新预览坐标
             GameStore.editor.previewPos = { x: newX, y: newY };
-            // 注意：此时不需要 renderStaticLayer，因为 draw() 会负责画出 previewPos
         } 
-        // 只有在按下鼠标(isDragging.current)且不是编辑拖拽状态时，才移动相机
         else if (isDragging.current) {
             cameraRef.current.x -= dx;
             cameraRef.current.y -= dy;
@@ -622,14 +595,9 @@ const GameCanvas: React.FC = () => {
     const handleMouseUp = (e: React.MouseEvent) => {
         isDragging.current = false;
 
-        // [Fix] 释放鼠标时的逻辑
         if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
-            
-            // 如果是“刚刚拾取” (isPickingUp 为 true)
             if (isPickingUp.current) {
                 if (hasDragged.current) {
-                    // 如果发生了拖拽位移 -> 视为“拖拽放置”操作，直接放下
-                    // 执行放置
                     GameStore.editor.isDragging = false;
                     const finalPos = GameStore.editor.previewPos || {x:0, y:0};
 
@@ -640,19 +608,13 @@ const GameCanvas: React.FC = () => {
                     }
                     renderStaticLayer();
                 } else {
-                    // 如果没有发生位移 -> 视为“点击拾取”操作
-                    // 不放下物体，而是进入“跟随鼠标”模式
-                    // 只需要把 isPickingUp 标记去掉，下次点击就会触发放置逻辑
                     isPickingUp.current = false;
                 }
             } 
-            // 如果不是刚刚拾取 (即已经在携带中)，MouseUp 不做任何事
-            // 放置逻辑由下次 MouseDown 触发
             return;
         }
 
         if (e.button === 0 && !hasDragged.current) {
-            // 普通模式下的点击选择 Sim 逻辑
             const rect = canvasRef.current!.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
