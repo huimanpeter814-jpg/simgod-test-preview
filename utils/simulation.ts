@@ -203,8 +203,40 @@ export class GameStore {
                         pixelPattern: 'simple' 
                     }
                 ],
-                furniture: []
+                furniture: [],
+                housingUnits: [] // 初始化为空数组
             };
+
+            // [修复] 关键逻辑：如果是住宅类型，动态生成 HousingUnit
+            const type = plot.customType;
+            if (type && ['dorm', 'villa', 'apartment'].includes(type)) {
+                let unitType: 'public_housing' | 'apartment' | 'villa' = 'public_housing';
+                let capacity = 6;
+                let cost = 500;
+
+                if (type === 'villa') {
+                    unitType = 'villa';
+                    capacity = 4; // 别墅容纳一家人
+                    cost = 5000;
+                } else if (type === 'apartment') {
+                    unitType = 'apartment';
+                    capacity = 2; // 公寓适合情侣/单身
+                    cost = 1500;
+                } else if (type === 'dorm') {
+                    unitType = 'public_housing';
+                    capacity = 8; // 宿舍容纳多人
+                    cost = 200;
+                }
+
+                template.housingUnits!.push({
+                    id: 'custom_home', // 这里的ID是模板内的相对ID
+                    name: plot.customName || (unitType === 'villa' ? '私人别墅' : '自建公寓'),
+                    capacity: capacity,
+                    cost: cost,
+                    type: unitType,
+                    area: { x: 0, y: 0, w: w, h: h } // 默认整个地皮范围都是家
+                });
+            }
         }
 
         const plotUnits: (HousingUnit & { x: number, y: number, maxX: number, maxY: number })[] = [];
