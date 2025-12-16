@@ -164,6 +164,33 @@ export class GameStore {
         });
     }
 
+    // === [NEW] 归属权刷新逻辑 ===
+    // 遍历所有 custom 家具，检测它们是否在某个 HousingUnit 内，如果是，将 homeId 写入家具数据中
+    static refreshFurnitureOwnership() {
+        this.furniture.forEach(f => {
+            // 仅处理用户放置的自定义家具 (custom_ 开头)
+            if (f.id.startsWith('custom_')) {
+                // 计算家具中心点
+                const cx = f.x + f.w / 2;
+                const cy = f.y + f.h / 2;
+
+                const ownerUnit = this.housingUnits.find(u => {
+                    // maxX/maxY 是 instantiatePlot 时计算并附加的，如果没有则实时计算
+                    const maxX = u.maxX ?? (u.x + u.area.w);
+                    const maxY = u.maxY ?? (u.y + u.area.h);
+                    return cx >= u.x && cx < maxX && cy >= u.y && cy < maxY;
+                });
+                
+                if (ownerUnit) {
+                    f.homeId = ownerUnit.id;
+                } else {
+                    delete f.homeId;
+                }
+            }
+        });
+        console.log("[System] Furniture ownership refreshed.");
+    }
+
     // === Editor Transaction Logic ===
 
     static enterEditorMode() {
@@ -183,6 +210,7 @@ export class GameStore {
         this.resetEditorState();
         this.time.speed = 1; 
         this.initIndex(); 
+        this.refreshFurnitureOwnership(); // [新增] 确认编辑后主动刷新一次归属权
         this.notify();
     }
 
@@ -399,6 +427,7 @@ export class GameStore {
 
         this.furniture.push(newItem);
         this.initIndex();
+        this.refreshFurnitureOwnership(); // [新增] 放置家具后刷新归属权
         
         this.editor.placingFurniture = null;
         this.editor.isDragging = false;
@@ -459,6 +488,7 @@ export class GameStore {
                 newData: { x, y } 
             });
             this.initIndex();
+            this.refreshFurnitureOwnership(); // [新增] 移动后刷新归属权
         }
         
         this.editor.previewPos = null;
