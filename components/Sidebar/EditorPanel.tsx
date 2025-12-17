@@ -536,9 +536,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                             {/* [修改] 独立显示：地表材质 */}
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">地表材质 (笔刷)</div>
                             <div className="grid grid-cols-2 gap-2 pb-2">
-                                {SURFACE_TYPES.map((type, idx) => (
+                                {SURFACE_TYPES.map((type) => (
                                     <button
-                                        key={idx}
+                                        key={type.pattern} // [Fix] Changed from idx to unique pattern string
                                         onClick={() => handleStartDrawingFloor(type, false)} // hasWall = false
                                         className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-yellow-400 bg-yellow-400/10' : ''}`}
                                     >
@@ -568,9 +568,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                         <>
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">框选建造房间</div>
                             <div className="grid grid-cols-2 gap-2 pb-2">
-                                {ROOM_TYPES.map((type, idx) => (
+                                {ROOM_TYPES.map((type) => (
                                     <button
-                                        key={idx}
+                                        key={type.pattern} // [Fix] Changed from idx to unique pattern string
                                         onClick={() => handleStartDrawingFloor(type, true)} // hasWall = true
                                         className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-yellow-400 bg-yellow-400/10' : ''}`}
                                     >
@@ -597,9 +597,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                             
                             {/* Items Grid */}
                             <div className="grid grid-cols-2 gap-2 pb-2">
-                                {FURNITURE_CATALOG[category].items.map((item, idx) => (
+                                {FURNITURE_CATALOG[category].items.map((item) => (
                                     <button
-                                        key={idx}
+                                        key={item.label} // [Fix] Changed from idx to item.label
                                         onClick={() => handleStartPlacingFurniture(item)}
                                         className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95"
                                     >

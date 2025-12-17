@@ -149,8 +149,8 @@ const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
                     {detailView ? (
                         <div className="flex flex-col gap-1">
                             {detailView.list.length > 0 ? (
-                                detailView.list.map((item, idx) => (
-                                    <SimListItem key={idx} name={item.name} sub={item.sub} id={item.id} />
+                                detailView.list.map((item) => (
+                                    <SimListItem key={item.name} name={item.name} sub={item.sub} id={item.id} />
                                 ))
                             ) : (
                                 <div className="text-center text-gray-500 py-4 text-xs">空空如也</div>
