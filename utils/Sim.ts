@@ -40,12 +40,15 @@ interface SimInitConfig {
     money?: number; 
     traits?: string[]; 
     familyLore?: string; 
+    workplaceId?: string; // 🆕
 }
 
 export class Sim {
     id: string;
     familyId: string;
     homeId: string | null = null;
+    workplaceId?: string; // 🆕 固定工作地点
+    
     pos: Vector2;
     prevPos: Vector2; 
     target: Vector2 | null = null;
@@ -108,6 +111,8 @@ export class Sim {
     money: number;
     dailyBudget: number;
     workPerformance: number;
+    consecutiveAbsences: number = 0; // 🆕 连续旷工计数
+
     job: Job; 
     dailyExpense: number;
     dailyIncome: number; 
@@ -143,6 +148,7 @@ export class Sim {
         this.id = Math.random().toString(36).substring(2, 11);
         this.familyId = config.familyId || this.id;
         this.homeId = config.homeId || null;
+        this.workplaceId = config.workplaceId; // 🆕
 
         this.pos = {
             x: config.x ?? (50 + Math.random() * (CONFIG.CANVAS_W - 100)),
@@ -535,6 +541,11 @@ export class Sim {
             this.updateMood();
             this.checkDeath(dt); 
             this.checkSchedule();
+
+            // 🆕 每日一次：检查是否会被解雇 (放在每天 0 点)
+            if (GameStore.time.hour === 0 && GameStore.time.minute === 0) {
+                CareerLogic.checkFire(this);
+            }
 
             if (this.isPregnant) {
                 this.pregnancyTimer -= 1; 

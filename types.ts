@@ -255,6 +255,8 @@ export interface SimData {
   id: string;
   familyId: string; 
   homeId: string | null;
+  workplaceId?: string; // 🆕 工作地点 ID (Plot ID)
+  
   name: string;
   surname: string; 
   pos: Vector2;
@@ -303,6 +305,8 @@ export interface SimData {
   money: number;
   dailyBudget: number;
   workPerformance: number;
+  consecutiveAbsences?: number; // 🆕 连续旷工天数
+  
   job: Job;
   dailyExpense: number;
   dailyIncome: number; 
