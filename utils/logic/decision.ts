@@ -1,7 +1,6 @@
 import type { Sim } from '../Sim'; 
 import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
-import { minutes } from '../simulationHelpers';
 import { Furniture, SimAction, NeedType, AgeStage } from '../../types';
 
 export const DecisionLogic = {
@@ -9,11 +8,9 @@ export const DecisionLogic = {
     isRestricted(sim: Sim, target: { x: number, y: number } | Furniture): boolean {
         let homeId: string | undefined;
 
-        // 如果是家具，直接检查家具的归属
         if ('homeId' in target && (target as Furniture).homeId) {
             homeId = (target as Furniture).homeId;
         } else {
-            // 如果是坐标，检查是否落在某个住房单元内
             const unit = GameStore.housingUnits.find(u => 
                 target.x >= u.x && target.x <= u.x + u.area.w &&
                 target.y >= u.y && target.y <= u.y + u.area.h
@@ -22,16 +19,10 @@ export const DecisionLogic = {
         }
 
         if (homeId) {
-            // 如果是自己的家，不限制
             if (sim.homeId === homeId) return false;
-            
-            // 查找该房屋的主人（假设只要有住户，就不是空房）
             const isOccupied = GameStore.sims.some(s => s.homeId === homeId);
-            
-            // 如果房子有人住，且不是我家 -> 禁止入内
             if (isOccupied) return true;
         }
-
         return false;
     },
 
@@ -51,7 +42,8 @@ export const DecisionLogic = {
         }
 
         // 2. 计算各需求评分
-        let scores = [
+        // [修复] 显式定义数组类型，允许 id 为 string，解决类型不兼容报错
+        let scores: { id: string, score: number, type: string }[] = [
             { id: NeedType.Energy, score: (100 - sim.needs.energy) * 3.0, type: 'obj' },
             { id: NeedType.Hunger, score: (100 - sim.needs.hunger) * 2.5, type: 'obj' },
             { id: NeedType.Bladder, score: (100 - sim.needs.bladder) * 2.8, type: 'obj' },
@@ -122,22 +114,19 @@ export const DecisionLogic = {
             else if (choice.id === 'side_hustle') DecisionLogic.findSideHustle(sim);
             else DecisionLogic.findObject(sim, choice.id);
         } else {
-            DecisionLogic.wander(sim);
+            sim.startWandering();
         }
 
         // 学生做作业决策
         if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage) && sim.job.id === 'unemployed') {
-            // 勤奋的学生(J)或者害怕挂科(成绩差)会倾向于做作业
             let studyDesire = 0;
             if (sim.mbti.includes('J')) studyDesire += 40;
-            if ((sim.schoolPerformance || 60) < 60) studyDesire += 50; // 临阵磨枪
+            if ((sim.schoolPerformance || 60) < 60) studyDesire += 50; 
             
-            // 下午/晚上才有做作业的想法
             const hour = GameStore.time.hour;
             if (hour > 16 && hour < 21) studyDesire += 30;
 
             if (studyDesire > 60) {
-                // 寻找课桌
                 DecisionLogic.findObject(sim, sim.ageStage === AgeStage.Teen ? 'study_high' : 'study');
                 return;
             }
@@ -149,8 +138,6 @@ export const DecisionLogic = {
 
         if (sim.skills.logic > 5 || sim.skills.creativity > 5) {
             let pcs = GameStore.furniture.filter(f => f.label.includes('电脑') && (!f.reserved || f.reserved === sim.id));
-            
-            // [新增] 过滤掉别人家里的电脑
             pcs = pcs.filter(f => !DecisionLogic.isRestricted(sim, f));
 
             if (pcs.length > 0) {
@@ -171,7 +158,6 @@ export const DecisionLogic = {
         if (lake) options.push({ type: 'lake', target: lake });
 
         let flowers = GameStore.furnitureIndex.get('gardening') || [];
-        // 过滤私人花园
         flowers = flowers.filter(f => !DecisionLogic.isRestricted(sim, f));
 
         if (flowers.length > 0) options.push({ type: 'garden', target: flowers[Math.floor(Math.random() * flowers.length)] });
@@ -181,26 +167,23 @@ export const DecisionLogic = {
             sim.target = { x: best.target.x + best.target.w / 2, y: best.target.y + best.target.h / 2 };
             sim.interactionTarget = best.target;
             sim.isSideHustle = true; 
+            
+            // [修复] 调用 Sim 方法代替直接实例化 State，切断循环依赖
+            sim.startCommuting();
         } else {
-            DecisionLogic.wander(sim);
+            sim.startWandering();
         }
     },
 
     findObject(sim: Sim, type: string) {
         let utility = type;
-
         const simpleMap: Record<string, string> = {
              [NeedType.Hunger]: 'hunger', 
              [NeedType.Bladder]: 'bladder', 
              [NeedType.Hygiene]: 'hygiene',
              [NeedType.Energy]: 'energy',
-             cooking: 'cooking', 
-             gardening: 'gardening', 
-             fishing: 'fishing',
-             art: 'art', 
-             play: 'play'
+             cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play'
         };
-        
         if (simpleMap[type]) utility = simpleMap[type];
 
         let candidates: Furniture[] = [];
@@ -208,7 +191,6 @@ export const DecisionLogic = {
         if (type === NeedType.Fun) {
             const funTypes = ['fun', 'cinema_2d', 'cinema_3d', 'cinema_imax', 'art', 'play', 'fishing'];
             if (sim.needs.energy < 70) funTypes.push('comfort');
-            
             funTypes.forEach(t => {
                 const list = GameStore.furnitureIndex.get(t);
                 if (list) candidates = candidates.concat(list);
@@ -240,17 +222,11 @@ export const DecisionLogic = {
 
         if (candidates.length) {
             candidates = candidates.filter((f: Furniture)=> {
-                 // 过滤私人领地
                  if (DecisionLogic.isRestricted(sim, f)) return false;
-
-                 // [修改] 关键逻辑：如果是食物或生存必需品，且没钱，过滤掉收费项目
                  if (type === NeedType.Hunger && sim.money < 20) {
-                     // 如果这东西要钱（cost > 0），就别去了
                      if (f.cost && f.cost > 0) return false;
-                     // 还要过滤掉那种 utility 是 buy_food 的（通常隐含收费）
                      if (f.utility === 'buy_food' || f.utility === 'buy_drink') return false;
                  }
-
                  if (f.cost && f.cost > sim.money) return false;
                  if (f.reserved && f.reserved !== sim.id) return false;
                  if (!f.multiUser) {
@@ -268,29 +244,27 @@ export const DecisionLogic = {
                 });
 
                 let poolSize = 3;
-                if (type === NeedType.Fun || type === 'play' || type === 'art') {
-                    poolSize = 10; 
-                } else if (type === NeedType.Hunger) {
-                    poolSize = 5;  
-                }
+                if (type === NeedType.Fun || type === 'play' || type === 'art') poolSize = 10; 
+                else if (type === NeedType.Hunger) poolSize = 5;  
                 
                 let obj = candidates[Math.floor(Math.random() * Math.min(candidates.length, poolSize))];
                 
                 sim.target = { x: obj.x + obj.w / 2, y: obj.y + obj.h / 2 };
                 sim.interactionTarget = obj;
+                
+                // [修复] 调用 Sim 方法
+                sim.startCommuting();
                 return;
             } else {
                 sim.say("没钱/没位置...", 'bad');
             }
         }
-        DecisionLogic.wander(sim);
+        sim.startWandering();
     },
 
     findHuman(sim: Sim) {
         let others = GameStore.sims.filter(s => s.id !== sim.id && s.action !== SimAction.Sleeping && s.action !== SimAction.Working);
-        
         others.sort(() => Math.random() - 0.5);
-
         others.sort((a, b) => {
             let relA = (sim.relationships[a.id]?.friendship || 0);
             let relB = (sim.relationships[b.id]?.friendship || 0);
@@ -300,15 +274,12 @@ export const DecisionLogic = {
         if (others.length) {
             const bestRel = sim.relationships[others[0].id]?.friendship || 0;
             let poolSize = bestRel < 20 ? 10 : 3;
-            
             poolSize = Math.min(others.length, poolSize);
 
             let partner = others[Math.floor(Math.random() * poolSize)];
             
-            // [新增] 检查目标是否在私人领地内 (如果我不能进他家，就不能去找他)
             if (DecisionLogic.isRestricted(sim, partner.pos)) {
-                // 尝试找下一个
-                DecisionLogic.wander(sim);
+                sim.startWandering();
                 return;
             }
 
@@ -321,33 +292,11 @@ export const DecisionLogic = {
             };
             
             sim.interactionTarget = { type: 'human', ref: partner };
-        } else {
-            DecisionLogic.wander(sim);
-        }
-    },
-
-    wander(sim: Sim) {
-        let minX = 50, maxX = CONFIG.CANVAS_W - 100;
-        let minY = 100, maxY = CONFIG.CANVAS_H - 100;
-        
-        // 尝试寻找一个可达的目标点 (最多尝试5次)
-        for (let i = 0; i < 5; i++) {
-            let tx = minX + Math.random() * (maxX - minX);
-            let ty = minY + Math.random() * (maxY - minY);
             
-            // [新增] 检查该点是否在受限区域
-            if (!DecisionLogic.isRestricted(sim, { x: tx, y: ty })) {
-                sim.target = { x: tx, y: ty };
-                break;
-            }
+            // [修复] 调用 Sim 方法
+            sim.startCommuting();
+        } else {
+            sim.startWandering();
         }
-        
-        // 如果都没找到（极少情况），就待在原地发呆
-        if (!sim.target) {
-            sim.target = { ...sim.pos };
-        }
-
-        sim.action = SimAction.Wandering;
-        sim.actionTimer = minutes(0);
     }
 };
