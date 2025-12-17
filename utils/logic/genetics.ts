@@ -1,14 +1,91 @@
 import { Sim } from '../Sim';
-import { CONFIG, SURNAMES } from '../../constants';
+import { CONFIG, SURNAMES, MBTI_TYPES } from '../../constants';
 import { SocialLogic } from './social';
+import { mixTrait, mixMBTI } from './LifeCycleLogic'; // 复用生命周期中的遗传辅助函数
 import { HousingUnit, AgeStage } from '../../types';
 
 // 定义一个包含绝对坐标的类型，与 GameStore.housingUnits 保持一致
 type HousingUnitWithPos = HousingUnit & { x: number; y: number };
 
+type FamilyType = 'Standard' | 'MultiGenerational' | 'SingleParent' | 'DINK';
+
 // 生成家庭的逻辑
 export const FamilyGenerator = {
-    // 参数类型改为 HousingUnitWithPos[]
+    /**
+     * 动态年龄逻辑：根据父母的年龄阶段决定孩子的年龄阶段
+     */
+    determineChildStage(parentStage: AgeStage): AgeStage {
+        const r = Math.random();
+        
+        if (parentStage === AgeStage.Adult) {
+            // 成年父母：主要是婴幼儿
+            return r > 0.5 ? AgeStage.Infant : AgeStage.Toddler;
+        }
+        
+        if (parentStage === AgeStage.MiddleAged) {
+            // 中年父母：主要是儿童或青少年
+            return r > 0.6 ? AgeStage.Child : AgeStage.Teen;
+        }
+        
+        if (parentStage === AgeStage.Elder) {
+            // 老年父母：
+            // 5% 概率“老来得子” (模拟领养或晚育)
+            if (r < 0.05) return r < 0.5 ? AgeStage.Infant : AgeStage.Toddler;
+            // 主要是成年子女或青少年
+            return r > 0.6 ? AgeStage.Adult : AgeStage.Teen;
+        }
+
+        // 默认 fallback (如果是青少年父母等极端情况)
+        return AgeStage.Infant;
+    },
+
+    /**
+     * 辅助函数：生成 Sim 的配置对象，包含遗传逻辑
+     */
+    generateSimConfig(
+        x: number, 
+        y: number, 
+        surname: string, 
+        familyId: string, 
+        ageStage: AgeStage, 
+        homeId: string | null,
+        baseMoney: number,
+        parents: Sim[] = []
+    ): any {
+        const config: any = {
+            x, y, surname, familyId, ageStage, homeId, money: baseMoney
+        };
+
+        // 性别随机
+        config.gender = Math.random() > 0.5 ? 'M' : 'F';
+
+        // === 🧬 遗传机制 (Genetics) ===
+        if (parents.length > 0) {
+            const p1 = parents[0];
+            const p2 = parents.length > 1 ? parents[1] : p1; // 如果是单亲，则只有 p1
+
+            // 1. 外观遗传 (Visuals)
+            // 肤色和发色大概率继承自父母一方
+            config.skinColor = Math.random() > 0.5 ? p1.skinColor : (p2 ? p2.skinColor : p1.skinColor);
+            config.hairColor = Math.random() > 0.5 ? p1.hairColor : (p2 ? p2.hairColor : p1.hairColor);
+            
+            // 2. 属性遗传 (Attributes) - 使用 mixTrait 混合
+            // 在 Sim 构造函数中，如果传入了这些属性，会覆盖默认随机值
+            config.iq = mixTrait(p1.iq, p2.iq);
+            config.eq = mixTrait(p1.eq, p2.eq);
+            config.constitution = mixTrait(p1.constitution, p2.constitution);
+            config.appearanceScore = mixTrait(p1.appearanceScore, p2.appearanceScore);
+            
+            // 3. 性格遗传 (MBTI)
+            config.mbti = mixMBTI(p1.mbti, p2.mbti);
+        } else {
+            // 无父母（初代生成），Sim 类构造函数会处理默认随机值
+            // 但我们可以为了多样性在这里预设一些
+        }
+
+        return config;
+    },
+
     generate(count: number, housingUnits: HousingUnitWithPos[], allSims: Sim[]): Sim[] {
         const familyId = Math.random().toString(36).substring(2, 8);
         const r = Math.random();
@@ -16,9 +93,9 @@ export const FamilyGenerator = {
         let baseMoney = 0;
 
         // 1. 决定阶级 & 家庭总资金
-        if (r < 0.15) { wealthClass = 'rich'; baseMoney = 10000 + Math.floor(Math.random() * 20000); } 
-        else if (r < 0.8) { wealthClass = 'middle'; baseMoney = 2500 + Math.floor(Math.random() * 6500); } 
-        else { wealthClass = 'poor'; baseMoney = 1000 + Math.floor(Math.random() * 500); }
+        if (r < 0.15) { wealthClass = 'rich'; baseMoney = 20000 + Math.floor(Math.random() * 30000); } 
+        else if (r < 0.7) { wealthClass = 'middle'; baseMoney = 5000 + Math.floor(Math.random() * 10000); } 
+        else { wealthClass = 'poor'; baseMoney = 1000 + Math.floor(Math.random() * 2000); }
 
         // 2. 寻找合适的住所
         let targetHomeTypes: string[] = wealthClass === 'rich' ? ['villa', 'apartment'] : (wealthClass === 'middle' ? ['apartment', 'public_housing'] : ['public_housing']); 
@@ -28,7 +105,6 @@ export const FamilyGenerator = {
             return targetHomeTypes.includes(unit.type) && (occupants + count <= unit.capacity);
         });
 
-        // 住所优先级排序
         availableHomes.sort((a, b) => targetHomeTypes.indexOf(a.type) - targetHomeTypes.indexOf(b.type));
 
         let homeId: string | null = null;
@@ -40,89 +116,183 @@ export const FamilyGenerator = {
             const bestHomes = availableHomes.filter(h => h.type === bestType);
             const home = bestHomes[Math.floor(Math.random() * bestHomes.length)];
             homeId = home.id;
-            // 现在 home 被识别为 HousingUnitWithPos，包含 x 和 y 属性
             homeX = home.x + home.area.w / 2;
             homeY = home.y + home.area.h / 2;
         }
 
-        const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
+        // 3. 决定家庭类型 (FamilyType)
+        let familyType: FamilyType = 'Standard';
+        const rType = Math.random();
+
+        if (count === 2 && rType < 0.2) familyType = 'DINK'; // 2人时有概率丁克
+        else if (count >= 3 && rType < 0.2) familyType = 'MultiGenerational'; // 3人以上概率三代同堂
+        else if (rType < 0.3) familyType = 'SingleParent'; // 单亲家庭概率
+        // 默认为 Standard
+
+        // 根据类型调整人数约束
+        if (familyType === 'DINK') count = 2;
+        if (familyType === 'MultiGenerational' && count < 3) count = 3; // 至少要3人才能三代
+
         const members: Sim[] = [];
+        const familySurname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
         
-        // 3. 生成父母 (Parents)
-        const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
-        const isSameSex = parentCount === 2 && Math.random() < 0.1; 
-        
-        // [修改] 资金均分：确保所有成年人手里都有钱
-        const moneyPerAdult = Math.floor(baseMoney / parentCount);
+        // 辅助：根据人数计算每个成年人的初始资金
+        const adultCount = familyType === 'DINK' ? 2 : (familyType === 'SingleParent' ? 1 : 2);
+        const moneyPerAdult = Math.floor(baseMoney / Math.max(1, adultCount));
 
-        // [修改] 年龄不设限：父母可以是成年、中年或老年
-        const adultStages = [AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Elder];
-        const getRandomParentStage = () => adultStages[Math.floor(Math.random() * adultStages.length)];
+        // === 生成逻辑分支 ===
 
-        const p1Gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
-        let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
-        if (isSameSex) p2Gender = p1Gender;
-
-        const p1Surname = getSurname();
-        const parent1 = new Sim({ 
-            x: homeX, 
-            y: homeY, 
-            surname: p1Surname, 
-            familyId, 
-            ageStage: getRandomParentStage(), // [修改] 随机年龄段
-            gender: p1Gender, 
-            homeId, 
-            money: moneyPerAdult // [修改] 分配资金
-        });
-        members.push(parent1);
-
-        let parent2: Sim | null = null;
-        if (parentCount === 2) {
-            const p2Surname = getSurname(); 
-            parent2 = new Sim({ 
-                x: homeX + 10, 
-                y: homeY + 10, 
-                surname: p2Surname, 
-                familyId, 
-                ageStage: getRandomParentStage(), // [修改] 随机年龄段
-                gender: p2Gender, 
-                homeId, 
-                money: moneyPerAdult // [修改] 分配资金
-            });
-            members.push(parent2);
-            SocialLogic.marry(parent1, parent2, true); 
-        }
-
-        // 4. 生成孩子
-        const childCount = count - parentCount;
-        for (let i = 0; i < childCount; i++) {
-            const r2 = Math.random();
-            const ageStage = r2 > 0.6 ? AgeStage.Child : (r2 > 0.3 ? AgeStage.Teen : AgeStage.Toddler);
-            let childSurname = p1Surname;
-            if (parent2 && Math.random() > 0.5) childSurname = parent2.surname;
+        if (familyType === 'MultiGenerational') {
+            // 三代同堂：祖父母(1-2) -> 父母(1-2) -> 孙辈
+            const grandParentCount = Math.random() > 0.5 ? 2 : 1;
+            const grandParents: Sim[] = [];
             
-            const child = new Sim({ 
-                x: homeX + (i+1)*15, y: homeY + 15, surname: childSurname, familyId, ageStage, homeId, 
-                fatherId: p1Gender === 'M' ? parent1.id : (parent2 && p2Gender === 'M' ? parent2.id : undefined),
-                motherId: p1Gender === 'F' ? parent1.id : (parent2 && p2Gender === 'F' ? parent2.id : undefined),
-                money: 0
-            });
+            // 1. 生成祖父母 (Elder)
+            for (let i = 0; i < grandParentCount; i++) {
+                const gp = new Sim(FamilyGenerator.generateSimConfig(
+                    homeX + i * 20, homeY, familySurname, familyId, AgeStage.Elder, homeId, moneyPerAdult
+                ));
+                grandParents.push(gp);
+                members.push(gp);
+            }
+            if (grandParents.length === 2) SocialLogic.marry(grandParents[0], grandParents[1], true);
+
+            // 2. 生成父母 (Middle/Adult) - 是祖父母的孩子
+            const parentCount = Math.min(2, Math.max(1, count - grandParentCount - 1)); // 留至少1个位置给孙辈
+            const parents: Sim[] = [];
             
-            // 建立亲属关系
-            members.forEach(p => {
-                // [修改] 只要不是未成年人，就被视为长辈/监护人建立亲子关系
-                if (![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen].includes(p.ageStage)) {
-                    SocialLogic.setKinship(p, child, 'child'); 
-                    SocialLogic.setKinship(child, p, 'parent'); 
+            for (let i = 0; i < parentCount; i++) {
+                // 父母的年龄段
+                const pStage = Math.random() > 0.5 ? AgeStage.MiddleAged : AgeStage.Adult;
+                // 继承祖父母基因
+                const config = FamilyGenerator.generateSimConfig(
+                    homeX + 40 + i * 20, homeY + 20, familySurname, familyId, pStage, homeId, moneyPerAdult, grandParents
+                );
+                
+                const parent = new Sim(config);
+                parents.push(parent);
+                members.push(parent);
+
+                // 建立祖父母 -> 父母 亲属关系
+                grandParents.forEach(gp => {
+                    SocialLogic.setKinship(gp, parent, 'child');
+                    SocialLogic.setKinship(parent, gp, 'parent');
+                    gp.childrenIds.push(parent.id);
+                });
+            }
+            if (parents.length === 2) SocialLogic.marry(parents[0], parents[1], true);
+
+            // 3. 生成孙辈 (Children)
+            const childCount = Math.max(1, count - grandParentCount - parentCount);
+            for (let i = 0; i < childCount; i++) {
+                // 根据父母年龄决定孩子年龄
+                const childStage = FamilyGenerator.determineChildStage(parents[0].ageStage);
+                
+                // 继承父母基因
+                const config = FamilyGenerator.generateSimConfig(
+                    homeX + i * 20, homeY + 40, familySurname, familyId, childStage, homeId, 0, parents
+                );
+                // 修正：如果孙辈是继承父母，有概率随父母姓（这里已经是 familySurname 了）
+                
+                const child = new Sim(config);
+                members.push(child);
+
+                // 建立 父母 -> 孩子 关系
+                parents.forEach(p => {
+                    SocialLogic.setKinship(p, child, 'child');
+                    SocialLogic.setKinship(child, p, 'parent');
                     p.childrenIds.push(child.id);
-                } else {
-                    // 如果父母生成得太年轻（比如极端情况下修改逻辑导致），或者兄弟姐妹之间
-                    SocialLogic.setKinship(p, child, 'sibling'); 
-                    SocialLogic.setKinship(child, p, 'sibling');
+                });
+                
+                // 建立 祖父母 -> 孙子 关系 (简化为 none 或自定义 grandparent，目前 types 里只有 parent/child/sibling/spouse)
+                // 暂不显式设定隔代 kinship 字段，依靠逻辑推断或暂无特殊标识
+            }
+
+        } else if (familyType === 'DINK') {
+            // 丁克：两位伴侣，无子女
+            const p1 = new Sim(FamilyGenerator.generateSimConfig(homeX, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult));
+            const p2 = new Sim(FamilyGenerator.generateSimConfig(homeX + 20, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult));
+            
+            // 确保异性或同性伴侣
+            if (Math.random() > 0.3) p2.gender = p1.gender === 'M' ? 'F' : 'M';
+            
+            SocialLogic.marry(p1, p2, true);
+            members.push(p1, p2);
+
+        } else {
+            // Standard (标准) 或 SingleParent (单亲)
+            const isSingle = familyType === 'SingleParent';
+            const parentCount = isSingle ? 1 : 2;
+            const parents: Sim[] = [];
+
+            // 1. 生成父母
+            for (let i = 0; i < parentCount; i++) {
+                // 父母年龄可以是 Adult 或 MiddleAged
+                const pStage = Math.random() > 0.3 ? AgeStage.Adult : AgeStage.MiddleAged;
+                const config = FamilyGenerator.generateSimConfig(
+                    homeX + i * 20, homeY, familySurname, familyId, pStage, homeId, moneyPerAdult
+                );
+                // 强制第二位异性 (如果是标准家庭)
+                if (i === 1 && parents.length > 0) {
+                    config.gender = parents[0].gender === 'M' ? 'F' : 'M';
                 }
-            });
-            members.push(child);
+                
+                const p = new Sim(config);
+                parents.push(p);
+                members.push(p);
+            }
+
+            if (parentCount === 2) SocialLogic.marry(parents[0], parents[1], true);
+
+            // 2. 生成子女
+            const childCount = Math.max(1, count - parentCount);
+            // 基于父母年龄决定孩子基准年龄
+            const baseParentStage = parents[0].ageStage;
+
+            for (let i = 0; i < childCount; i++) {
+                const childStage = FamilyGenerator.determineChildStage(baseParentStage);
+                
+                const config = FamilyGenerator.generateSimConfig(
+                    homeX + i * 20, homeY + 30, familySurname, familyId, childStage, homeId, 0, parents
+                );
+                
+                const child = new Sim(config);
+                
+                // 补充父母ID字段
+                if (parents.length > 0) {
+                    const father = parents.find(p => p.gender === 'M');
+                    const mother = parents.find(p => p.gender === 'F');
+                    if (father) child.fatherId = father.id;
+                    if (mother) child.motherId = mother.id;
+                }
+
+                members.push(child);
+
+                // 建立关系
+                parents.forEach(p => {
+                    SocialLogic.setKinship(p, child, 'child');
+                    SocialLogic.setKinship(child, p, 'parent');
+                    p.childrenIds.push(child.id);
+                });
+            }
         }
+
+        // 处理兄弟姐妹关系 (所有同辈孩子之间)
+        // 简单处理：同一个 familyId 下，且 kinship 都是 child 的
+        // 这里简化逻辑：遍历 members 数组，找到所有是孩子的
+        const children = members.filter(m => 
+            [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult].includes(m.ageStage) &&
+            members.some(parent => parent.childrenIds.includes(m.id))
+        );
+
+        for (let i = 0; i < children.length; i++) {
+            for (let j = i + 1; j < children.length; j++) {
+                SocialLogic.setKinship(children[i], children[j], 'sibling');
+                SocialLogic.setKinship(children[j], children[i], 'sibling');
+            }
+        }
+
+        console.log(`[Genetics] Generated family (${familyType}): ${members.length} members.`);
         return members;
     }
 };
