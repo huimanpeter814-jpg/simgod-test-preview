@@ -17,6 +17,8 @@ const PALETTE = {
     // 科技感
     tech_blue: '#0984e3',
     tech_glow: '#81ecec',
+    road_gray: '#3d404b',
+    road_line: 'rgba(255,255,255,0.4)'
 };
 
 // 辅助工具：快速生成行列，但这次我们会更灵活地使用
@@ -85,41 +87,42 @@ const PLOT_DORM: PlotTemplate = {
 // ==========================================
 const PLOT_APARTMENT: PlotTemplate = {
     id: 'apartment_template',
-    width: 400,
-    height: 400,
-    type: 'residential',
+    width: 400, height: 400, type: 'residential',
     housingUnits: [
-        { id: 'apt_101', name: '101室', capacity: 2, cost: 1200, type: 'apartment', area: { x: 10, y: 10, w: 180, h: 180 } },
-        { id: 'apt_102', name: '102室', capacity: 2, cost: 1200, type: 'apartment', area: { x: 210, y: 10, w: 180, h: 180 } },
-        { id: 'apt_201', name: '201室', capacity: 2, cost: 1200, type: 'apartment', area: { x: 10, y: 210, w: 180, h: 180 } },
-        { id: 'apt_202', name: '202室', capacity: 2, cost: 1200, type: 'apartment', area: { x: 210, y: 210, w: 180, h: 180 } },
+        { id: 'u1', name: '101', capacity: 2, cost: 1200, type: 'apartment', area: { x: 10, y: 10, w: 180, h: 180 } },
+        { id: 'u2', name: '102', capacity: 2, cost: 1200, type: 'apartment', area: { x: 210, y: 10, w: 180, h: 180 } },
+        { id: 'u3', name: '201', capacity: 2, cost: 1200, type: 'apartment', area: { x: 10, y: 210, w: 180, h: 180 } },
+        { id: 'u4', name: '202', capacity: 2, cost: 1200, type: 'apartment', area: { x: 210, y: 210, w: 180, h: 180 } },
     ],
     rooms: [
-        { id: 'apt_g', x: 0, y: 0, w: 400, h: 400, label: '', color: '#b2bec3', pixelPattern: 'concrete' },
-        // 十字走廊分割
-        { id: 'room_101', x: 10, y: 10, w: 180, h: 180, label: '101', color: '#fff', pixelPattern: 'wood' },
-        { id: 'room_102', x: 210, y: 10, w: 180, h: 180, label: '102', color: '#fff', pixelPattern: 'wood' },
-        { id: 'room_201', x: 10, y: 210, w: 180, h: 180, label: '201', color: '#fff', pixelPattern: 'wood' },
-        { id: 'room_202', x: 210, y: 210, w: 180, h: 180, label: '202', color: '#fff', pixelPattern: 'wood' },
+        { id: 'base', x: 0, y: 0, w: 400, h: 400, label: '', color: '#b2bec3', pixelPattern: 'concrete' },
+        { id: 'r1', x: 10, y: 10, w: 180, h: 180, label: '101', color: '#fff', pixelPattern: 'wood' },
+        { id: 'r2', x: 210, y: 10, w: 180, h: 180, label: '102', color: '#fff', pixelPattern: 'wood' },
+        { id: 'r3', x: 10, y: 210, w: 180, h: 180, label: '201', color: '#fff', pixelPattern: 'wood' },
+        { id: 'r4', x: 210, y: 210, w: 180, h: 180, label: '202', color: '#fff', pixelPattern: 'wood' },
     ],
     furniture: [
-        // 101 & 102 (镜像布局)
-        { id: 'bed_101', x: 20, y: 20, w: 60, h: 80, color: '#ff7675', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
-        { id: 'sofa_101', x: 100, y: 20, w: 60, h: 30, color: '#74b9ff', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_pixel' },
-        { id: 'kitchen_101', x: 20, y: 140, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
+        // 101 - 标准户型
+        { id: 'bed_1', x: 20, y: 20, w: 60, h: 80, color: '#ff7675', label: '床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        { id: 'rug_1', x: 90, y: 30, w: 60, h: 40, color: '#ffeaa7', label: '地毯', utility: 'none', pixelPattern: 'rug_simple' },
+        { id: 'sofa_1', x: 100, y: 35, w: 40, h: 30, color: '#74b9ff', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_pixel' },
+        { id: 'kit_1', x: 20, y: 140, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
         
-        { id: 'bed_102', x: 320, y: 20, w: 60, h: 80, color: '#ff7675', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
-        { id: 'sofa_102', x: 240, y: 20, w: 60, h: 30, color: '#74b9ff', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_pixel' },
-        { id: 'kitchen_102', x: 320, y: 140, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
+        // 102 - 极客户型
+        { id: 'bed_2', x: 320, y: 20, w: 60, h: 80, color: '#a29bfe', label: '床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        { id: 'pc_2', x: 220, y: 30, w: 50, h: 30, color: '#3742fa', label: '电竞桌', utility: 'play', pixelPattern: 'pc_pixel' },
+        { id: 'kit_2', x: 320, y: 140, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
 
-        // 201 & 202 (带书房风格)
-        { id: 'bed_201', x: 20, y: 220, w: 60, h: 80, color: '#a29bfe', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
-        { id: 'pc_201', x: 100, y: 220, w: 40, h: 30, color: '#3742fa', label: '电脑桌', utility: 'play', pixelPattern: 'pc_pixel' },
-        { id: 'toilet_201', x: 140, y: 350, w: 30, h: 30, color: '#fff', label: '马桶', utility: 'bladder', pixelPattern: 'toilet' },
+        // 201 - 植物户型
+        { id: 'bed_3', x: 20, y: 220, w: 60, h: 80, color: '#55efc4', label: '床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        { id: 'p_3a', x: 100, y: 220, w: 20, h: 20, color: PALETTE.plant_green, label: '绿植', utility: 'none', pixelPattern: 'plant_pixel' },
+        { id: 'p_3b', x: 120, y: 240, w: 20, h: 20, color: PALETTE.plant_green, label: '绿植', utility: 'none', pixelPattern: 'plant_pixel' },
+        { id: 'kit_3', x: 20, y: 340, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
 
-        { id: 'bed_202', x: 320, y: 220, w: 60, h: 80, color: '#a29bfe', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
-        { id: 'pc_202', x: 260, y: 220, w: 40, h: 30, color: '#3742fa', label: '电脑桌', utility: 'play', pixelPattern: 'pc_pixel' },
-        { id: 'toilet_202', x: 230, y: 350, w: 30, h: 30, color: '#fff', label: '马桶', utility: 'bladder', pixelPattern: 'toilet' },
+        // 202 - 读书户型
+        { id: 'bed_4', x: 320, y: 220, w: 60, h: 80, color: '#fab1a0', label: '床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        { id: 'book_4', x: 220, y: 220, w: 40, h: 60, color: '#e17055', label: '书柜', utility: 'buy_book', pixelPattern: 'bookshelf_simple' },
+        { id: 'kit_4', x: 320, y: 340, w: 60, h: 30, color: '#b2bec3', label: '厨房', utility: 'cook', pixelPattern: 'kitchen' },
     ]
 };
 
@@ -129,37 +132,38 @@ const PLOT_APARTMENT: PlotTemplate = {
 // ==========================================
 const PLOT_VILLA: PlotTemplate = {
     id: 'villa_template',
-    width: 400,
-    height: 400,
+    width: 450, //稍微加宽
+    height: 450,
     type: 'residential',
     housingUnits: [
-        { id: 'unit_villa', name: '湖畔豪宅', capacity: 4, cost: 5000, type: 'villa', area: { x: 10, y: 10, w: 380, h: 380 } }
+        { id: 'unit_villa', name: '湖畔豪宅', capacity: 4, cost: 5000, type: 'villa', area: { x: 20, y: 20, w: 410, h: 410 } }
     ],
     rooms: [
-        { id: 'villa_lawn', x: 0, y: 0, w: 400, h: 400, label: '', color: PALETTE.plant_green, pixelPattern: 'grass_dense' },
-        { id: 'villa_pool', x: 260, y: 30, w: 120, h: 180, label: '无边泳池', color: '#5a8fff', pixelPattern: 'water' },
-        { id: 'villa_main', x: 30, y: 30, w: 220, h: 340, label: '主楼', color: '#fff', pixelPattern: 'pave_fancy' },
-        { id: 'villa_bedroom', x: 30, y: 200, w: 220, h: 170, label: '休憩区', color: '#f5f6fa', pixelPattern: 'carpet' },
+        { id: 'villa_lawn', x: 0, y: 0, w: 450, h: 450, label: '', color: PALETTE.plant_green, pixelPattern: 'grass_dense' },
+        { id: 'villa_pool', x: 280, y: 50, w: 140, h: 200, label: '私家泳池', color: '#5a8fff', pixelPattern: 'water' },
+        { id: 'villa_deck', x: 260, y: 50, w: 20, h: 200, label: '', color: '#d4a373', pixelPattern: 'wood' }, // 泳池甲板
+        { id: 'villa_main', x: 40, y: 40, w: 220, h: 360, label: '主楼', color: '#fff', pixelPattern: 'pave_fancy' },
+        { id: 'villa_carpet', x: 60, y: 220, w: 180, h: 160, label: '卧室区', color: '#f5f6fa', pixelPattern: 'carpet' },
     ],
     furniture: [
-        // 客厅区：钢琴 + 巨型沙发
-        { id: 'piano', x: 50, y: 50, w: 60, h: 80, color: '#2d3436', label: '三角钢琴', utility: 'play', pixelPattern: 'piano' },
-        { id: 'rug_main', x: 130, y: 60, w: 100, h: 60, color: '#a29bfe', label: '波斯地毯', utility: 'none', pixelPattern: 'rug_persian' },
-        { id: 'sofa_l', x: 120, y: 60, w: 30, h: 80, color: '#fff', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_vip' },
-        { id: 'tv_unit', x: 220, y: 70, w: 10, h: 60, color: '#2d3436', label: '电视墙', utility: 'play', pixelPattern: 'tv_wall' },
-
-        // 卧室区：两张King Size Bed
-        { id: 'bed_master', x: 50, y: 220, w: 80, h: 100, color: '#ff7675', label: '主卧大床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
-        { id: 'bed_guest', x: 150, y: 220, w: 80, h: 100, color: '#fab1a0', label: '次卧大床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        // 客厅：三角钢琴 + 艺术区
+        { id: 'piano', x: 60, y: 60, w: 70, h: 90, color: '#2d3436', label: '施坦威', utility: 'play', pixelPattern: 'piano' },
+        { id: 'art_statue', x: 180, y: 60, w: 40, h: 40, color: '#fff', label: '雕塑', utility: 'art', pixelPattern: 'statue' },
+        { id: 'sofa_set', x: 100, y: 160, w: 100, h: 40, color: '#74b9ff', label: '真皮沙发', utility: 'comfort', pixelPattern: 'sofa_vip', multiUser: true },
         
-        // 浴室：大浴缸
-        { id: 'bathtub', x: 180, y: 330, w: 60, h: 30, color: '#fff', label: '按摩浴缸', utility: 'hygiene', pixelPattern: 'bath_tub' },
+        // 卧室：更加温馨
+        { id: 'bed_master', x: 70, y: 240, w: 80, h: 100, color: '#ff7675', label: 'King Bed', utility: 'energy', pixelPattern: 'bed_king', multiUser: true },
+        { id: 'vanity', x: 180, y: 240, w: 50, h: 30, color: '#fab1a0', label: '梳妆台', utility: 'none', pixelPattern: 'desk_simple' },
+        
+        // 卫浴
+        { id: 'jacuzzi', x: 160, y: 340, w: 80, h: 40, color: '#fff', label: '按摩浴缸', utility: 'hygiene', pixelPattern: 'bath_tub' },
 
-        // 户外：泳池躺椅 & 花园
-        { id: 'pool_chair_1', x: 270, y: 230, w: 20, h: 40, color: '#fff', label: '躺椅', utility: 'comfort', pixelPattern: 'bench_park' },
-        { id: 'pool_chair_2', x: 300, y: 230, w: 20, h: 40, color: '#fff', label: '躺椅', utility: 'comfort', pixelPattern: 'bench_park' },
-        { id: 'flower_1', x: 300, y: 300, w: 40, h: 40, color: '#ff6b81', label: '玫瑰', utility: 'gardening', pixelPattern: 'flower_rose' },
-        { id: 'flower_2', x: 350, y: 300, w: 40, h: 40, color: '#ff6b81', label: '玫瑰', utility: 'gardening', pixelPattern: 'flower_rose' },
+        // 户外：花园小径与休憩
+        { id: 'path_1', x: 150, y: 410, w: 40, h: 40, color: '#b2bec3', label: '', utility: 'none', pixelPattern: 'stone_path' },
+        { id: 'garden_table', x: 300, y: 300, w: 60, h: 60, color: '#fff', label: '下午茶', utility: 'eat_out', pixelPattern: 'table_round' },
+        { id: 'umbrella', x: 310, y: 310, w: 40, h: 40, color: '#ff7675', label: '遮阳伞', utility: 'none' },
+        { id: 'bush_1', x: 20, y: 410, w: 30, h: 30, color: '#27ae60', label: '灌木', utility: 'none', pixelPattern: 'bush' },
+        { id: 'bush_2', x: 400, y: 410, w: 30, h: 30, color: '#27ae60', label: '灌木', utility: 'none', pixelPattern: 'bush' },
     ]
 };
 
@@ -168,38 +172,21 @@ const PLOT_VILLA: PlotTemplate = {
 // 设计理念：岛式工位布局，中心化服务器，大量绿植
 // ==========================================
 const PLOT_TECH: PlotTemplate = {
-    id: 'tech_template',
-    width: 500,
-    height: 400,
-    type: 'work',
+    id: 'tech_template', width: 500, height: 400, type: 'work',
     rooms: [
-        { id: 'tech_floor', x: 0, y: 0, w: 500, h: 400, label: '科技园', color: '#ecf0f1', pixelPattern: 'grid' },
-        { id: 'tech_server_room', x: 20, y: 20, w: 100, h: 360, label: '机房', color: '#2c3e50', pixelPattern: 'stripes' },
-        { id: 'tech_work_area', x: 140, y: 20, w: 340, h: 360, label: '办公区', color: '#fff', pixelPattern: 'tile' },
+        { id: 'floor', x: 0, y: 0, w: 500, h: 400, label: '', color: '#ecf0f1', pixelPattern: 'grid' },
+        { id: 'server_r', x: 20, y: 20, w: 100, h: 360, label: '机房', color: '#2c3e50', pixelPattern: 'stripes' },
+        { id: 'work_r', x: 140, y: 20, w: 340, h: 360, label: '办公区', color: '#fff', pixelPattern: 'tile' },
     ],
     furniture: [
-        // 机房：服务器列阵
-        ...createRow('server', 40, 40, 4, 0, 80, { w: 60, h: 40, color: '#00cec9', label: '服务器', utility: 'work', pixelPattern: 'server', pixelGlow: true }),
-        
-        // 办公区：岛式工位 (4人一组) - 24工位 total
-        // 第一组岛 (左上)
-        ...createRow('desk_isle1_a', 160, 50, 3, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        ...createRow('desk_isle1_b', 160, 80, 3, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        // 第二组岛 (左下)
-        ...createRow('desk_isle2_a', 160, 200, 3, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        ...createRow('desk_isle2_b', 160, 230, 3, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        // 第三组岛 (右侧竖排)
-        ...createRow('desk_isle3_a', 350, 50, 2, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        ...createRow('desk_isle3_b', 350, 80, 2, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        ...createRow('desk_isle4_a', 350, 200, 2, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-        ...createRow('desk_isle4_b', 350, 230, 2, 50, 0, { w: 40, h: 30, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel' }),
-
-        // 休闲区
-        { id: 'coffee_tech', x: 420, y: 320, w: 40, h: 40, color: '#fab1a0', label: '咖啡角', utility: 'drink', pixelPattern: 'coffee_corner' },
-        { id: 'beanbag', x: 360, y: 320, w: 40, h: 40, color: '#ff7675', label: '懒人沙发', utility: 'comfort', pixelPattern: 'beanbag' },
-        
-        // 老板位
-        { id: 'cto_desk', x: 400, y: 140, w: 60, h: 40, color: '#2d3436', label: 'CTO工位', utility: 'work', pixelPattern: 'desk_wood' },
+        ...createRow('server', 40, 40, 4, 0, 80, { w: 60, h: 40, color: '#00cec9', label: 'Server', utility: 'work', pixelPattern: 'server', pixelGlow: true }),
+        // 前台接待
+        { id: 'reception', x: 280, y: 320, w: 120, h: 40, color: '#dfe6e9', label: '前台', utility: 'work', pixelPattern: 'reception' },
+        // 办公组
+        ...createGrid('desk_g1', 160, 50, 2, 4, 60, 50, { w: 40, h: 30, color: '#dfe6e9', label: 'Dev', utility: 'work', pixelPattern: 'desk_pixel' }),
+        ...createGrid('desk_g2', 350, 50, 2, 4, 60, 50, { w: 40, h: 30, color: '#dfe6e9', label: 'Ops', utility: 'work', pixelPattern: 'desk_pixel' }),
+        // 休息区
+        { id: 'coffee', x: 420, y: 320, w: 40, h: 40, color: '#fab1a0', label: '咖啡', utility: 'drink', pixelPattern: 'coffee_corner' },
     ]
 };
 
