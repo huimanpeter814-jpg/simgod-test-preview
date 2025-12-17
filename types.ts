@@ -274,6 +274,9 @@ export interface SimData {
   
   // === 🆕 新增性格特质 ===
   traits: string[];
+  
+  // === 🆕 新增家庭背景故事 ===
+  familyLore?: string;
 
   age: number;
   ageStage: AgeStage; // Use Enum

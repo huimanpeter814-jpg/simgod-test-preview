@@ -36,6 +36,7 @@ interface SimInitConfig {
     homeId?: string | null;
     money?: number; 
     traits?: string[]; // 🆕 允许传入性格
+    familyLore?: string; // 🆕 允许传入家庭背景
 }
 
 export class Sim {
@@ -65,6 +66,9 @@ export class Sim {
     
     // === 🆕 性格特质 ===
     traits: string[];
+    
+    // === 🆕 家庭背景 ===
+    familyLore?: string;
 
     age: number;
     ageStage: AgeStage; 
@@ -199,7 +203,10 @@ export class Sim {
         this.zodiac = ZODIACS[Math.floor(Math.random() * ZODIACS.length)];
         
         // === 🆕 初始化性格特质 ===
-        this.traits = config.traits || []; 
+        this.traits = config.traits || [];
+        
+        // === 🆕 初始化家庭背景 ===
+        this.familyLore = config.familyLore;
 
         this.health = 90 + Math.random() * 10; 
         this.lifeGoal = LIFE_GOALS[Math.floor(Math.random() * LIFE_GOALS.length)];

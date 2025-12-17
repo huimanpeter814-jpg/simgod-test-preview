@@ -9,18 +9,22 @@ interface InspectorProps {
     sims: Sim[];
 }
 
-const InspectorFace: React.FC<{ sim: SimData }> = ({ sim }) => {
+const InspectorFace: React.FC<{ sim: SimData, size?: number }> = ({ sim, size = 64 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     useEffect(() => {
         if (canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
-                ctx.clearRect(0, 0, 64, 64);
-                drawAvatarHead(ctx, 32, 40, 20, sim);
+                ctx.clearRect(0, 0, size, size);
+                // Adjust drawing parameters based on size
+                const headSize = size === 64 ? 20 : 12;
+                const centerX = size / 2;
+                const centerY = size === 64 ? 40 : 25;
+                drawAvatarHead(ctx, centerX, centerY, headSize, sim);
             }
         }
-    }, [sim]);
-    return <canvas ref={canvasRef} width={64} height={64} />;
+    }, [sim, size]);
+    return <canvas ref={canvasRef} width={size} height={size} />;
 };
 
 const SkillBar: React.FC<{ val: number }> = ({ val }) => (
@@ -154,6 +158,128 @@ const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
     );
 };
 
+// Tree Node Component
+const TreeNode: React.FC<{ 
+    sim: SimData | null, 
+    label: string, 
+    isSelf?: boolean,
+    onClick?: (id: string) => void 
+}> = ({ sim, label, isSelf, onClick }) => {
+    if (!sim) {
+        return (
+            <div className="flex flex-col items-center gap-1 opacity-30">
+                <div className="w-10 h-10 rounded-full border border-dashed border-white/30 bg-white/5 flex items-center justify-center">
+                    <span className="text-[10px] text-gray-500">?</span>
+                </div>
+                <span className="text-[9px] text-gray-500">{label}</span>
+            </div>
+        );
+    }
+
+    return (
+        <div 
+            className={`flex flex-col items-center gap-1 group cursor-pointer ${isSelf ? 'scale-110' : ''}`}
+            onClick={() => onClick && onClick(sim.id)}
+        >
+            <div className={`
+                w-10 h-10 rounded-full border-2 overflow-hidden bg-black/40 relative transition-all group-hover:border-white
+                ${isSelf ? 'border-accent shadow-[0_0_10px_rgba(162,155,254,0.5)]' : 'border-white/20'}
+            `}>
+                <InspectorFace sim={sim} size={40} />
+            </div>
+            <div className="flex flex-col items-center leading-none">
+                <span className={`text-[9px] font-bold truncate max-w-[60px] ${isSelf ? 'text-accent' : 'text-gray-300 group-hover:text-white'}`}>
+                    {sim.name}
+                </span>
+                <span className="text-[8px] text-gray-500">{label}</span>
+            </div>
+        </div>
+    );
+};
+
+const FamilyTab: React.FC<{ sim: Sim, sims: Sim[] }> = ({ sim, sims }) => {
+    const getSim = (id: string | null) => sims.find(s => s.id === id);
+    const partner = getSim(sim.partnerId);
+    const father = getSim(sim.fatherId);
+    const mother = getSim(sim.motherId);
+    const children = sim.childrenIds.map(id => getSim(id)).filter(Boolean) as SimData[];
+
+    const handleSelect = (id: string) => {
+        GameStore.selectedSimId = id;
+        GameStore.notify();
+    };
+
+    return (
+        <div className="flex flex-col gap-4">
+            {/* Family Lore Section - Moved here */}
+            {sim.familyLore && (
+                <div className="p-3 rounded bg-gradient-to-br from-yellow-900/30 to-orange-900/30 border border-yellow-500/20 text-[11px] shadow-sm">
+                    <div className="text-[9px] text-yellow-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <span>📜 家庭历史</span>
+                    </div>
+                    <div className="leading-snug text-gray-300 italic">
+                        "{sim.familyLore}"
+                    </div>
+                </div>
+            )}
+
+            {/* Tree Structure */}
+            <div className="flex flex-col items-center relative py-2">
+                {/* Generation 1: Parents */}
+                <div className="flex justify-center gap-8 relative z-10 mb-6">
+                    <TreeNode sim={father || null} label="父亲" onClick={handleSelect} />
+                    <TreeNode sim={mother || null} label="母亲" onClick={handleSelect} />
+                    
+                    {/* Parent Connector Line */}
+                    {(father || mother) && (
+                        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full h-4 pointer-events-none">
+                            <div className="w-[60px] h-full border-b border-white/20 mx-auto rounded-b-lg"></div>
+                            <div className="w-px h-6 bg-white/20 mx-auto"></div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Generation 2: Self & Partner */}
+                <div className="flex justify-center gap-10 relative z-10 mb-6">
+                    <TreeNode sim={sim} label="我" isSelf onClick={handleSelect} />
+                    {partner && (
+                        <>
+                            <div className="absolute top-5 left-1/2 -translate-x-1/2 w-8 h-px bg-pink-500/30"></div>
+                            <TreeNode sim={partner} label="配偶" onClick={handleSelect} />
+                        </>
+                    )}
+                </div>
+
+                {/* Generation 3: Children */}
+                {children.length > 0 && (
+                    <div className="w-full flex flex-col items-center relative">
+                        {/* Connector from Parent to Children */}
+                        <div className="w-px h-6 bg-white/20 absolute -top-6"></div>
+                        <div className="w-[80%] border-t border-white/20 absolute top-0"></div>
+                        
+                        <div className="flex justify-center gap-4 flex-wrap pt-4">
+                            {children.map(child => (
+                                <div key={child.id} className="relative flex flex-col items-center">
+                                    <div className="w-px h-4 bg-white/20 absolute -top-4"></div>
+                                    <TreeNode 
+                                        sim={child} 
+                                        label="子女" 
+                                        onClick={handleSelect}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {children.length === 0 && (
+                    <div className="text-[10px] text-gray-600 italic mt-2">- 暂无后代 -</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
     const hairName = HAIR_STYLE_NAMES[(sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 17)] || '未知发型';
     const jobTitle = sim.ageStage === AgeStage.Infant ? '吃奶' : (sim.ageStage === AgeStage.Toddler ? '幼儿园' : (sim.ageStage === AgeStage.Child ? '小学生' : (sim.ageStage === AgeStage.Teen ? '中学生' : sim.job.title)));
@@ -171,6 +297,21 @@ const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                             {!sim.homeId && <button onClick={() => GameStore.assignRandomHome(sim)} className="text-[9px] bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30 transition-colors">分配住址</button>}
                         </div>
                     </div>
+                    
+                    {/* 🆕 增加性格特质显示 */}
+                    <div className="flex flex-col gap-1 col-span-2 pb-2 mb-2 border-b border-white/5">
+                        <span className="text-gray-500 text-[9px]">性格特质 (Traits)</span>
+                        <div className="flex flex-wrap gap-1">
+                            {sim.traits && sim.traits.length > 0 ? (
+                                sim.traits.map(t => (
+                                    <span key={t} className="text-[10px] bg-white/10 text-gray-200 px-1.5 py-0.5 rounded border border-white/10">{t}</span>
+                                ))
+                            ) : (
+                                <span className="text-gray-600 text-[10px] italic">无明显特质</span>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="flex flex-col gap-0.5"><span className="text-gray-500 text-[9px]">姓氏</span><span className="text-gray-200 font-bold">{sim.surname}</span></div>
                     <div className="flex flex-col gap-0.5"><span className="text-gray-500 text-[9px]">发型 / 色值</span><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border border-white/20 shrink-0" style={{background: sim.hairColor}}></div><div className="flex flex-col leading-none justify-center"><span className="text-gray-200 font-bold text-[10px]">{hairName}</span><span className="text-gray-500 font-mono text-[8px] scale-90 origin-left">{sim.hairColor}</span></div></div></div>
                     <div className="flex flex-col gap-0.5"><span className="text-gray-500 text-[9px]">身高</span><span className="text-gray-200 font-mono">{sim.height} cm</span></div>
@@ -213,42 +354,6 @@ const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                 </div>
             </div>
         </>
-    );
-};
-
-const FamilyTab: React.FC<{ sim: Sim, sims: Sim[] }> = ({ sim, sims }) => {
-    const getSim = (id: string | null) => sims.find(s => s.id === id);
-    const partner = getSim(sim.partnerId);
-    const father = getSim(sim.fatherId);
-    const mother = getSim(sim.motherId);
-    const children = sim.childrenIds.map(id => getSim(id)).filter(Boolean) as SimData[];
-
-    return (
-        <div className="flex flex-col gap-4">
-            <div className="bg-white/5 rounded-lg p-3 border border-white/5 text-center">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">配偶 / 伴侣</div>
-                {partner ? (
-                    <div className="p-2 bg-pink-500/10 rounded border border-pink-500/30 text-pink-200 font-bold cursor-pointer hover:bg-pink-500/20 transition-colors flex items-center justify-center gap-2" onClick={()=>{GameStore.selectedSimId=partner.id;GameStore.notify();}}>
-                        <span>❤️</span><span>{partner.name}</span><span className="text-[9px] opacity-60 font-normal">({AGE_CONFIG[partner.ageStage].label})</span>
-                    </div>
-                ) : <div className="text-gray-600 text-xs py-2">- 单身 -</div>}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 rounded-lg p-3 border border-white/5 text-center"><div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">父亲</div>{father ? <div className="p-1.5 bg-white/5 rounded text-xs cursor-pointer hover:bg-white/10 hover:text-white text-gray-300 font-bold" onClick={()=>{GameStore.selectedSimId=father.id;GameStore.notify();}}>{father.name}</div> : <span className="text-gray-700 text-xs">-</span>}</div>
-                <div className="bg-white/5 rounded-lg p-3 border border-white/5 text-center"><div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">母亲</div>{mother ? <div className="p-1.5 bg-white/5 rounded text-xs cursor-pointer hover:bg-white/10 hover:text-white text-gray-300 font-bold" onClick={()=>{GameStore.selectedSimId=mother.id;GameStore.notify();}}>{mother.name}</div> : <span className="text-gray-700 text-xs">-</span>}</div>
-            </div>
-            <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 pb-1 border-b border-white/5 flex justify-between"><span>子女</span><span>{children.length}</span></div>
-                <div className="flex flex-col gap-1.5">
-                    {children.map(c => (
-                        <div key={c.id} className="p-1.5 bg-white/5 rounded text-xs flex justify-between items-center cursor-pointer hover:bg-white/10 hover:text-white text-gray-300 transition-colors" onClick={()=>{GameStore.selectedSimId=c.id;GameStore.notify();}}>
-                            <span className="font-bold">{c.name}</span><span className="text-[10px] opacity-50 px-1.5 py-0.5 rounded border border-white/10" style={{color: AGE_CONFIG[c.ageStage].color}}>{AGE_CONFIG[c.ageStage].label}</span>
-                        </div>
-                    ))}
-                    {children.length === 0 && <span className="text-gray-700 text-xs text-center py-2">暂无子女</span>}
-                </div>
-            </div>
-        </div>
     );
 };
 

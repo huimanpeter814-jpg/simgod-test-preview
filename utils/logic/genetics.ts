@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { CONFIG, SURNAMES, MBTI_TYPES, TRAIT_POOL, TRAIT_CONFLICTS } from '../../constants';
+import { CONFIG, SURNAMES, MBTI_TYPES, TRAIT_POOL, TRAIT_CONFLICTS, FAMILY_LORE_TEMPLATES } from '../../constants';
 import { SocialLogic } from './social';
 import { mixTrait, mixMBTI } from './LifeCycleLogic'; // 复用生命周期中的遗传辅助函数
 import { HousingUnit, AgeStage } from '../../types';
@@ -95,6 +95,30 @@ export const FamilyGenerator = {
         }
 
         return traits;
+    },
+
+    /**
+     * 🆕 核心算法：生成家庭背景故事
+     */
+    generateFamilyLore(surname: string, wealth: 'poor' | 'middle' | 'rich', type: FamilyType): string {
+        const templates = FAMILY_LORE_TEMPLATES[wealth];
+        
+        const origin = templates.origins[Math.floor(Math.random() * templates.origins.length)];
+        const event = templates.events[Math.floor(Math.random() * templates.events.length)];
+        const vibe = templates.vibes[Math.floor(Math.random() * templates.vibes.length)];
+
+        let lore = `${origin} ${event} 如今，这个家庭的氛围${vibe}`;
+
+        // 追加特定类型的描述
+        if (type === 'SingleParent') {
+            lore += " 独自抚养孩子很辛苦，但爱让一切值得。";
+        } else if (type === 'DINK') {
+            lore += " 享受二人世界，追求自由与梦想。";
+        } else if (type === 'MultiGenerational') {
+            lore += " 四世同堂，传承着古老的家风。";
+        }
+
+        return lore;
     },
 
     /**
@@ -223,9 +247,18 @@ export const FamilyGenerator = {
         const members: Sim[] = [];
         const familySurname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
         
+        // 🆕 生成家庭背景故事
+        const familyLore = FamilyGenerator.generateFamilyLore(familySurname, wealthClass, familyType);
+
         // 辅助：根据人数计算每个成年人的初始资金
         const adultCount = familyType === 'DINK' ? 2 : (familyType === 'SingleParent' ? 1 : 2);
         const moneyPerAdult = Math.floor(baseMoney / Math.max(1, adultCount));
+
+        // 辅助：为成员附加 lore 的函数
+        const attachLore = (config: any) => {
+            config.familyLore = familyLore;
+            return config;
+        };
 
         // === 生成逻辑分支 ===
 
@@ -236,9 +269,11 @@ export const FamilyGenerator = {
             
             // 1. 生成祖父母 (Elder)
             for (let i = 0; i < grandParentCount; i++) {
-                const gp = new Sim(FamilyGenerator.generateSimConfig(
+                let config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY, familySurname, familyId, AgeStage.Elder, homeId, moneyPerAdult
-                ));
+                );
+                config = attachLore(config);
+                const gp = new Sim(config);
                 grandParents.push(gp);
                 members.push(gp);
             }
@@ -252,9 +287,10 @@ export const FamilyGenerator = {
                 // 父母的年龄段
                 const pStage = Math.random() > 0.5 ? AgeStage.MiddleAged : AgeStage.Adult;
                 // 继承祖父母基因
-                const config = FamilyGenerator.generateSimConfig(
+                let config = FamilyGenerator.generateSimConfig(
                     homeX + 40 + i * 20, homeY + 20, familySurname, familyId, pStage, homeId, moneyPerAdult, grandParents
                 );
+                config = attachLore(config);
                 
                 const parent = new Sim(config);
                 parents.push(parent);
@@ -276,9 +312,10 @@ export const FamilyGenerator = {
                 const childStage = FamilyGenerator.determineChildStage(parents[0].ageStage);
                 
                 // 继承父母基因
-                const config = FamilyGenerator.generateSimConfig(
+                let config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY + 40, familySurname, familyId, childStage, homeId, 0, parents
                 );
+                config = attachLore(config);
                 
                 const child = new Sim(config);
                 members.push(child);
@@ -293,8 +330,13 @@ export const FamilyGenerator = {
 
         } else if (familyType === 'DINK') {
             // 丁克：两位伴侣，无子女
-            const p1 = new Sim(FamilyGenerator.generateSimConfig(homeX, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult));
-            const p2 = new Sim(FamilyGenerator.generateSimConfig(homeX + 20, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult));
+            let c1 = FamilyGenerator.generateSimConfig(homeX, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult);
+            let c2 = FamilyGenerator.generateSimConfig(homeX + 20, homeY, familySurname, familyId, AgeStage.Adult, homeId, moneyPerAdult);
+            c1 = attachLore(c1);
+            c2 = attachLore(c2);
+
+            const p1 = new Sim(c1);
+            const p2 = new Sim(c2);
             
             // 确保异性或同性伴侣
             if (Math.random() > 0.3) p2.gender = p1.gender === 'M' ? 'F' : 'M';
@@ -312,13 +354,14 @@ export const FamilyGenerator = {
             for (let i = 0; i < parentCount; i++) {
                 // 父母年龄可以是 Adult 或 MiddleAged
                 const pStage = Math.random() > 0.3 ? AgeStage.Adult : AgeStage.MiddleAged;
-                const config = FamilyGenerator.generateSimConfig(
+                let config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY, familySurname, familyId, pStage, homeId, moneyPerAdult
                 );
                 // 强制第二位异性 (如果是标准家庭)
                 if (i === 1 && parents.length > 0) {
                     config.gender = parents[0].gender === 'M' ? 'F' : 'M';
                 }
+                config = attachLore(config);
                 
                 const p = new Sim(config);
                 parents.push(p);
@@ -335,9 +378,10 @@ export const FamilyGenerator = {
             for (let i = 0; i < childCount; i++) {
                 const childStage = FamilyGenerator.determineChildStage(baseParentStage);
                 
-                const config = FamilyGenerator.generateSimConfig(
+                let config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY + 30, familySurname, familyId, childStage, homeId, 0, parents
                 );
+                config = attachLore(config);
                 
                 const child = new Sim(config);
                 
@@ -373,7 +417,14 @@ export const FamilyGenerator = {
             }
         }
 
-        console.log(`[Genetics] Generated family (${familyType}): ${members.length} members.`);
+        // 为所有成员添加初始记忆
+        members.forEach(m => {
+            if (m.familyLore) {
+                m.addMemory(`[家庭背景] ${m.familyLore}`, 'family');
+            }
+        });
+
+        console.log(`[Genetics] Generated family (${familyType}): ${members.length} members. Lore: ${familyLore}`);
         return members;
     }
 };
