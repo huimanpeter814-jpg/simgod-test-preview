@@ -277,6 +277,11 @@ export class Sim {
         this.changeState(new CommutingState());
     }
 
+    // [New] 开始普通的移动（非上班/上学通勤）
+    startMovingToInteraction() {
+        this.changeState(new MovingState(SimAction.Moving));
+    }
+
     startWandering() {
         this.changeState(new MovingState(SimAction.Wandering));
     }
@@ -620,14 +625,14 @@ export class Sim {
         if (this.lifeGoal.includes('富翁') || this.lifeGoal.includes('大亨')) { this.metabolism.fun *= 1.2; }
         
         // 🆕 应用新特质带来的数值影响
-        if (this.traits.includes('Active')) { this.metabolism.energy *= 0.9; this.skillModifiers.athletics *= 1.3; }
-        if (this.traits.includes('Lazy')) { this.metabolism.energy *= 1.2; this.skillModifiers.athletics *= 0.7; }
-        if (this.traits.includes('Loner')) { this.metabolism.social *= 0.5; this.socialModifier *= 0.8; }
-        if (this.traits.includes('Outgoing')) { this.metabolism.social *= 1.5; this.socialModifier *= 1.2; }
-        if (this.traits.includes('Glutton')) { this.metabolism.hunger *= 1.5; }
-        if (this.traits.includes('Genius')) { this.skillModifiers.logic *= 1.5; this.iq += 10; }
-        if (this.traits.includes('Creative')) { this.skillModifiers.creativity *= 1.5; }
-        if (this.traits.includes('Clean')) { this.metabolism.hygiene *= 1.5; } // 爱干净的人卫生掉得快（需要常洗澡）? 或者保持得好？通常理解为对卫生要求高，下降快。
+        if (this.traits.includes('活力')) { this.metabolism.energy *= 0.9; this.skillModifiers.athletics *= 1.3; }
+        if (this.traits.includes('懒惰')) { this.metabolism.energy *= 1.2; this.skillModifiers.athletics *= 0.7; }
+        if (this.traits.includes('独行侠')) { this.metabolism.social *= 0.5; this.socialModifier *= 0.8; }
+        if (this.traits.includes('外向')) { this.metabolism.social *= 1.5; this.socialModifier *= 1.2; }
+        if (this.traits.includes('吃货')) { this.metabolism.hunger *= 1.5; }
+        if (this.traits.includes('天才')) { this.skillModifiers.logic *= 1.5; this.iq += 10; }
+        if (this.traits.includes('有创意')) { this.skillModifiers.creativity *= 1.5; }
+        if (this.traits.includes('洁癖')) { this.metabolism.hygiene *= 1.5; } 
     }
     applyMonthlyEffects(month: number, holiday?: { name: string, type: string }) {
         this.age += 0.1;

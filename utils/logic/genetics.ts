@@ -240,6 +240,7 @@ export const FamilyGenerator = {
             let config = FamilyGenerator.generateSimConfig(
                 homeX, homeY, familySurname, familyId, stage, homeId, singleMoney
             );
+
             config.familyLore = lore + " 独自在这个城市打拼。";
             
             const sim = new Sim(config);

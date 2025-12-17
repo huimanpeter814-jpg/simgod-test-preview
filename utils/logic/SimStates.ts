@@ -70,32 +70,52 @@ export class IdleState extends BaseState {
 // --- 移动状态 (Moving / Wandering / Following) ---
 export class MovingState extends BaseState {
     actionName: string;
+    // [Updated] 增加超时机制，防止长时间卡在移动中
+    moveTimeout: number = 0;
 
     constructor(actionName: string = SimAction.Moving) {
         super();
         this.actionName = actionName;
     }
 
+    enter(sim: Sim) {
+        super.enter(sim);
+        this.moveTimeout = 0;
+    }
+
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
         
+        this.moveTimeout += dt;
+        
+        // 1200 ticks (20 游戏分钟) 超时强行结算，防止卡死
+        // 除非是 'moving_home' 或其他长途跋涉，可以放宽
+        if (this.moveTimeout > 1500 && sim.target) {
+            sim.pos = { ...sim.target };
+            this.handleArrival(sim);
+            return;
+        }
+
         // 执行移动逻辑
         const arrived = sim.moveTowardsTarget(dt);
         
         if (arrived) {
-            // 到达目的地后的处理
-            if (this.actionName === SimAction.MovingHome) {
-                sim.changeState(new IdleState());
-            } else if (sim.interactionTarget) {
-                sim.startInteraction(); // 自动根据 interactionTarget 切换到 Using/Talking 等状态
-            } else {
-                sim.changeState(new IdleState());
-            }
+            this.handleArrival(sim);
+        }
+    }
+
+    private handleArrival(sim: Sim) {
+        if (this.actionName === SimAction.MovingHome) {
+            sim.changeState(new IdleState());
+        } else if (sim.interactionTarget) {
+            sim.startInteraction(); // 自动根据 interactionTarget 切换到 Using/Talking 等状态
+        } else {
+            sim.changeState(new IdleState());
         }
     }
 }
 
-// --- 通勤状态 (Commuting) ---
+// --- 通勤状态 (Commuting) - 专用于上班/上学等长途且必须到达的场景 ---
 export class CommutingState extends BaseState {
     actionName = SimAction.Commuting;
 

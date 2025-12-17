@@ -66,31 +66,36 @@ export const STREET_PROPS: Furniture[] = [
 // Col X: 60, 700, 1340, 1980
 // Row Y: 60, 600, 1140
 // 额外功能区在底部 Y=1560
+// [更新] 为所有默认地皮指定 customType (用地类型)，防止市民工作/居住逻辑混乱
 export const WORLD_LAYOUT: WorldPlot[] = [
     // --- Row 1 (Work & Education) ---
     {
         "id": "plot_dorm",
         "templateId": "dorm",
         "x": 60,
-        "y": 60
+        "y": 60,
+        "customType": "residential" // 居住区
     },
     {
         "id": "plot_tech",
         "templateId": "tech",
         "x": 700,
-        "y": 60
+        "y": 60,
+        "customType": "work" // 工作区
     },
     {
         "id": "plot_finance",
         "templateId": "finance",
         "x": 1340,
-        "y": 60
+        "y": 60,
+        "customType": "work" // 工作区
     },
     {
         "id": "plot_high",
         "templateId": "high_school",
         "x": 1980,
-        "y": 60
+        "y": 60,
+        "customType": "public" // 公共/学校
     },
 
     // --- Row 2 (Living & Leisure) ---
@@ -98,25 +103,29 @@ export const WORLD_LAYOUT: WorldPlot[] = [
         "id": "plot_apt",
         "templateId": "apartment",
         "x": 60,
-        "y": 600
+        "y": 600,
+        "customType": "residential" // 居住区
     },
     {
         "id": "plot_park",
         "templateId": "park",
         "x": 700,
-        "y": 600
+        "y": 600,
+        "customType": "public" // 公共休闲
     },
     {
         "id": "plot_comm",
         "templateId": "commercial",
         "x": 1340,
-        "y": 600
+        "y": 600,
+        "customType": "commercial" // 商业区
     },
     {
         "id": "plot_elem",
         "templateId": "elementary",
         "x": 1980,
-        "y": 600
+        "y": 600,
+        "customType": "public" // 公共/学校
     },
 
     // --- Row 3 (Service & Nightlife) ---
@@ -124,25 +133,29 @@ export const WORLD_LAYOUT: WorldPlot[] = [
         "id": "plot_serv",
         "templateId": "service",
         "x": 60,
-        "y": 1140
+        "y": 1140,
+        "customType": "public" // 公共服务
     },
     {
         "id": "plot_night",
         "templateId": "nightlife",
         "x": 700,
-        "y": 1140
+        "y": 1140,
+        "customType": "commercial" // 娱乐/商业
     },
     {
         "id": "plot_design",
         "templateId": "design",
         "x": 1340,
-        "y": 1140
+        "y": 1140,
+        "customType": "work" // 工作区
     },
     {
         "id": "plot_kg",
         "templateId": "kindergarten",
         "x": 1980,
-        "y": 1140
+        "y": 1140,
+        "customType": "public" // 公共/学校
     },
 
     // --- Row 4 (Extra / Small) ---
@@ -150,19 +163,22 @@ export const WORLD_LAYOUT: WorldPlot[] = [
         "id": "plot_netcafe",
         "templateId": "netcafe",
         "x": 60,
-        "y": 1560
+        "y": 1560,
+        "customType": "commercial" // 商业
     },
     {
         "id": "plot_gallery",
         "templateId": "gallery",
         "x": 700,
-        "y": 1560
+        "y": 1560,
+        "customType": "public" // 公共文化
     },
     {
         "id": "plot_villa",
         "templateId": "villa",
         "x": 1340,
-        "y": 1560
+        "y": 1560,
+        "customType": "residential" // 居住区
     },
 
     // --- Roads (Horizontal) ---

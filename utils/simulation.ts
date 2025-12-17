@@ -528,14 +528,18 @@ export function initGame() {
     if (GameStore.loadGame(1)) {
         GameStore.addLog(null, "自动读取存档 1 成功", "sys");
     } else {
-        const familyCount = 4 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < familyCount; i++) {
-            const size = 1 + Math.floor(Math.random() * 4); 
-            // [Refactor] 使用独立的 FamilyGenerator
-            const fam = FamilyGenerator.generate(size, GameStore.housingUnits, GameStore.sims);
-            GameStore.sims.push(...fam);
-        }
-        GameStore.addLog(null, `新世界已生成。共 ${familyCount} 个家庭，${GameStore.sims.length} 位市民。`, "sys");
+        // [Updated] 默认生成逻辑：2个单身 + 2个家庭
+        GameStore.addLog(null, "正在初始化新城市人口...", "sys");
+        
+        // 1. 生成 2 个单身市民
+        GameStore.spawnSingle();
+        GameStore.spawnSingle();
+
+        // 2. 生成 2 个家庭 (随机2-4人)
+        GameStore.spawnFamily();
+        GameStore.spawnFamily();
+
+        GameStore.addLog(null, `新世界已生成！当前人口: ${GameStore.sims.length}`, "sys");
     }
     GameStore.notify();
 }

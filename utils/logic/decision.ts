@@ -168,8 +168,8 @@ export const DecisionLogic = {
             sim.interactionTarget = best.target;
             sim.isSideHustle = true; 
             
-            // [修复] 调用 Sim 方法代替直接实例化 State，切断循环依赖
-            sim.startCommuting();
+            // [Updated] 兼职也使用普通移动，因为它不是强制性的通勤
+            sim.startMovingToInteraction();
         } else {
             sim.startWandering();
         }
@@ -253,8 +253,8 @@ export const DecisionLogic = {
                 sim.target = { x: obj.x + obj.w / 2, y: obj.y + obj.h / 2 };
                 sim.interactionTarget = obj;
                 
-                // [修复] 调用 Sim 方法
-                sim.startCommuting();
+                // [修复] 使用普通的移动状态，不再显示为"通勤中"
+                sim.startMovingToInteraction();
                 return;
             } else {
                 sim.say("没钱/没位置...", 'bad');
@@ -294,8 +294,8 @@ export const DecisionLogic = {
             
             sim.interactionTarget = { type: 'human', ref: partner };
             
-            // [修复] 调用 Sim 方法
-            sim.startCommuting();
+            // [修复] 使用普通的移动状态
+            sim.startMovingToInteraction();
         } else {
             sim.startWandering();
         }

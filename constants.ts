@@ -205,32 +205,32 @@ export const MBTI_TYPES = [
     'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ'
 ];
 
-// === 🆕 性格特质池 ===
+// === 🆕 性格特质池 (中文版) ===
 export const TRAIT_POOL = {
-    social: ['Outgoing', 'Loner', 'Charming', 'Awkward', 'Mean'], // 社交类
-    lifestyle: ['Active', 'Lazy', 'Clean', 'Messy', 'Glutton'],   // 生活类
-    mental: ['Creative', 'Logical', 'Genius', 'Goofball', 'Serious'] // 思维类
+    social: ['外向', '独行侠', '万人迷', '社恐', '刻薄'], // 社交类
+    lifestyle: ['活力', '懒惰', '洁癖', '邋遢', '吃货'],   // 生活类
+    mental: ['有创意', '逻辑强', '天才', '开心果', '严肃'] // 思维类
 };
 
-// === 🆕 性格互斥表 ===
+// === 🆕 性格互斥表 (中文版) ===
 // Key 不能与 Value 中的任何性格共存
 export const TRAIT_CONFLICTS: Record<string, string[]> = {
-    'Outgoing': ['Loner', 'Awkward'],
-    'Loner': ['Outgoing', 'Charming', 'Party Animal'],
-    'Charming': ['Mean', 'Awkward'],
-    'Mean': ['Charming'],
-    'Awkward': ['Charming', 'Outgoing'],
+    '外向': ['独行侠', '社恐'],
+    '独行侠': ['外向', '万人迷', '派对动物'],
+    '万人迷': ['刻薄', '社恐'],
+    '刻薄': ['万人迷'],
+    '社恐': ['万人迷', '外向'],
     
-    'Active': ['Lazy'],
-    'Lazy': ['Active'],
-    'Clean': ['Messy'],
-    'Messy': ['Clean'],
+    '活力': ['懒惰'],
+    '懒惰': ['活力'],
+    '洁癖': ['邋遢'],
+    '邋遢': ['洁癖'],
     
-    'Logical': ['Goofball', 'Creative'], // 假设逻辑和创意在某种程度互斥，或者也可以共存
-    'Creative': ['Logical', 'Serious'],
-    'Genius': ['Goofball'],
-    'Goofball': ['Serious', 'Genius', 'Logical'],
-    'Serious': ['Goofball']
+    '逻辑强': ['开心果', '有创意'], // 假设逻辑和创意在某种程度互斥，或者也可以共存
+    '有创意': ['逻辑强', '严肃'],
+    '天才': ['开心果'],
+    '开心果': ['严肃', '天才', '逻辑强'],
+    '严肃': ['开心果']
 };
 
 export const SURNAMES = [
