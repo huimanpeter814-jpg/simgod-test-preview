@@ -353,36 +353,57 @@ export class FollowingState extends BaseState {
     }
 }
 
-// 🆕 家长去接孩子 (PickingUp) - 修复闪现 Bug
+// 🆕 家长去接孩子 (PickingUp)
 export class PickingUpState extends BaseState {
     actionName = SimAction.PickingUp;
+    // 增加一个计时器，避免每帧都重算寻路，优化性能
+    repathTimer = 0; 
     
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
 
-        // [修复] 实时更新目标为孩子的当前位置
-        // 这样即使孩子移动了一点，父母也会平滑转向，而不是走到旧地点后瞬移
         if (sim.carryingSimId) {
             const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
             if (child) {
+                // 1. 实时更新目标
                 sim.target = { x: child.pos.x, y: child.pos.y };
+
+                // 2. 修复闪现 Bug：检查目标是否移动太远
+                // 如果当前路径的终点 和 现在的孩子位置 距离超过 20px，说明孩子跑远了
+                // 清空路径，强迫 moveTowardsTarget 在下一帧重新寻路
+                if (sim.path.length > 0) {
+                    const lastNode = sim.path[sim.path.length - 1];
+                    const distToPathEnd = Math.sqrt(Math.pow(lastNode.x - child.pos.x, 2) + Math.pow(lastNode.y - child.pos.y, 2));
+                    
+                    if (distToPathEnd > 40) { // 阈值可以根据需要调整
+                        sim.path = []; 
+                    }
+                }
             }
         }
 
+        // 执行移动
         const arrived = sim.moveTowardsTarget(dt);
         
-        // 判定距离而不是依靠 path 结束，防止 path 误差
+        // 判定距离而不是依靠 path 结束
         if (sim.carryingSimId) {
             const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
             if (child) {
                 const dist = Math.sqrt(Math.pow(sim.pos.x - child.pos.x, 2) + Math.pow(sim.pos.y - child.pos.y, 2));
-                if (dist < 20) { // 接近了
+                
+                // 判定接触范围
+                if (dist < 20) { 
                     // 切换到护送状态
                     const schoolPlot = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
                     if (schoolPlot) {
                         const tx = schoolPlot.x + (schoolPlot.width || 300)/2;
                         const ty = schoolPlot.y + (schoolPlot.height || 300)/2;
+                        
+                        // 设置新目标：学校
                         sim.target = { x: tx, y: ty };
+                        // 🚩 关键修复：切换目标地点后，必须清空旧路径！
+                        // 否则 Sim 会认为"我已经走完路径了"，直接瞬移到新 Target
+                        sim.path = []; 
                         
                         child.carriedBySimId = sim.id;
                         child.changeState(new BeingEscortedState());
@@ -402,9 +423,14 @@ export class PickingUpState extends BaseState {
     }
 }
 
-// 🆕 家长护送/抱着孩子 (Escorting) - 修复渲染层级
+// 🆕 家长护送/抱着孩子 (Escorting)
 export class EscortingState extends BaseState {
     actionName = SimAction.Escorting;
+
+    // 🚩 关键修复：进入状态时确保路径为空，强制重新计算去学校的路
+    enter(sim: Sim) {
+        sim.path = [];
+    }
 
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
@@ -414,10 +440,12 @@ export class EscortingState extends BaseState {
         if (sim.carryingSimId) {
             const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
             if (child) {
-                // [修复] 位置偏移：Y轴减小(向上)，X轴稍微偏移，制造“抱在怀里”或“牵手”的视觉
-                // 注意：渲染层级在 GameCanvas 中处理
+                // 渲染层级修复：位置稍微偏移
                 child.pos.x = sim.pos.x + 6; 
-                child.pos.y = sim.pos.y - 12; // 稍微向上提一点
+                child.pos.y = sim.pos.y - 12; 
+                // 也要把孩子的目标和路径清空，防止孩子逻辑干扰
+                child.target = null;
+                child.path = [];
             }
         }
 
@@ -427,7 +455,7 @@ export class EscortingState extends BaseState {
                 const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
                 if (child) {
                     child.carriedBySimId = null;
-                    child.changeState(new SchoolingState()); // 孩子进入上学状态
+                    child.changeState(new SchoolingState()); 
                     child.say("拜拜~ 👋", 'family');
                 }
                 sim.carryingSimId = null;
@@ -438,7 +466,7 @@ export class EscortingState extends BaseState {
     }
 }
 
-// 🆕 孩子被抱着 (BeingEscorted)
+// 孩子被抱着 (BeingEscorted)
 export class BeingEscortedState extends BaseState {
     actionName = SimAction.BeingEscorted;
 
