@@ -10,8 +10,17 @@ import { SchoolLogic } from './logic/school';
 import { LifeCycleLogic } from './logic/LifeCycleLogic'; 
 import { EconomyLogic } from './logic/EconomyLogic';     
 import { 
-    SimState, IdleState, WorkingState, MovingState, CommutingState, 
-    InteractionState, FollowingState 
+    SimState, 
+    IdleState, 
+    WorkingState, 
+    MovingState, 
+    CommutingState, 
+    InteractionState, 
+    FollowingState,
+    // [修复] 补充导入缺失的状态类
+    CommutingSchoolState,
+    SchoolingState,
+    PlayingHomeState
 } from './logic/SimStates';
 
 interface SimInitConfig {
@@ -263,6 +272,49 @@ export class Sim {
 
     enterInteractionState(actionName: string) {
         this.changeState(new InteractionState(actionName));
+    }
+
+    // [修复] 存档加载后的状态恢复逻辑
+    // 存档时 JSON.stringify 会把 state 序列化为普通对象，丢失方法
+    // 加载时需要根据 action 字符串重新实例化正确的 State 类
+    restoreState() {
+        switch (this.action) {
+            case SimAction.Idle:
+                this.state = new IdleState();
+                break;
+            case SimAction.Working:
+                this.state = new WorkingState();
+                break;
+            case SimAction.Commuting:
+                this.state = new CommutingState();
+                break;
+            case SimAction.CommutingSchool:
+                this.state = new CommutingSchoolState();
+                break;
+            case SimAction.Schooling:
+                this.state = new SchoolingState();
+                break;
+            case SimAction.Following:
+                this.state = new FollowingState();
+                break;
+            case SimAction.PlayingHome:
+                this.state = new PlayingHomeState();
+                break;
+            case SimAction.Moving:
+            case SimAction.Wandering:
+            case SimAction.MovingHome:
+                this.state = new MovingState(this.action);
+                break;
+            // 剩下的通常都是 InteractionState (Eating, Sleeping, Using, Talking 等)
+            default:
+                this.state = new InteractionState(this.action);
+                break;
+        }
+        // 如果数据损坏严重，兜底回到 Idle
+        if (!this.state) {
+            this.state = new IdleState();
+            this.action = SimAction.Idle;
+        }
     }
 
     startInteraction() {

@@ -486,6 +486,11 @@ export class GameStore {
             if (currentJobDefinition) {
                 sim.job = { ...currentJobDefinition };
             }
+
+            // [修复] 核心修复：根据 action 属性恢复正确的 State 实例
+            // 否则 state 只是一个普通对象，没有 update 方法，导致报错
+            sim.restoreState();
+
             return sim;
         });
     }
