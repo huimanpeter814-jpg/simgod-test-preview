@@ -495,13 +495,22 @@ export class GameStore {
         });
     }
 
-    static spawnFamily() {
-        const size = 1 + Math.floor(Math.random() * 4); 
-        // [Refactor] 使用独立的 FamilyGenerator
-        const fam = FamilyGenerator.generate(size, this.housingUnits, this.sims);
+    static spawnFamily(size?: number) {
+        // 如果传入了 size，使用 size，否则默认 2-4 人
+        const count = size || (2 + Math.floor(Math.random() * 3)); 
+        const fam = FamilyGenerator.generate(count, this.housingUnits, this.sims);
         this.sims.push(...fam);
-        this.addLog(null, `新家庭搬入城市！共 ${fam.length} 人。`, "sys");
+        
+        const logMsg = count === 1 
+            ? `新居民 ${fam[0].name} 搬入了城市。`
+            : `新家庭 (${fam[0].surname}家) 搬入城市！共 ${fam.length} 人。`;
+            
+        this.addLog(null, logMsg, "sys");
         this.notify();
+    }
+
+    static spawnSingle() {
+        this.spawnFamily(1);
     }
 }
 

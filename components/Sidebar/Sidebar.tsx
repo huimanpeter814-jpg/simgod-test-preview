@@ -13,9 +13,6 @@ const GameOverlay: React.FC = () => {
     const [showStats, setShowStats] = useState(false);
     const [showEditor, setShowEditor] = useState(false); 
     
-    // [已移除] 创造者模式检测逻辑，现在默认开启权限
-    // const [isCreatorMode, setIsCreatorMode] = useState(false);
-
     useEffect(() => {
         // Initial fetch
         setSims([...GameStore.sims]);
@@ -32,7 +29,11 @@ const GameOverlay: React.FC = () => {
     }, []);
 
     const handleSpawnFamily = () => {
-        GameStore.spawnFamily();
+        GameStore.spawnFamily(); // Random family (2+)
+    };
+
+    const handleSpawnSingle = () => {
+        GameStore.spawnSingle(); // Solo Sim
     };
 
     // Toggle Editor Logic
@@ -79,63 +80,81 @@ const GameOverlay: React.FC = () => {
             {showStats && <StatisticsPanel onClose={() => setShowStats(false)} />}
 
             {/* Bottom Right: Controls */}
-            <div className="absolute right-8 bottom-8 pointer-events-auto flex gap-4 items-end">
+            <div className="absolute right-8 bottom-8 pointer-events-auto flex flex-col gap-3 items-end">
                 
-                {/* [修改] Editor Button: 现在对所有用户显示，不再需要 #creator */}
-                <button
-                    onClick={toggleEditor}
-                    className={`
-                        group flex items-center justify-center
-                        w-14 h-14 rounded-full
-                        shadow-lg border-2 
-                        transition-all duration-300 transform hover:scale-105 active:scale-95
-                        ${showEditor 
-                            ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
-                            : 'bg-purple-600 hover:bg-purple-500 text-white border-white/20 hover:border-white'
-                        }
-                    `}
-                    title="建筑模式 (已解锁)"
-                >
-                    <span className="text-2xl">🛠️</span>
-                </button>
+                {/* Editor & Stats Buttons Row */}
+                <div className="flex gap-3">
+                     {/* Editor Button */}
+                    <button
+                        onClick={toggleEditor}
+                        className={`
+                            group flex items-center justify-center
+                            w-12 h-12 rounded-full
+                            shadow-lg border-2 
+                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                            ${showEditor 
+                                ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
+                                : 'bg-purple-600 hover:bg-purple-500 text-white border-white/20 hover:border-white'
+                            }
+                        `}
+                        title="建筑模式"
+                    >
+                        <span className="text-xl">🛠️</span>
+                    </button>
 
-                {/* Statistics Button */}
-                <button
-                    onClick={() => setShowStats(true)}
-                    className="
-                        group flex items-center justify-center
-                        bg-[#0984e3] hover:bg-[#74b9ff] text-white
-                        w-14 h-14 rounded-full
-                        shadow-[0_0_20px_rgba(9,132,227,0.6)] hover:shadow-[0_0_30px_rgba(116,185,255,0.8)]
-                        border-2 border-white/20 hover:border-white
-                        transition-all duration-300 transform hover:scale-105 active:scale-95
-                    "
-                    title="View Statistics"
-                >
-                    <span className="text-2xl">📊</span>
-                </button>
+                    {/* Statistics Button */}
+                    <button
+                        onClick={() => setShowStats(true)}
+                        className="
+                            group flex items-center justify-center
+                            bg-[#0984e3] hover:bg-[#74b9ff] text-white
+                            w-12 h-12 rounded-full
+                            shadow-[0_0_20px_rgba(9,132,227,0.6)] hover:shadow-[0_0_30px_rgba(116,185,255,0.8)]
+                            border-2 border-white/20 hover:border-white
+                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                        "
+                        title="查看统计"
+                    >
+                        <span className="text-xl">📊</span>
+                    </button>
+                </div>
 
-                {/* Spawn Button */}
-                <button
-                    onClick={handleSpawnFamily}
-                    className="
-                        group flex items-center gap-3 
-                        bg-[#00b894] hover:bg-[#55efc4] text-[#121212] 
-                        pl-5 pr-8 py-4 rounded-full 
-                        shadow-[0_0_20px_rgba(0,184,148,0.6)] hover:shadow-[0_0_30px_rgba(85,239,196,0.8)]
-                        border-2 border-[#fff]/20 hover:border-white
-                        transition-all duration-300 transform hover:scale-105 active:scale-95
-                    "
-                    title="Add a new family"
-                >
-                    <div className="bg-black/20 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-black group-hover:rotate-90 transition-transform duration-300">
-                        +
-                    </div>
-                    <div className="flex flex-col items-start">
-                        <span className="font-pixel text-xs font-bold opacity-80">SYSTEM</span>
-                        <span className="font-inter text-lg font-black tracking-wide leading-none">ADD FAMILY</span>
-                    </div>
-                </button>
+                {/* Spawn Buttons Group */}
+                <div className="flex gap-3">
+                    {/* Spawn Single Button */}
+                    <button
+                        onClick={handleSpawnSingle}
+                        className="
+                            group flex items-center gap-2 
+                            bg-[#00b894] hover:bg-[#55efc4] text-[#121212] 
+                            pl-4 pr-5 py-3 rounded-full 
+                            shadow-lg hover:shadow-[0_0_20px_rgba(85,239,196,0.5)]
+                            border-2 border-[#fff]/20 hover:border-white
+                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                        "
+                        title="添加单身居民"
+                    >
+                        <span className="text-xl">👤</span>
+                        <span className="font-bold text-xs">单人</span>
+                    </button>
+
+                    {/* Spawn Family Button */}
+                    <button
+                        onClick={handleSpawnFamily}
+                        className="
+                            group flex items-center gap-2 
+                            bg-[#e17055] hover:bg-[#ff7675] text-white
+                            pl-4 pr-5 py-3 rounded-full 
+                            shadow-lg hover:shadow-[0_0_20px_rgba(225,112,85,0.5)]
+                            border-2 border-[#fff]/20 hover:border-white
+                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                        "
+                        title="添加随机家庭"
+                    >
+                        <span className="text-xl">👨‍👩‍👧</span>
+                        <span className="font-bold text-xs">家庭</span>
+                    </button>
+                </div>
             </div>
         </div>
     );

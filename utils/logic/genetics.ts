@@ -87,8 +87,6 @@ export const FamilyGenerator = {
         }
 
         // 4. 兜底填充 (Optional): 如果性格太少，随机补全?
-        // 根据需求描述，只说了变异概率，没强制填满。
-        // 为了游戏性，我们至少保证有 1 个性格
         if (traits.length === 0) {
              const t = allTraits[Math.floor(Math.random() * allTraits.length)];
              if (canAdd(t)) traits.push(t);
@@ -175,12 +173,10 @@ export const FamilyGenerator = {
             const p2 = parents.length > 1 ? parents[1] : p1; // 如果是单亲，则只有 p1
 
             // 1. 外观遗传 (Visuals)
-            // 肤色和发色大概率继承自父母一方
             config.skinColor = Math.random() > 0.5 ? p1.skinColor : (p2 ? p2.skinColor : p1.skinColor);
             config.hairColor = Math.random() > 0.5 ? p1.hairColor : (p2 ? p2.hairColor : p1.hairColor);
             
-            // 2. 属性遗传 (Attributes) - 使用 mixTrait 混合
-            // 在 Sim 构造函数中，如果传入了这些属性，会覆盖默认随机值
+            // 2. 属性遗传 (Attributes)
             config.iq = mixTrait(p1.iq, p2.iq);
             config.eq = mixTrait(p1.eq, p2.eq);
             config.constitution = mixTrait(p1.constitution, p2.constitution);
@@ -191,7 +187,6 @@ export const FamilyGenerator = {
         }
 
         // 🆕 4. 性格特质遗传 (Personality Traits)
-        // 无论是初代生成还是后代，都通过此方法计算 traits
         config.traits = FamilyGenerator.generatePersonality(parents);
 
         return config;
@@ -231,6 +226,29 @@ export const FamilyGenerator = {
             homeY = home.y + home.area.h / 2;
         }
 
+        const members: Sim[] = [];
+        const familySurname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
+        
+        // 🆕 处理单身家庭 (Solo household)
+        if (count === 1) {
+            const stages = [AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Teen];
+            const stage = stages[Math.floor(Math.random() * stages.length)];
+            const singleMoney = Math.floor(baseMoney / 2);
+            
+            const lore = FamilyGenerator.generateFamilyLore(familySurname, wealthClass, 'Standard');
+            
+            let config = FamilyGenerator.generateSimConfig(
+                homeX, homeY, familySurname, familyId, stage, homeId, singleMoney
+            );
+            config.familyLore = lore + " 独自在这个城市打拼。";
+            
+            const sim = new Sim(config);
+            sim.addMemory(`[背景] ${config.familyLore}`, 'family');
+            console.log(`[Genetics] Generated Solo Sim: ${sim.name}`);
+            return [sim];
+        }
+
+        // 🆕 生成家庭背景故事
         // 3. 决定家庭类型 (FamilyType)
         let familyType: FamilyType = 'Standard';
         const rType = Math.random();
@@ -244,10 +262,6 @@ export const FamilyGenerator = {
         if (familyType === 'DINK') count = 2;
         if (familyType === 'MultiGenerational' && count < 3) count = 3; // 至少要3人才能三代
 
-        const members: Sim[] = [];
-        const familySurname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
-        
-        // 🆕 生成家庭背景故事
         const familyLore = FamilyGenerator.generateFamilyLore(familySurname, wealthClass, familyType);
 
         // 辅助：根据人数计算每个成年人的初始资金
