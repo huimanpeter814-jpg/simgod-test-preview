@@ -1,5 +1,5 @@
 ﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, AGE_CONFIG } from '../constants';
-import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship, AgeStage } from '../types';
+import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship, AgeStage, SimAction, JobType, NeedType } from '../types';
 import { GameStore } from './simulation'; 
 import { minutes } from './simulationHelpers';
 import { SocialLogic } from './logic/social';
@@ -7,8 +7,8 @@ import { CareerLogic } from './logic/career';
 import { DecisionLogic } from './logic/decision';
 import { INTERACTIONS, RESTORE_TIMES, InteractionHandler } from './logic/interactionRegistry';
 import { SchoolLogic } from './logic/school';
-import { LifeCycleLogic } from './logic/LifeCycleLogic'; // [新增]
-import { EconomyLogic } from './logic/EconomyLogic';     // [新增]
+import { LifeCycleLogic } from './logic/LifeCycleLogic'; 
+import { EconomyLogic } from './logic/EconomyLogic';     
 
 interface SimInitConfig {
     x?: number;
@@ -50,7 +50,7 @@ export class Sim {
     mbti: string;
     zodiac: any;
     age: number;
-    ageStage: AgeStage;
+    ageStage: AgeStage; // 使用 Enum
     health: number;
 
     partnerId: string | null = null;
@@ -77,7 +77,7 @@ export class Sim {
     morality: number;        
     creativity: number;      
 
-    needs: any;
+    needs: any; // Ideally typed as Needs
     skills: any;
     relationships: Record<string, Relationship> = {};
     
@@ -103,7 +103,7 @@ export class Sim {
 
     memories: Memory[] = [];
 
-    action: string;
+    action: SimAction | string; // 使用 Enum
     actionTimer: number;
     interactionTarget: any = null;
     bubble: { text: string | null; timer: number; type: string } = { text: null, timer: 0, type: 'normal' };
@@ -130,20 +130,20 @@ export class Sim {
 
         this.gender = config.gender || (Math.random() > 0.5 ? 'M' : 'F');
 
-        this.ageStage = config.ageStage || 'Adult';
+        this.ageStage = config.ageStage || AgeStage.Adult;
         const stageConfig = AGE_CONFIG[this.ageStage];
         this.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
 
-        if (this.ageStage === 'Infant') {
+        if (this.ageStage === AgeStage.Infant) {
             this.height = 50 + Math.random() * 25; 
             this.weight = 3 + Math.random() * 7;   
-        } else if (this.ageStage === 'Toddler') {
+        } else if (this.ageStage === AgeStage.Toddler) {
             this.height = 80 + Math.random() * 20; 
             this.weight = 10 + Math.random() * 6;  
-        } else if (this.ageStage === 'Child') {
+        } else if (this.ageStage === AgeStage.Child) {
             this.height = 110 + Math.random() * 30;
             this.weight = 20 + Math.random() * 15; 
-        } else if (this.ageStage === 'Teen') {
+        } else if (this.ageStage === AgeStage.Teen) {
             this.height = 150 + Math.random() * 25; 
             this.weight = 40 + Math.random() * 25;  
         } else {
@@ -205,7 +205,14 @@ export class Sim {
         this.faithfulness = Math.min(100, Math.max(0, baseFaith + (Math.random() * 40 - 20)));
 
         const randNeed = () => 60 + Math.floor(Math.random() * 40);
-        this.needs = { hunger: randNeed(), energy: randNeed(), fun: randNeed(), social: randNeed(), bladder: randNeed(), hygiene: randNeed() };
+        this.needs = { 
+            [NeedType.Hunger]: randNeed(), 
+            [NeedType.Energy]: randNeed(), 
+            [NeedType.Fun]: randNeed(), 
+            [NeedType.Social]: randNeed(), 
+            [NeedType.Bladder]: randNeed(), 
+            [NeedType.Hygiene]: randNeed() 
+        };
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
@@ -215,7 +222,7 @@ export class Sim {
             this.money = 500 + Math.floor(Math.random() * 1000);
         }
         
-        if (['Infant', 'Toddler', 'Child', 'Teen'].includes(this.ageStage)) {
+        if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen].includes(this.ageStage)) {
             this.money = 50 + Math.floor(Math.random() * 50);
         }
 
@@ -227,7 +234,7 @@ export class Sim {
 
         this.applyTraits();
 
-        if (['Adult', 'MiddleAged'].includes(this.ageStage)) {
+        if ([AgeStage.Adult, AgeStage.MiddleAged].includes(this.ageStage)) {
             this.assignJob();
         } else {
             this.job = JOBS.find(j => j.id === 'unemployed')!;
@@ -241,7 +248,7 @@ export class Sim {
         this.buffs = [];
         this.mood = 80;
 
-        this.action = 'idle';
+        this.action = SimAction.Idle;
         this.actionTimer = 0;
 
         this.calculateDailyBudget();
@@ -458,7 +465,7 @@ export class Sim {
                 this.currentPathIndex = 0;
             }
 
-            if ((this.action === 'using' || this.action === 'working' || this.action === 'eating' || this.action === 'sleeping') && !this.target) {
+            if ((this.action === SimAction.Using || this.action === SimAction.Working || this.action === SimAction.Eating || this.action === SimAction.Sleeping) && !this.target) {
                 const distToObj = Math.sqrt(Math.pow(this.pos.x - currentTargetX, 2) + Math.pow(this.pos.y - currentTargetY, 2));
                 if (distToObj > 10) { 
                      this.pos = { x: currentTargetX, y: currentTargetY };
@@ -466,14 +473,14 @@ export class Sim {
             }
         }
 
-        if (this.action === 'commuting_school') {
+        if (this.action === SimAction.CommutingSchool) {
             this.commuteTimer += dt;
             if (this.commuteTimer > 1200 && this.target) {
                 this.pos = { ...this.target };
-                this.action = 'schooling';
+                this.action = SimAction.Schooling;
                 this.say("上课中...", 'act');
             }
-        } else if (this.action === 'schooling') {
+        } else if (this.action === SimAction.Schooling) {
             this.needs.fun -= 0.005 * dt; 
             this.skills.logic += 0.002 * dt;
         }
@@ -485,16 +492,16 @@ export class Sim {
             this.health += 0.01 * f;
         }
 
-        if (['Infant', 'Toddler'].includes(this.ageStage)) {
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) {
             const isSchoolTime = GameStore.time.hour >= 8 && GameStore.time.hour < 18;
 
             if (this.homeId && !this.isAtHome()) {
-                if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') {
-                    if (!this.target || this.action !== 'moving_home') {
+                if (!isSchoolTime && this.action !== SimAction.Schooling && this.action !== SimAction.CommutingSchool) {
+                    if (!this.target || this.action !== SimAction.MovingHome) {
                         const homePos = this.getHomeLocation();
                         if (homePos) {
                             this.target = homePos;
-                            this.action = 'moving_home';
+                            this.action = SimAction.MovingHome;
                             this.path = []; 
                         }
                     }
@@ -507,7 +514,7 @@ export class Sim {
                         const tx = home.x + Math.random() * home.area.w;
                         const ty = home.y + Math.random() * home.area.h;
                         this.target = { x: tx, y: ty };
-                        this.action = 'playing_home';
+                        this.action = SimAction.PlayingHome;
                     }
                 }
                 if (this.needs.hunger < 40) {
@@ -520,28 +527,28 @@ export class Sim {
                     }
                 }
             }
-            else if (!isSchoolTime && this.action !== 'schooling' && this.action !== 'commuting_school') { 
+            else if (!isSchoolTime && this.action !== SimAction.Schooling && this.action !== SimAction.CommutingSchool) { 
                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                 if (parent) {
                     const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
                     if (dist > 50) {
                         this.target = { x: parent.pos.x, y: parent.pos.y };
-                        this.action = 'following';
+                        this.action = SimAction.Following;
                     }
                 }
             }
         }
 
-        if (this.action !== 'sleeping') this.needs.energy -= BASE_DECAY.energy * this.metabolism.energy * f;
-        if (this.action !== 'eating') this.needs.hunger -= BASE_DECAY.hunger * this.metabolism.hunger * f;
-        if (this.action !== 'watching_movie') this.needs.fun -= BASE_DECAY.fun * this.metabolism.fun * f;
+        if (this.action !== SimAction.Sleeping) this.needs.energy -= BASE_DECAY.energy * this.metabolism.energy * f;
+        if (this.action !== SimAction.Eating) this.needs.hunger -= BASE_DECAY.hunger * this.metabolism.hunger * f;
+        if (this.action !== SimAction.WatchingMovie) this.needs.fun -= BASE_DECAY.fun * this.metabolism.fun * f;
         this.needs.bladder -= BASE_DECAY.bladder * this.metabolism.bladder * f;
         this.needs.hygiene -= BASE_DECAY.hygiene * this.metabolism.hygiene * f;
-        if (this.action !== 'talking' && this.action !== 'watching_movie') this.needs.social -= BASE_DECAY.social * this.metabolism.social * f;
+        if (this.action !== SimAction.Talking && this.action !== SimAction.WatchingMovie) this.needs.social -= BASE_DECAY.social * this.metabolism.social * f;
 
         const getRate = (mins: number) => (100 / (mins * 60)) * dt;
 
-        if (this.action === 'working' && !this.isSideHustle) {
+        if (this.action === SimAction.Working && !this.isSideHustle) {
             if (this.needs.hunger < 20) {
                 this.needs.hunger = 80;
                 this.say("摸鱼吃零食 🍫", 'act');
@@ -559,10 +566,10 @@ export class Sim {
             }
         }
 
-        if (this.action === 'talking') {
+        if (this.action === SimAction.Talking) {
             this.needs.social += getRate(RESTORE_TIMES.social);
         }
-        else if (this.action === 'commuting') {
+        else if (this.action === SimAction.Commuting) {
             this.commuteTimer += dt;
             if (this.commuteTimer > 1200 && this.target) {
                 this.pos = { ...this.target };
@@ -575,7 +582,7 @@ export class Sim {
             if (obj.type === 'human' || !obj.utility) {
             } 
             else if (obj.utility === 'work') {
-                if (this.action !== 'working') this.action = 'working';
+                if (this.action !== SimAction.Working) this.action = SimAction.Working;
             } else {
                 let handler = INTERACTIONS[obj.utility];
                 if (!handler) {
@@ -601,14 +608,14 @@ export class Sim {
                 this.decisionTimer -= dt;
             } else {
                 if (this.job.id !== 'unemployed') {
-                    if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
-                         if (this.action === 'moving') this.action = 'idle';
+                    if (this.action !== SimAction.Commuting && this.action !== SimAction.Working && this.action !== SimAction.Schooling) {
+                         if (this.action === SimAction.Moving) this.action = SimAction.Idle;
                          DecisionLogic.decideAction(this);
                          this.decisionTimer = 30 + Math.random() * 30; 
                     }
                 } else {
-                    if (this.action !== 'commuting' && this.action !== 'working' && this.action !== 'schooling') {
-                        if (this.action === 'moving') this.action = 'idle';
+                    if (this.action !== SimAction.Commuting && this.action !== SimAction.Working && this.action !== SimAction.Schooling) {
+                        if (this.action === SimAction.Moving) this.action = SimAction.Idle;
                         DecisionLogic.decideAction(this);
                         this.decisionTimer = 30 + Math.random() * 30; 
                     }
@@ -624,14 +631,14 @@ export class Sim {
                 this.path = []; 
                 this.currentPathIndex = 0;
                 this.commuteTimer = 0;
-                if (this.action === 'commuting_school') {
-                    this.action = 'schooling'; 
+                if (this.action === SimAction.CommutingSchool) {
+                    this.action = SimAction.Schooling; 
                     this.say("乖乖上学", 'act');
                 } 
-                else if (this.action !== 'moving_home') {
+                else if (this.action !== SimAction.MovingHome) {
                     this.startInteraction();
                 } else {
-                    this.action = 'idle'; 
+                    this.action = SimAction.Idle; 
                 }
             } else {
                 if (this.path.length === 0) {
@@ -650,9 +657,9 @@ export class Sim {
                     const distToNext = Math.sqrt(dx * dx + dy * dy);
                     
                     let speedMod = 1.0;
-                    if (this.ageStage === 'Infant') speedMod = 0.3; 
-                    if (this.ageStage === 'Toddler') speedMod = 0.5;
-                    if (this.ageStage === 'Elder') speedMod = 0.7;
+                    if (this.ageStage === AgeStage.Infant) speedMod = 0.3; 
+                    if (this.ageStage === AgeStage.Toddler) speedMod = 0.5;
+                    if (this.ageStage === AgeStage.Elder) speedMod = 0.7;
                     if (this.isPregnant) speedMod = 0.6; 
 
                     const moveStep = this.speed * speedMod * (dt * 0.1);
@@ -665,13 +672,13 @@ export class Sim {
                         this.pos.x += Math.cos(angle) * moveStep;
                         this.pos.y += Math.sin(angle) * moveStep;
                     }
-                    if (this.action !== 'commuting' && this.action !== 'moving_home') this.action = 'moving';
+                    if (this.action !== SimAction.Commuting && this.action !== SimAction.MovingHome) this.action = SimAction.Moving;
                 } else {
                     this.pos = { ...this.target };
                     this.target = null;
                     this.path = [];
-                    if (this.action !== 'moving_home') this.startInteraction();
-                    else this.action = 'idle';
+                    if (this.action !== SimAction.MovingHome) this.startInteraction();
+                    else this.action = SimAction.Idle;
                 }
             }
             
@@ -744,16 +751,16 @@ export class Sim {
         if (this.interactionTarget.type === 'human') {
             let partner = this.interactionTarget.ref;
             const dist = Math.sqrt(Math.pow(this.pos.x - partner.pos.x, 2) + Math.pow(this.pos.y - partner.pos.y, 2));
-            if (dist > 80 || partner.action === 'sleeping' || partner.action === 'working') {
+            if (dist > 80 || partner.action === SimAction.Sleeping || partner.action === SimAction.Working) {
                 this.reset();
                 DecisionLogic.wander(this);
                 return;
             }
-            this.action = 'talking';
+            this.action = SimAction.Talking;
             this.actionTimer = minutes(40);
-            if (partner.action !== 'talking') {
+            if (partner.action !== SimAction.Talking) {
                 partner.reset();
-                partner.action = 'talking';
+                partner.action = SimAction.Talking;
                 partner.actionTimer = minutes(40);
             }
             SocialLogic.performSocial(this, partner);
@@ -796,7 +803,7 @@ export class Sim {
                     return;
                 }
             } else {
-                this.action = 'using';
+                this.action = SimAction.Using;
             }
 
             let durationMinutes = 30;
@@ -826,7 +833,7 @@ export class Sim {
     reset() {
         this.target = null;
         this.interactionTarget = null;
-        this.action = 'idle';
+        this.action = SimAction.Idle;
         this.actionTimer = 0;
         this.isSideHustle = false;
         this.commuteTimer = 0;
@@ -834,13 +841,13 @@ export class Sim {
     }
 
     finishAction() {
-        if (this.action === 'sleeping') {
+        if (this.action === SimAction.Sleeping) {
             this.needs.energy = 100;
             this.addBuff(BUFFS.well_rested);
         }
-        if (this.action === 'eating') this.needs.hunger = 100;
+        if (this.action === SimAction.Eating) this.needs.hunger = 100;
         
-        if (this.action === 'using' && this.interactionTarget) {
+        if (this.action === SimAction.Using && this.interactionTarget) {
             let u = this.interactionTarget.utility;
             let obj = this.interactionTarget;
 
@@ -862,7 +869,7 @@ export class Sim {
             if (!u.startsWith('buy_') && this.needs[u] !== undefined && this.needs[u] > 90) this.needs[u] = 100;
         }
         
-        if (this.action === 'talking') this.needs.social = 100;
+        if (this.action === SimAction.Talking) this.needs.social = 100;
         this.reset();
     }
 

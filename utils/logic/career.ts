@@ -2,7 +2,7 @@ import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
 import { getJobCapacity, minutes } from '../simulationHelpers';
-import { Furniture } from '../../types';
+import { Furniture, JobType, SimAction, AgeStage } from '../../types';
 
 // ==========================================
 // 💼 职业与生涯逻辑
@@ -13,10 +13,10 @@ export const CareerLogic = {
     // 初始工作指派
     assignJob(sim: Sim) {
         let preferredType = '';
-        if (sim.lifeGoal.includes('富翁') || sim.mbti.includes('T')) preferredType = 'internet';
-        else if (sim.lifeGoal.includes('博学') || sim.mbti.includes('N')) preferredType = 'design';
-        else if (sim.mbti.includes('E')) preferredType = 'business';
-        else preferredType = Math.random() > 0.5 ? 'store' : 'restaurant';
+        if (sim.lifeGoal.includes('富翁') || sim.mbti.includes('T')) preferredType = JobType.Internet;
+        else if (sim.lifeGoal.includes('博学') || sim.mbti.includes('N')) preferredType = JobType.Design;
+        else if (sim.mbti.includes('E')) preferredType = JobType.Business;
+        else preferredType = Math.random() > 0.5 ? JobType.Store : JobType.Restaurant;
 
         const validJobs = JOBS.filter(j => {
             if (j.id === 'unemployed') return true;
@@ -42,8 +42,8 @@ export const CareerLogic = {
         if (sim.hasBuff('stressed') || sim.hasBuff('anxious')) quitScore += 30;
         if (sim.money > 10000) quitScore += 10; 
         
-        if (sim.job.companyType === 'internet' && sim.mbti.includes('F')) quitScore += 10;
-        if (sim.job.companyType === 'business' && sim.mbti.includes('I')) quitScore += 15;
+        if (sim.job.companyType === JobType.Internet && sim.mbti.includes('F')) quitScore += 10;
+        if (sim.job.companyType === JobType.Business && sim.mbti.includes('I')) quitScore += 15;
         
         if (Math.random() * 100 < quitScore && quitScore > 50) {
             GameStore.addLog(sim, `决定辞职... "这工作不适合我"`, 'sys');
@@ -112,7 +112,7 @@ export const CareerLogic = {
         sim.money += actualPay;
         sim.dailyIncome += actualPay;
 
-        sim.action = 'idle';
+        sim.action = SimAction.Idle;
         sim.actionTimer = 0; 
         sim.target = null;
         sim.interactionTarget = null;
@@ -127,7 +127,7 @@ export const CareerLogic = {
 
     // 检查是否需要去上班
     checkSchedule(sim: Sim) {
-        if (sim.ageStage === 'Infant' || sim.ageStage === 'Toddler' || sim.ageStage === 'Elder' || sim.job.id === 'unemployed') return;
+        if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Elder].includes(sim.ageStage) || sim.job.id === 'unemployed') return;
 
         const currentMonth = GameStore.time.month;
         const holiday = HOLIDAYS[currentMonth];
@@ -143,8 +143,8 @@ export const CareerLogic = {
         if (isWorkTime) {
             if (sim.hasLeftWorkToday) return;
 
-            if (sim.action === 'working') return;
-            if (sim.action === 'commuting' && sim.interactionTarget?.utility === 'work') return;
+            if (sim.action === SimAction.Working) return;
+            if (sim.action === SimAction.Commuting && sim.interactionTarget?.utility === 'work') return;
             
             sim.isSideHustle = false; 
             sim.currentShiftStart = GameStore.time.hour + GameStore.time.minute / 60;
@@ -153,26 +153,25 @@ export const CareerLogic = {
             let searchCategories: string[] = ['work', 'work_group']; 
 
             // 查找合适的工位
-            if (sim.job.companyType === 'internet') {
+            if (sim.job.companyType === JobType.Internet) {
                 searchLabels = sim.job.level >= 4 ? ['老板椅'] : ['码农工位', '控制台'];
-            } else if (sim.job.companyType === 'design') {
+            } else if (sim.job.companyType === JobType.Design) {
                 searchLabels = ['画架'];
                 searchCategories.push('paint'); 
-            } else if (sim.job.companyType === 'business') {
+            } else if (sim.job.companyType === JobType.Business) {
                 searchLabels = sim.job.level >= 4 ? ['老板椅'] : ['商务工位'];
-            } else if (sim.job.companyType === 'store') {
+            } else if (sim.job.companyType === JobType.Store) {
                 searchLabels = ['服务台', '影院服务台', '售票处']; 
-            } else if (sim.job.companyType === 'restaurant') {
+            } else if (sim.job.companyType === JobType.Restaurant) {
                 if (sim.job.title.includes('厨') || sim.job.title === '打杂') {
                     searchLabels = ['后厨', '灶台'];
                 } else {
                     searchLabels = ['餐厅前台'];
                 }
-            } else if (sim.job.companyType === 'library') {
+            } else if (sim.job.companyType === JobType.Library) {
                 searchLabels = ['管理员'];
             }
-            // [新增] 学校相关职位
-            else if (sim.job.companyType === 'school') {
+            else if (sim.job.companyType === JobType.School) {
                 if (sim.job.id === 'teacher_kg') {
                     searchLabels = ['教师桌', '婴儿床', '滑梯']; // 幼师照顾孩子
                 } else if (sim.job.id === 'teacher_elem') {
@@ -187,8 +186,7 @@ export const CareerLogic = {
                     searchLabels = ['食堂灶台', '后厨']; // 厨师
                 }
             } 
-            // [新增] 夜生活相关职位
-            else if (sim.job.companyType === 'nightlife') {
+            else if (sim.job.companyType === JobType.Nightlife) {
                 if (sim.job.id === 'dj') {
                     searchLabels = ['DJ台'];
                 }
@@ -221,7 +219,7 @@ export const CareerLogic = {
 
                 sim.target = { x: targetX, y: targetY };
                 sim.interactionTarget = { ...desk, utility: 'work' };
-                sim.action = 'commuting';
+                sim.action = SimAction.Commuting;
                 sim.actionTimer = 0; 
                 sim.commuteTimer = 0;
                 sim.say("去上班 💼", 'act');
@@ -235,7 +233,7 @@ export const CareerLogic = {
                     label: '站立办公',
                     type: 'virtual'
                 };
-                sim.action = 'commuting';
+                sim.action = SimAction.Commuting;
                 sim.actionTimer = 0;
                 sim.commuteTimer = 0;
                 sim.say("站着上班 💼", 'bad');
@@ -245,10 +243,10 @@ export const CareerLogic = {
             // 下班逻辑
             sim.hasLeftWorkToday = false;
 
-            if (sim.action === 'working' || sim.action === 'commuting') {
-                 if (sim.action === 'commuting' && sim.interactionTarget?.utility !== 'work') return;
+            if (sim.action === SimAction.Working || sim.action === SimAction.Commuting) {
+                 if (sim.action === SimAction.Commuting && sim.interactionTarget?.utility !== 'work') return;
 
-                sim.action = 'idle';
+                sim.action = SimAction.Idle;
                 sim.target = null;
                 sim.interactionTarget = null;
                 sim.path = []; // Reset Path
@@ -260,16 +258,16 @@ export const CareerLogic = {
 
                 let dailyPerf = 5; 
                 // 工作表现计算
-                if (sim.job.companyType === 'internet') {
+                if (sim.job.companyType === JobType.Internet) {
                     if (sim.iq > 70) dailyPerf += 5;
                     if (sim.skills.logic > 50) dailyPerf += 3;
-                } else if (sim.job.companyType === 'design') {
+                } else if (sim.job.companyType === JobType.Design) {
                     if (sim.creativity > 70) dailyPerf += 5;
                     if (sim.skills.creativity > 50) dailyPerf += 3;
-                } else if (sim.job.companyType === 'business') {
+                } else if (sim.job.companyType === JobType.Business) {
                     if (sim.eq > 70) dailyPerf += 5;
                     if (sim.appearanceScore > 70) dailyPerf += 3;
-                } else if (sim.job.companyType === 'restaurant') {
+                } else if (sim.job.companyType === JobType.Restaurant) {
                     if (sim.constitution > 70) dailyPerf += 5;
                     if (sim.skills.cooking > 50) dailyPerf += 3;
                 }

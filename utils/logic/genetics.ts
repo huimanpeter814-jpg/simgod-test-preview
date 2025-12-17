@@ -1,14 +1,14 @@
 import { Sim } from '../Sim';
 import { CONFIG, SURNAMES } from '../../constants';
 import { SocialLogic } from './social';
-import { HousingUnit } from '../../types';
+import { HousingUnit, AgeStage } from '../../types';
 
-// [修复] 定义一个包含绝对坐标的类型，与 GameStore.housingUnits 保持一致
+// 定义一个包含绝对坐标的类型，与 GameStore.housingUnits 保持一致
 type HousingUnitWithPos = HousingUnit & { x: number; y: number };
 
 // 生成家庭的逻辑
 export const FamilyGenerator = {
-    // [修复] 参数类型改为 HousingUnitWithPos[]
+    // 参数类型改为 HousingUnitWithPos[]
     generate(count: number, housingUnits: HousingUnitWithPos[], allSims: Sim[]): Sim[] {
         const familyId = Math.random().toString(36).substring(2, 8);
         const r = Math.random();
@@ -57,13 +57,13 @@ export const FamilyGenerator = {
         if (isSameSex) p2Gender = p1Gender;
 
         const p1Surname = getSurname();
-        const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: 'Adult', gender: p1Gender, homeId, money: baseMoney });
+        const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: AgeStage.Adult, gender: p1Gender, homeId, money: baseMoney });
         members.push(parent1);
 
         let parent2: Sim | null = null;
         if (parentCount === 2) {
             const p2Surname = getSurname(); 
-            parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: 'Adult', gender: p2Gender, homeId, money: 0 });
+            parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: AgeStage.Adult, gender: p2Gender, homeId, money: 0 });
             members.push(parent2);
             SocialLogic.marry(parent1, parent2, true); 
         }
@@ -72,7 +72,7 @@ export const FamilyGenerator = {
         const childCount = count - parentCount;
         for (let i = 0; i < childCount; i++) {
             const r2 = Math.random();
-            const ageStage = r2 > 0.6 ? 'Child' : (r2 > 0.3 ? 'Teen' : 'Toddler');
+            const ageStage = r2 > 0.6 ? AgeStage.Child : (r2 > 0.3 ? AgeStage.Teen : AgeStage.Toddler);
             let childSurname = p1Surname;
             if (parent2 && Math.random() > 0.5) childSurname = parent2.surname;
             
@@ -85,7 +85,7 @@ export const FamilyGenerator = {
             
             // 建立亲属关系
             members.forEach(p => {
-                if (p.ageStage === 'Adult') {
+                if (p.ageStage === AgeStage.Adult) {
                     SocialLogic.setKinship(p, child, 'child'); 
                     SocialLogic.setKinship(child, p, 'parent'); 
                     p.childrenIds.push(child.id);

@@ -2,6 +2,7 @@ import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { SCHOOL_CONFIG, BUFFS, HOLIDAYS } from '../../constants';
 import { DecisionLogic } from './decision';
+import { SimAction, AgeStage, NeedType } from '../../types';
 
 export const SchoolLogic = {
     findObjectInArea(sim: Sim, utility: string, area: {minX: number, maxX: number, minY: number, maxY: number}) {
@@ -22,7 +23,7 @@ export const SchoolLogic = {
             const tx = area.minX + Math.random() * (area.maxX - area.minX);
             const ty = area.minY + Math.random() * (area.maxY - area.minY);
             sim.target = { x: tx, y: ty };
-            sim.action = 'schooling'; // 保持状态
+            sim.action = SimAction.Schooling; // 保持状态
         }
     },
     isInSchoolArea(sim: Sim, type: string): boolean {
@@ -83,12 +84,12 @@ export const SchoolLogic = {
             sim.pos = { x: targetX, y: targetY };
             sim.target = null;
             sim.path = [];
-            sim.action = 'schooling'; 
+            sim.action = SimAction.Schooling; 
             return true;
         }
 
         sim.target = { x: targetX, y: targetY };
-        sim.action = 'commuting_school';
+        sim.action = SimAction.CommutingSchool;
         sim.say("去学校...", 'act');
         return true;
     },
@@ -96,7 +97,7 @@ export const SchoolLogic = {
 
     // 1. 幼儿园托管逻辑
     checkKindergarten(sim: Sim) {
-        if (!['Infant', 'Toddler'].includes(sim.ageStage)) return;
+        if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
 
         const currentHour = GameStore.time.hour;
         // 设定托儿所时间：早上8点到下午6点
@@ -106,14 +107,14 @@ export const SchoolLogic = {
 
         // 1. 白天：强制托管（解决父母出门导致反复传送的问题）
         if (isDaycareTime) {
-            if (!inKindergarten && sim.action !== 'commuting_school' && sim.action !== 'schooling') {
+            if (!inKindergarten && sim.action !== SimAction.CommutingSchool && sim.action !== SimAction.Schooling) {
                 // 只有不在学校且没在路上时，才传送/出发
                 SchoolLogic.sendToSchool(sim, 'kindergarten');
                 GameStore.addLog(sim, "到了上托儿所的时间，被送到了幼儿园", 'sys');
             } 
             else if (inKindergarten) {
                 // 在学校里保持状态
-                if (sim.action === 'idle') sim.action = 'schooling';
+                if (sim.action === SimAction.Idle) sim.action = SimAction.Schooling;
                 if (sim.needs.social < 80) sim.needs.social += 1; 
                 SchoolLogic.autoReplenishNeeds(sim);
                 
@@ -141,7 +142,7 @@ export const SchoolLogic = {
                     // 只有放学这一刻传送一次
                     sim.pos = { x: home.x, y: home.y + 20 };
                     sim.target = null;
-                    sim.action = 'idle';
+                    sim.action = SimAction.Idle;
                     sim.interactionTarget = null;
                     sim.say("爸爸妈妈来接我啦！", 'love');
                     GameStore.addLog(sim, "放学被接回了家", 'family');
@@ -153,9 +154,9 @@ export const SchoolLogic = {
 
     // 2. 中小学上课逻辑 (checkSchedule 调用)
     checkSchoolSchedule(sim: Sim) {
-        if (!['Child', 'Teen'].includes(sim.ageStage)) return;
+        if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
 
-        const config = sim.ageStage === 'Child' ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
+        const config = sim.ageStage === AgeStage.Child ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
         const currentMonth = GameStore.time.month;
 
        // 1. 寒暑假判定
@@ -183,8 +184,8 @@ export const SchoolLogic = {
 
         // 上学时间
         if (hour >= config.startHour && hour < config.endHour) {
-            if (sim.action === 'schooling') return;
-            if (sim.action === 'commuting_school') return;
+            if (sim.action === SimAction.Schooling) return;
+            if (sim.action === SimAction.CommutingSchool) return;
             if (sim.hasLeftWorkToday) return; // 借用这个flag表示今天已经放学或逃学
 
             // 判定是否逃学 (基于性格和心情)
@@ -212,7 +213,7 @@ export const SchoolLogic = {
 
             // 5. 年龄阶段
             // 青少年更容易叛逆
-            if (sim.ageStage === 'Teen') skipProb += 0.02;
+            if (sim.ageStage === AgeStage.Teen) skipProb += 0.02;
 
             // 6. 当前状态 (短期诱因 - 决定性因素)
             // 极度无聊是逃课的最大动力
@@ -232,12 +233,12 @@ export const SchoolLogic = {
                 if (sim.needs.fun < 30) {
                     sim.say("学校太无聊了，去玩吧！🎮", 'bad');
                     GameStore.addLog(sim, "因忍受不了枯燥，决定逃学去玩！", 'bad');
-                    DecisionLogic.findObject(sim, 'fun'); // 明确去找乐子
+                    DecisionLogic.findObject(sim, NeedType.Fun); // 明确去找乐子
                 } else if (sim.needs.energy < 20) {
                     sim.say("太困了...再睡会 💤", 'bad');
                     GameStore.addLog(sim, "因精力不足，决定在宿舍补觉逃课。", 'bad');
                     // 留在原地或回家睡觉
-                    if (sim.homeId) DecisionLogic.findObject(sim, 'energy');
+                    if (sim.homeId) DecisionLogic.findObject(sim, NeedType.Energy);
                 } else if (sim.morality < 30) {
                     sim.say("切，谁稀罕上学...", 'bad');
                     GameStore.addLog(sim, "作为不良少年，逃课是家常便饭。", 'bad');
@@ -259,9 +260,9 @@ export const SchoolLogic = {
                 sim.say("学校好像关门了...", 'sys');
             }
         } 
-        else if (hour >= config.endHour && sim.action === 'schooling') {
+        else if (hour >= config.endHour && sim.action === SimAction.Schooling) {
             // 放学
-            sim.action = 'idle';
+            sim.action = SimAction.Idle;
             sim.target = null;
             sim.hasLeftWorkToday = false;
             sim.say("放学啦！", 'act');
@@ -275,7 +276,7 @@ export const SchoolLogic = {
 
     autoReplenishNeeds(sim: Sim) {
         // 幼儿园老师照顾：如果需求过低，自动补满
-        ['hunger', 'bladder', 'hygiene', 'energy'].forEach(n => {
+        [NeedType.Hunger, NeedType.Bladder, NeedType.Hygiene, NeedType.Energy].forEach(n => {
             if (sim.needs[n] < 30) {
                 sim.needs[n] = 90;
                 sim.say("老师帮忙...", 'sys');
@@ -287,9 +288,9 @@ export const SchoolLogic = {
 
     // 4. 零花钱系统 (每日触发)
     giveAllowance(sim: Sim) {
-        if (!['Child', 'Teen'].includes(sim.ageStage)) return;
+        if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
         
-        const config = sim.ageStage === 'Child' ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
+        const config = sim.ageStage === AgeStage.Child ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
         let amount = config.allowanceBase;
 
         // 父母越有钱，给的越多
@@ -312,7 +313,7 @@ export const SchoolLogic = {
     // 5. 学业与作业
     doHomework(sim: Sim) {
         // 只有小学生和中学生需要做作业
-        if (!['Child', 'Teen'].includes(sim.ageStage)) return;
+        if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
 
         const successChance = (sim.iq * 0.4 + sim.skills.logic * 0.6) / 100;
         

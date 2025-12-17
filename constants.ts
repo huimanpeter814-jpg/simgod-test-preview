@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Furniture, Job } from './types';
+import { Job, JobType, AgeStage, NeedType } from './types';
 
 // 1. 资源加载
 const faceFiles = import.meta.glob('/public/assets/face/*.{png,jpg,jpeg,webp}', { eager: true });
@@ -27,7 +27,6 @@ export const CONFIG = {
         clothes: [
             '#e66767', '#f19066', '#f5cd79', '#63cdda', '#cf6a87', '#786fa6', '#546de5'
         ],
-        // [新增] 裤子颜色库
         pants: [
             '#2d3436', // 黑/深灰
             '#636e72', // 灰
@@ -44,50 +43,38 @@ export const CONFIG = {
 
 export { PALETTES } from './data/scene';
 
-export const AGE_CONFIG = {
-    Infant: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb', width: 12, height: 16, headSize: 8 },
-    Toddler: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3', width: 14, height: 22, headSize: 10 },
-    Child: { min: 6, max: 12, label: '儿童', color: '#54a0ff', width: 16, height: 30, headSize: 11 },
-    Teen: { min: 13, max: 18, label: '青少年', color: '#5f27cd', width: 18, height: 38, headSize: 12 },
-    Adult: { min: 19, max: 39, label: '成年', color: '#1dd1a1', width: 20, height: 42, headSize: 13 },
-    MiddleAged: { min: 40, max: 59, label: '中年', color: '#ff9f43', width: 22, height: 42, headSize: 13 },
-    Elder: { min: 60, max: 120, label: '老年', color: '#8395a7', width: 20, height: 40, headSize: 13 }
+// 使用 Enum 作为 Key
+export const AGE_CONFIG: Record<AgeStage, { min: number, max: number, label: string, color: string, width: number, height: number, headSize: number }> = {
+    [AgeStage.Infant]: { min: 0, max: 2, label: '婴儿', color: '#ffbdcb', width: 12, height: 16, headSize: 8 },
+    [AgeStage.Toddler]: { min: 3, max: 5, label: '幼儿', color: '#ff9ff3', width: 14, height: 22, headSize: 10 },
+    [AgeStage.Child]: { min: 6, max: 12, label: '儿童', color: '#54a0ff', width: 16, height: 30, headSize: 11 },
+    [AgeStage.Teen]: { min: 13, max: 18, label: '青少年', color: '#5f27cd', width: 18, height: 38, headSize: 12 },
+    [AgeStage.Adult]: { min: 19, max: 39, label: '成年', color: '#1dd1a1', width: 20, height: 42, headSize: 13 },
+    [AgeStage.MiddleAged]: { min: 40, max: 59, label: '中年', color: '#ff9f43', width: 22, height: 42, headSize: 13 },
+    [AgeStage.Elder]: { min: 60, max: 120, label: '老年', color: '#8395a7', width: 20, height: 40, headSize: 13 }
 };
 
 export const HAIR_STYLE_NAMES = [
-    '普通短发',      // 0
-    '波波头',        // 1
-    '刺猬头',        // 2
-    '侧分背头',      // 3
-    '丸子头',        // 4
-    '姬发式长直',    // 5
-    '蓬松爆炸头',    // 6
-    '莫霍克',        // 7
-    '双马尾',        // 8
-    '地中海',        // 9
-    '中分窗帘头',    // 10
-    '高马尾',        // 11
-    '狼尾鲻鱼头',    // 12
-    '遮眼侧刘海',    // 13
-    '脏辫',          // 14
-    '波浪长卷发',    // 15
-    '半扎公主头',    // 16
+    '普通短发', '波波头', '刺猬头', '侧分背头', '丸子头', '姬发式长直', '蓬松爆炸头',
+    '莫霍克', '双马尾', '地中海', '中分窗帘头', '高马尾', '狼尾鲻鱼头', '遮眼侧刘海',
+    '脏辫', '波浪长卷发', '半扎公主头'
 ];
 
+// 使用 NeedType
 export const ITEMS = [
-    { id: 'drink', label: '冰美式', cost: 15, needs: { hunger: 2, fun: 5 }, trigger: 'street' },
-    { id: 'book', label: '设计年鉴', cost: 60, needs: { fun: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
-    { id: 'cinema_2d', label: '文艺片票', cost: 30, needs: { fun: 40 }, trigger: 'bored' },
-    { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { fun: 60 }, trigger: 'rich' },
-    { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { fun: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
-    { id: 'gym_pass', label: '私教课', cost: 100, needs: { energy: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
+    { id: 'drink', label: '冰美式', cost: 15, needs: { [NeedType.Hunger]: 2, [NeedType.Fun]: 5 }, trigger: 'street' },
+    { id: 'book', label: '设计年鉴', cost: 60, needs: { [NeedType.Fun]: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'cinema_2d', label: '文艺片票', cost: 30, needs: { [NeedType.Fun]: 40 }, trigger: 'bored' },
+    { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { [NeedType.Fun]: 60 }, trigger: 'rich' },
+    { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { [NeedType.Fun]: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
+    { id: 'gym_pass', label: '私教课', cost: 100, needs: { [NeedType.Energy]: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
     { id: 'medicine', label: '急救包', cost: 100, buff: 'healing', trigger: 'sick' },
-    { id: 'game_coin', label: '代币', cost: 5, needs: { fun: 20 }, trigger: 'bored' },
-    { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { fun: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
-    { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { hunger: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
-    { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { fun: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
-    { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { fun: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
-    { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { hunger: 10, fun: 10 }, rel: true, trigger: 'love' },
+    { id: 'game_coin', label: '代币', cost: 5, needs: { [NeedType.Fun]: 20 }, trigger: 'bored' },
+    { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { [NeedType.Fun]: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
+    { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { [NeedType.Hunger]: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
+    { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { [NeedType.Fun]: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { [NeedType.Fun]: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
+    { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { [NeedType.Hunger]: 10, [NeedType.Fun]: 10 }, rel: true, trigger: 'love' },
     { id: 'protection', label: '安全措施', cost: 20, trigger: 'safe_sex' },
 ];
 
@@ -97,56 +84,57 @@ export const SKILLS = [
     { id: 'gardening', label: '种植' }, { id: 'fishing', label: '钓鱼' }
 ];
 
+// 使用 JobType Enum
 export const JOBS: Job[] = [
-    { id: 'unemployed', title: '自由职业', level: 0, salary: 0, startHour: 0, endHour: 0 },
+    { id: 'unemployed', title: '自由职业', level: 0, salary: 0, startHour: 0, endHour: 0, companyType: JobType.Unemployed },
 
     // Internet Co
-    { id: 'dev_intern', title: '初级码农', level: 1, salary: 400, startHour: 10, endHour: 19, companyType: 'internet' },
-    { id: 'developer', title: '全栈开发', level: 2, salary: 800, startHour: 10, endHour: 20, companyType: 'internet' },
-    { id: 'senior_dev', title: '架构师', level: 3, salary: 1500, startHour: 10, endHour: 18, companyType: 'internet' },
-    { id: 'cto', title: '合伙人', level: 4, salary: 3000, startHour: 11, endHour: 16, companyType: 'internet' },
+    { id: 'dev_intern', title: '初级码农', level: 1, salary: 400, startHour: 10, endHour: 19, companyType: JobType.Internet },
+    { id: 'developer', title: '全栈开发', level: 2, salary: 800, startHour: 10, endHour: 20, companyType: JobType.Internet },
+    { id: 'senior_dev', title: '架构师', level: 3, salary: 1500, startHour: 10, endHour: 18, companyType: JobType.Internet },
+    { id: 'cto', title: '合伙人', level: 4, salary: 3000, startHour: 11, endHour: 16, companyType: JobType.Internet },
 
     // Design Co
-    { id: 'design_intern', title: '绘图员', level: 1, salary: 300, startHour: 9, endHour: 18, companyType: 'design' },
-    { id: 'designer', title: '视觉设计', level: 2, salary: 600, startHour: 10, endHour: 19, companyType: 'design' },
-    { id: 'senior_designer', title: '主美', level: 3, salary: 1000, startHour: 10, endHour: 18, companyType: 'design' },
-    { id: 'art_director', title: '创意总监', level: 4, salary: 2000, startHour: 11, endHour: 16, companyType: 'design' },
+    { id: 'design_intern', title: '绘图员', level: 1, salary: 300, startHour: 9, endHour: 18, companyType: JobType.Design },
+    { id: 'designer', title: '视觉设计', level: 2, salary: 600, startHour: 10, endHour: 19, companyType: JobType.Design },
+    { id: 'senior_designer', title: '主美', level: 3, salary: 1000, startHour: 10, endHour: 18, companyType: JobType.Design },
+    { id: 'art_director', title: '创意总监', level: 4, salary: 2000, startHour: 11, endHour: 16, companyType: JobType.Design },
 
     // Business Co
-    { id: 'biz_intern', title: '行政专员', level: 1, salary: 250, startHour: 9, endHour: 17, companyType: 'business' },
-    { id: 'clerk_biz', title: '客户经理', level: 2, salary: 500, startHour: 9, endHour: 17, companyType: 'business' },
-    { id: 'biz_supervisor', title: '运营总监', level: 3, salary: 1000, startHour: 9, endHour: 17, companyType: 'business' },
-    { id: 'manager', title: 'CEO', level: 4, salary: 2500, startHour: 10, endHour: 16, companyType: 'business' },
+    { id: 'biz_intern', title: '行政专员', level: 1, salary: 250, startHour: 9, endHour: 17, companyType: JobType.Business },
+    { id: 'clerk_biz', title: '客户经理', level: 2, salary: 500, startHour: 9, endHour: 17, companyType: JobType.Business },
+    { id: 'biz_supervisor', title: '运营总监', level: 3, salary: 1000, startHour: 9, endHour: 17, companyType: JobType.Business },
+    { id: 'manager', title: 'CEO', level: 4, salary: 2500, startHour: 10, endHour: 16, companyType: JobType.Business },
 
     // Services (Store)
-    { id: 'store_trainee', title: '理货员', level: 1, salary: 180, startHour: 8, endHour: 16, companyType: 'store' },
-    { id: 'clerk_book', title: '导购', level: 2, salary: 300, startHour: 9, endHour: 17, companyType: 'store' },
-    { id: 'store_supervisor', title: '值班经理', level: 3, salary: 500, startHour: 9, endHour: 18, companyType: 'store' },
-    { id: 'store_manager', title: '店长', level: 4, salary: 800, startHour: 10, endHour: 17, companyType: 'store' },
+    { id: 'store_trainee', title: '理货员', level: 1, salary: 180, startHour: 8, endHour: 16, companyType: JobType.Store },
+    { id: 'clerk_book', title: '导购', level: 2, salary: 300, startHour: 9, endHour: 17, companyType: JobType.Store },
+    { id: 'store_supervisor', title: '值班经理', level: 3, salary: 500, startHour: 9, endHour: 18, companyType: JobType.Store },
+    { id: 'store_manager', title: '店长', level: 4, salary: 800, startHour: 10, endHour: 17, companyType: JobType.Store },
 
-    // Cinema
-    { id: 'cinema_trainee', title: '检票员', level: 1, salary: 220, startHour: 10, endHour: 18, companyType: 'store' },
-    { id: 'cinema_staff', title: '售票员', level: 2, salary: 380, startHour: 10, endHour: 19, companyType: 'store' },
+    // Cinema (Also Store for now, or could make a new Entertainment type)
+    { id: 'cinema_trainee', title: '检票员', level: 1, salary: 220, startHour: 10, endHour: 18, companyType: JobType.Store },
+    { id: 'cinema_staff', title: '售票员', level: 2, salary: 380, startHour: 10, endHour: 19, companyType: JobType.Store },
 
     // Services (Restaurant)
-    { id: 'kitchen_helper', title: '打杂', level: 1, salary: 200, startHour: 10, endHour: 20, companyType: 'restaurant' },
-    { id: 'waiter', title: '服务员', level: 2, salary: 350, startHour: 11, endHour: 20, companyType: 'restaurant' },
-    { id: 'cook', title: '厨师', level: 3, salary: 600, startHour: 10, endHour: 20, companyType: 'restaurant' },
-    { id: 'head_chef', title: '行政主厨', level: 4, salary: 1200, startHour: 10, endHour: 19, companyType: 'restaurant' },
+    { id: 'kitchen_helper', title: '打杂', level: 1, salary: 200, startHour: 10, endHour: 20, companyType: JobType.Restaurant },
+    { id: 'waiter', title: '服务员', level: 2, salary: 350, startHour: 11, endHour: 20, companyType: JobType.Restaurant },
+    { id: 'cook', title: '厨师', level: 3, salary: 600, startHour: 10, endHour: 20, companyType: JobType.Restaurant },
+    { id: 'head_chef', title: '行政主厨', level: 4, salary: 1200, startHour: 10, endHour: 19, companyType: JobType.Restaurant },
 
     // Library
-    { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: 'library', vacationMonths: [2, 7] },
+    { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: JobType.Library, vacationMonths: [2, 7] },
 
-    // [新增] Education (School)
-    { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: 'school', vacationMonths: [2, 7] },
-    { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: 'school', vacationMonths: [2, 7] },
-    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: 'school', vacationMonths: [2, 7] },
-    { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: 'school', vacationMonths: [2, 7] },
-    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: 'school' },
-    { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 550, startHour: 6, endHour: 14, companyType: 'school' },
+    // Education (School)
+    { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: JobType.School },
+    { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 550, startHour: 6, endHour: 14, companyType: JobType.School },
 
-    // [新增] Nightlife
-    { id: 'dj', title: 'DJ', level: 3, salary: 1000, startHour: 20, endHour: 4, companyType: 'nightlife' },
+    // Nightlife
+    { id: 'dj', title: 'DJ', level: 3, salary: 1000, startHour: 20, endHour: 4, companyType: JobType.Nightlife },
 ];
 
 export const BUFFS = {
@@ -272,14 +260,14 @@ export const SOCIAL_TYPES = [
     { id: 'argue', label: '吵架', val: -15, type: 'friendship', minVal: -100, maxVal: 100, logType: 'bad' }
 ];
 
-export const BASE_DECAY = {
-    energy: 0.8,
-    hunger: 1.0,
-    fun: 0.8,
-    social: 0.8,
-    bladder: 0.8,
-    hygiene: 0.5,
-    health: 0.0 
+export const BASE_DECAY: Record<NeedType, number> = {
+    [NeedType.Energy]: 0.8,
+    [NeedType.Hunger]: 1.0,
+    [NeedType.Fun]: 0.8,
+    [NeedType.Social]: 0.8,
+    [NeedType.Bladder]: 0.8,
+    [NeedType.Hygiene]: 0.5,
+    [NeedType.Comfort]: 0.0 // Added Comfort for type safety
 };
 
 export const ORIENTATIONS = [
@@ -294,14 +282,14 @@ export const SCHOOL_CONFIG = {
         label: '向日葵幼儿园',
         startHour: 8,
         endHour: 17,
-        stages: ['Infant', 'Toddler']
+        stages: [AgeStage.Infant, AgeStage.Toddler]
     },
     elementary: {
         id: 'elementary',
         label: '第一小学',
         startHour: 8,
         endHour: 15,
-        stages: ['Child'],
+        stages: [AgeStage.Child],
         allowanceBase: 20
     },
     high_school: {
@@ -309,7 +297,7 @@ export const SCHOOL_CONFIG = {
         label: '第一中学',
         startHour: 7.5,
         endHour: 18, 
-        stages: ['Teen'],
+        stages: [AgeStage.Teen],
         allowanceBase: 50
     }
 };

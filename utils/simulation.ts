@@ -1,14 +1,14 @@
 import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState, AgeStage } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
 import { FamilyGenerator } from './logic/genetics';
 import { NarrativeSystem } from './logic/narrative';
 import { EditorManager } from '../managers/EditorManager';
-import { SaveManager, GameSaveData } from '../managers/SaveManager'; // [新增] 引入 SaveManager
+import { SaveManager, GameSaveData } from '../managers/SaveManager'; 
 
 // Re-exports
 export { Sim } from './Sim';
@@ -100,7 +100,7 @@ export class GameStore {
             this.addLog(partner, `随配偶搬进了新家`, 'family');
         }
 
-        const children = this.sims.filter(s => sim.childrenIds.includes(s.id) && ['Infant', 'Toddler', 'Child', 'Teen'].includes(s.ageStage));
+        const children = this.sims.filter(s => sim.childrenIds.includes(s.id) && ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen] as AgeStage[]).includes(s.ageStage));
         children.forEach(child => {
             if (child.homeId !== newHome.id) {
                 child.homeId = newHome.id;
@@ -477,7 +477,8 @@ export class GameStore {
             // 数据补全/兼容性处理
             if (!sim.childrenIds) sim.childrenIds = [];
             if (!sim.health) sim.health = 100;
-            if (!sim.ageStage) sim.ageStage = 'Adult';
+            // [Fix] 使用枚举 AgeStage.Adult 而不是字符串
+            if (!sim.ageStage) sim.ageStage = AgeStage.Adult;
             if (sim.interactionTarget) sim.interactionTarget = null;
             
             // 恢复职业对象 (确保引用的是常量中的 Job 对象)

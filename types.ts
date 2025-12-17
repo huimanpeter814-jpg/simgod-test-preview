@@ -3,6 +3,59 @@ export interface Vector2 {
   y: number;
 }
 
+// 1. 定义核心 Enums 以替换 Magic Strings
+export enum SimAction {
+    Idle = 'idle',
+    Working = 'working',
+    Sleeping = 'sleeping',
+    Eating = 'eating',
+    Talking = 'talking',
+    Using = 'using',
+    Moving = 'moving',
+    Wandering = 'wandering',
+    Commuting = 'commuting',
+    CommutingSchool = 'commuting_school', // 上学通勤
+    Schooling = 'schooling',              // 在校学习
+    WatchingMovie = 'watching_movie',
+    Phone = 'phone',
+    PlayingHome = 'playing_home',
+    Following = 'following',
+    MovingHome = 'moving_home',
+    EatingOut = 'eat_out'
+}
+
+export enum JobType {
+    Unemployed = 'unemployed',
+    Internet = 'internet',
+    Design = 'design',
+    Business = 'business',
+    Store = 'store',
+    Restaurant = 'restaurant',
+    Library = 'library',
+    School = 'school',
+    Nightlife = 'nightlife'
+}
+
+export enum NeedType {
+    Hunger = 'hunger',
+    Energy = 'energy',
+    Fun = 'fun',
+    Social = 'social',
+    Bladder = 'bladder',
+    Hygiene = 'hygiene',
+    Comfort = 'comfort'
+}
+
+export enum AgeStage {
+    Infant = 'Infant',
+    Toddler = 'Toddler',
+    Child = 'Child',
+    Teen = 'Teen',
+    Adult = 'Adult',
+    MiddleAged = 'MiddleAged',
+    Elder = 'Elder'
+}
+
 export interface Furniture {
   id: string;
   x: number;
@@ -65,13 +118,13 @@ export interface WorldPlot {
     y: number;
     width?: number; 
     height?: number;
-    customName?: string;  // 自定义地皮名称
-    customColor?: string; // 自定义地皮颜色
-    customType?: string;  // 自定义功能类型 (如 tech, park 等，但不改变外观)
+    customName?: string;  
+    customColor?: string; 
+    customType?: string;  
 }
 
 export interface EditorState {
-  mode: 'none' | 'plot' | 'furniture' | 'floor'; // floor 模式现在实际上是“房间建造模式”
+  mode: 'none' | 'plot' | 'furniture' | 'floor'; 
   selectedPlotId: string | null;
   selectedFurnitureId: string | null;
   selectedRoomId: string | null;
@@ -98,19 +151,18 @@ export interface EditorState {
       pattern: string;
       color: string;
       label: string;
-      hasWall: boolean; // [新增] 是否带墙
+      hasWall: boolean; 
   } | null;
 
   previewPos: { x: number, y: number } | null;
 }
 
-// [新增] 从 simulation.ts 移动过来的接口
 export interface EditorAction {
     type: 'add' | 'remove' | 'move' | 'modify';
     entityType: 'plot' | 'furniture' | 'room';
     id: string;
-    prevData?: any; // 用于撤销
-    newData?: any;  // 用于重做
+    prevData?: any; 
+    newData?: any;  
 }
 
 export interface RoomDef {
@@ -128,16 +180,10 @@ export interface RoomDef {
   hasWall?: boolean; 
 }
 
-export interface Needs {
-  hunger: number;
-  energy: number;
-  fun: number;
-  social: number;
-  bladder: number;
-  hygiene: number;
-  comfort?: number;
-  [key: string]: number | undefined;
-}
+// Update Needs to use dynamic keys but generally match NeedType
+export type Needs = {
+  [key in NeedType]: number;
+} & { [key: string]: number | undefined };
 
 export interface Skills {
   cooking: number;
@@ -174,7 +220,7 @@ export interface Job {
   startHour: number;
   endHour: number;
   vacationMonths?: number[]; 
-  companyType?: string; 
+  companyType?: JobType | string; // Use Enum
 }
 
 export interface Buff {
@@ -199,8 +245,6 @@ export interface Memory {
     text: string;
     relatedSimId?: string; 
 }
-
-export type AgeStage = 'Infant' | 'Toddler' | 'Child' | 'Teen' | 'Adult' | 'MiddleAged' | 'Elder';
 
 export interface SimData {
   id: string;
@@ -229,7 +273,7 @@ export interface SimData {
   zodiac: Zodiac;
   
   age: number;
-  ageStage: AgeStage; 
+  ageStage: AgeStage; // Use Enum
   health: number; 
   
   partnerId: string | null;
@@ -261,7 +305,7 @@ export interface SimData {
 
   memories: Memory[];
 
-  action: string;
+  action: SimAction | string; // Use Enum
   bubble?: { text: string | null; type: string; timer: number };
   target?: Vector2 | null;
   interactionTarget?: any;

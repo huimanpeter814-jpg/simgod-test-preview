@@ -2,10 +2,10 @@ import type { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
 import { minutes } from '../simulationHelpers';
-import { Furniture } from '../../types';
+import { Furniture, SimAction, NeedType, AgeStage } from '../../types';
 
 export const DecisionLogic = {
-    // [新增] 检查目标位置或家具是否是私人领地
+    // 检查目标位置或家具是否是私人领地
     isRestricted(sim: Sim, target: { x: number, y: number } | Furniture): boolean {
         let homeId: string | undefined;
 
@@ -38,10 +38,10 @@ export const DecisionLogic = {
     decideAction(sim: Sim) {
         // 1. 检查紧急需求 (< 40)
         let critical = [
-            { id: 'energy', val: sim.needs.energy },
-            { id: 'hunger', val: sim.needs.hunger },
-            { id: 'bladder', val: sim.needs.bladder },
-            { id: 'hygiene', val: sim.needs.hygiene }
+            { id: NeedType.Energy, val: sim.needs.energy },
+            { id: NeedType.Hunger, val: sim.needs.hunger },
+            { id: NeedType.Bladder, val: sim.needs.bladder },
+            { id: NeedType.Hygiene, val: sim.needs.hygiene }
         ].filter(n => n.val < 40);
 
         if (critical.length > 0) {
@@ -52,11 +52,11 @@ export const DecisionLogic = {
 
         // 2. 计算各需求评分
         let scores = [
-            { id: 'energy', score: (100 - sim.needs.energy) * 3.0, type: 'obj' },
-            { id: 'hunger', score: (100 - sim.needs.hunger) * 2.5, type: 'obj' },
-            { id: 'bladder', score: (100 - sim.needs.bladder) * 2.8, type: 'obj' },
-            { id: 'hygiene', score: (100 - sim.needs.hygiene) * 1.5, type: 'obj' },
-            { id: 'fun', score: (100 - sim.needs.fun) * 1.2, type: 'fun' },
+            { id: NeedType.Energy, score: (100 - sim.needs.energy) * 3.0, type: 'obj' },
+            { id: NeedType.Hunger, score: (100 - sim.needs.hunger) * 2.5, type: 'obj' },
+            { id: NeedType.Bladder, score: (100 - sim.needs.bladder) * 2.8, type: 'obj' },
+            { id: NeedType.Hygiene, score: (100 - sim.needs.hygiene) * 1.5, type: 'obj' },
+            { id: NeedType.Fun, score: (100 - sim.needs.fun) * 1.2, type: 'fun' },
         ];
 
         let socialScore = (100 - sim.needs.social) * 1.5;
@@ -73,9 +73,9 @@ export const DecisionLogic = {
         }
         if (sim.mood < 30) socialScore *= 0.3;
 
-        scores.push({ id: 'social', score: socialScore, type: 'social' });
+        scores.push({ id: NeedType.Social, score: socialScore, type: 'social' });
 
-        if (sim.job.id === 'unemployed' && !['Infant', 'Toddler', 'Child'].includes(sim.ageStage)) {
+        if (sim.job.id === 'unemployed' && ![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
             let moneyDesire = 0;
             if (sim.money < 500) moneyDesire = 200; 
             else if (sim.money < 2000) moneyDesire = 100;
@@ -118,7 +118,7 @@ export const DecisionLogic = {
         let choice = scores[Math.floor(Math.random() * Math.min(scores.length, 3))];
 
         if (choice.score > 20) {
-            if (choice.id === 'social') DecisionLogic.findHuman(sim);
+            if (choice.id === NeedType.Social) DecisionLogic.findHuman(sim);
             else if (choice.id === 'side_hustle') DecisionLogic.findSideHustle(sim);
             else DecisionLogic.findObject(sim, choice.id);
         } else {
@@ -126,7 +126,7 @@ export const DecisionLogic = {
         }
 
         // 学生做作业决策
-        if (['Child', 'Teen'].includes(sim.ageStage) && sim.job.id === 'unemployed') {
+        if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage) && sim.job.id === 'unemployed') {
             // 勤奋的学生(J)或者害怕挂科(成绩差)会倾向于做作业
             let studyDesire = 0;
             if (sim.mbti.includes('J')) studyDesire += 40;
@@ -138,7 +138,7 @@ export const DecisionLogic = {
 
             if (studyDesire > 60) {
                 // 寻找课桌
-                DecisionLogic.findObject(sim, sim.ageStage === 'Teen' ? 'study_high' : 'study');
+                DecisionLogic.findObject(sim, sim.ageStage === AgeStage.Teen ? 'study_high' : 'study');
                 return;
             }
         }
@@ -190,10 +190,10 @@ export const DecisionLogic = {
         let utility = type;
 
         const simpleMap: Record<string, string> = {
-             hunger: 'hunger', 
-             bladder: 'bladder', 
-             hygiene: 'hygiene',
-             energy: 'energy',
+             [NeedType.Hunger]: 'hunger', 
+             [NeedType.Bladder]: 'bladder', 
+             [NeedType.Hygiene]: 'hygiene',
+             [NeedType.Energy]: 'energy',
              cooking: 'cooking', 
              gardening: 'gardening', 
              fishing: 'fishing',
@@ -205,7 +205,7 @@ export const DecisionLogic = {
 
         let candidates: Furniture[] = [];
 
-        if (type === 'fun') {
+        if (type === NeedType.Fun) {
             const funTypes = ['fun', 'cinema_2d', 'cinema_3d', 'cinema_imax', 'art', 'play', 'fishing'];
             if (sim.needs.energy < 70) funTypes.push('comfort');
             
@@ -213,22 +213,22 @@ export const DecisionLogic = {
                 const list = GameStore.furnitureIndex.get(t);
                 if (list) candidates = candidates.concat(list);
             });
-        } else if (type === 'energy') {
+        } else if (type === NeedType.Energy) {
              const beds = GameStore.furnitureIndex.get('energy') || [];
              candidates = candidates.concat(beds);
              if (sim.needs.energy < 30) {
                  const sofas = GameStore.furnitureIndex.get('comfort') || [];
                  candidates = candidates.concat(sofas);
              }
-        } else if (type === 'hunger') {
+        } else if (type === NeedType.Hunger) {
             candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('buy_drink') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []);
-        } else if (type === 'hygiene') {
+        } else if (type === NeedType.Hygiene) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('hygiene') || []);
              candidates = candidates.concat(GameStore.furnitureIndex.get('shower') || []);
-        } else if (type === 'bladder') {
+        } else if (type === NeedType.Bladder) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('bladder') || []);
              if (candidates.length === 0) {
                  const comforts = GameStore.furnitureIndex.get('comfort') || [];
@@ -244,7 +244,7 @@ export const DecisionLogic = {
                  if (DecisionLogic.isRestricted(sim, f)) return false;
 
                  // [修改] 关键逻辑：如果是食物或生存必需品，且没钱，过滤掉收费项目
-                 if (type === 'hunger' && sim.money < 20) {
+                 if (type === NeedType.Hunger && sim.money < 20) {
                      // 如果这东西要钱（cost > 0），就别去了
                      if (f.cost && f.cost > 0) return false;
                      // 还要过滤掉那种 utility 是 buy_food 的（通常隐含收费）
@@ -268,9 +268,9 @@ export const DecisionLogic = {
                 });
 
                 let poolSize = 3;
-                if (type === 'fun' || type === 'play' || type === 'art') {
+                if (type === NeedType.Fun || type === 'play' || type === 'art') {
                     poolSize = 10; 
-                } else if (type === 'hunger') {
+                } else if (type === NeedType.Hunger) {
                     poolSize = 5;  
                 }
                 
@@ -287,7 +287,7 @@ export const DecisionLogic = {
     },
 
     findHuman(sim: Sim) {
-        let others = GameStore.sims.filter(s => s.id !== sim.id && s.action !== 'sleeping' && s.action !== 'working');
+        let others = GameStore.sims.filter(s => s.id !== sim.id && s.action !== SimAction.Sleeping && s.action !== SimAction.Working);
         
         others.sort(() => Math.random() - 0.5);
 
@@ -347,7 +347,7 @@ export const DecisionLogic = {
             sim.target = { ...sim.pos };
         }
 
-        sim.action = 'wandering';
+        sim.action = SimAction.Wandering;
         sim.actionTimer = minutes(0);
     }
 };

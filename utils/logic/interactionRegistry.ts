@@ -1,5 +1,5 @@
 import { ITEMS, BUFFS } from '../../constants';
-import { Furniture } from '../../types';
+import { Furniture, NeedType, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
 
@@ -16,8 +16,8 @@ export interface InteractionHandler {
 
 // === 常量定义 ===
 export const RESTORE_TIMES: Record<string, number> = {
-    bladder: 15, hygiene: 25, hunger: 45, energy_sleep: 420, energy_nap: 60,
-    fun: 90, social: 60, art: 120, play: 60, default: 60
+    [NeedType.Bladder]: 15, [NeedType.Hygiene]: 25, [NeedType.Hunger]: 45, energy_sleep: 420, energy_nap: 60,
+    [NeedType.Fun]: 90, [NeedType.Social]: 60, art: 120, play: 60, default: 60
 };
 
 // === 辅助函数 ===
@@ -120,9 +120,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '烹饪', duration: 90,
         onStart: (sim) => { 
             if (sim.interactionTarget?.utility === 'work') {
-                sim.action = 'working';
+                sim.action = SimAction.Working;
             } else {
-                sim.action = 'using';
+                sim.action = SimAction.Using;
             }
             return true; 
         },
@@ -178,9 +178,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         
         onStart: (sim, obj) => {
             if (sim.isSideHustle) {
-                sim.action = 'using'; 
+                sim.action = SimAction.Using; 
             } else {
-                sim.action = 'working'; 
+                sim.action = SimAction.Working; 
             }
             return true;
         },
@@ -220,7 +220,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // Generic Needs
-    'energy': {
+    [NeedType.Energy]: {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
         getDuration: (sim, obj) => {
@@ -232,8 +232,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
              return (missing / 100) * RESTORE_TIMES.energy_sleep * 1.1; 
         },
         onStart: (sim, obj) => { 
-            if (obj.label.includes('沙发')) sim.action = 'using'; 
-            else sim.action = 'sleeping'; 
+            if (obj.label.includes('沙发')) sim.action = SimAction.Using; 
+            else sim.action = SimAction.Sleeping; 
             return true; 
         },
         onUpdate: (sim, obj, f, getRate) => {
@@ -245,7 +245,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'shower': {
         verb: '洗澡 🚿', duration: 20,
-        onStart: (sim) => { sim.action = 'using'; return true; }, 
+        onStart: (sim) => { sim.action = SimAction.Using; return true; }, 
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs.hygiene += getRate(20); 
             sim.needs.energy += getRate(400); 
@@ -254,17 +254,17 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             if (sim.appearanceScore < 80) sim.appearanceScore += 0.05 * f;
         }
     },
-    'hunger': {
+    [NeedType.Hunger]: {
         verb: '用餐 🍴', duration: 30,
-        onStart: (sim) => { sim.action = 'eating'; return true; },
-        onUpdate: genericRestore('hunger')
+        onStart: (sim) => { sim.action = SimAction.Eating; return true; },
+        onUpdate: genericRestore(NeedType.Hunger)
     },
-    'comfort': {
+    [NeedType.Comfort]: {
         verb: '休息', 
         duration: 60,
         getVerb: () => '小憩 💤',
         onStart: (sim) => { 
-            sim.action = 'using'; 
+            sim.action = SimAction.Using; 
             return true; 
         },
         onUpdate: (sim, obj, f, getRate) => {
@@ -333,7 +333,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '午睡 👶', duration: 120,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs.energy += getRate(120);
-            if (sim.ageStage === 'Infant') sim.health += 0.01 * f;
+            if (sim.ageStage === AgeStage.Infant) sim.health += 0.01 * f;
         }
     },
     'play_blocks': {
@@ -374,7 +374,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '吃食堂 🍛', duration: 20,
         onStart: (sim, obj) => {
             // 如果是学生（甚至可以放宽到穷人），免费吃饭
-            const isStudent = ['Child', 'Teen'].includes(sim.ageStage);
+            const isStudent = [AgeStage.Child, AgeStage.Teen].includes(sim.ageStage);
             
             if (!isStudent && sim.money < 10) { 
                 sim.say("饭卡没钱了...", 'bad'); 

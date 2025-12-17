@@ -3,6 +3,7 @@ import { GameStore } from '../simulation';
 import { AGE_CONFIG, JOBS, BUFFS, SURNAMES, MBTI_TYPES } from '../../constants';
 import { SocialLogic } from './social';
 import { CareerLogic } from './career';
+import { AgeStage } from '../../types';
 
 // 🧬 遗传算法辅助函数
 export const mixTrait = (val1: number, val2: number, mutationRange: number = 15) => {
@@ -30,19 +31,19 @@ export const LifeCycleLogic = {
     checkAgeStage(sim: Sim) {
         const currentStageConf = AGE_CONFIG[sim.ageStage];
         if (sim.age > currentStageConf.max) {
-            const stages: (keyof typeof AGE_CONFIG)[] = ['Infant', 'Toddler', 'Child', 'Teen', 'Adult', 'MiddleAged', 'Elder'];
+            const stages: AgeStage[] = [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Elder];
             const idx = stages.indexOf(sim.ageStage);
             if (idx < stages.length - 1) {
                 sim.ageStage = stages[idx + 1];
                 sim.say(`我长大了！变成 ${AGE_CONFIG[sim.ageStage].label} 了`, 'sys');
                 sim.addMemory(`在这个月，我成长为了 ${AGE_CONFIG[sim.ageStage].label}。`, 'life');
                 
-                if (sim.ageStage === 'Toddler') { sim.height += 30; sim.weight += 7; }
-                else if (sim.ageStage === 'Child') { sim.height += 30; sim.weight += 15; }
-                else if (sim.ageStage === 'Teen') { sim.height += 30; sim.weight += 20; }
-                else if (sim.ageStage === 'Adult') { sim.height += 5; sim.weight += 5; }
+                if (sim.ageStage === AgeStage.Toddler) { sim.height += 30; sim.weight += 7; }
+                else if (sim.ageStage === AgeStage.Child) { sim.height += 30; sim.weight += 15; }
+                else if (sim.ageStage === AgeStage.Teen) { sim.height += 30; sim.weight += 20; }
+                else if (sim.ageStage === AgeStage.Adult) { sim.height += 5; sim.weight += 5; }
 
-                if (sim.ageStage === 'Adult' && sim.job.id === 'unemployed') {
+                if (sim.ageStage === AgeStage.Adult && sim.job.id === 'unemployed') {
                     CareerLogic.assignJob(sim);
                     sim.say("该找份工作养活自己了！", 'sys');
                 }
@@ -55,7 +56,7 @@ export const LifeCycleLogic = {
             LifeCycleLogic.die(sim, "健康耗尽");
             return;
         }
-        if (sim.ageStage === 'Elder') {
+        if (sim.ageStage === AgeStage.Elder) {
             let deathProb = 0.00001 * (sim.age - 60) * dt; 
             deathProb *= (1.5 - sim.constitution / 100);
             deathProb *= (1.5 - sim.luck / 100);
@@ -167,7 +168,7 @@ export const LifeCycleLogic = {
             y: sim.pos.y + 20,
             surname: babySurname, 
             familyId: sim.familyId,
-            ageStage: 'Infant',
+            ageStage: AgeStage.Infant,
             gender: gender,
             motherId: sim.id, 
             fatherId: sim.partnerForBabyId || undefined,
