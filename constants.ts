@@ -205,6 +205,34 @@ export const MBTI_TYPES = [
     'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ'
 ];
 
+// === 🆕 性格特质池 ===
+export const TRAIT_POOL = {
+    social: ['Outgoing', 'Loner', 'Charming', 'Awkward', 'Mean'], // 社交类
+    lifestyle: ['Active', 'Lazy', 'Clean', 'Messy', 'Glutton'],   // 生活类
+    mental: ['Creative', 'Logical', 'Genius', 'Goofball', 'Serious'] // 思维类
+};
+
+// === 🆕 性格互斥表 ===
+// Key 不能与 Value 中的任何性格共存
+export const TRAIT_CONFLICTS: Record<string, string[]> = {
+    'Outgoing': ['Loner', 'Awkward'],
+    'Loner': ['Outgoing', 'Charming', 'Party Animal'],
+    'Charming': ['Mean', 'Awkward'],
+    'Mean': ['Charming'],
+    'Awkward': ['Charming', 'Outgoing'],
+    
+    'Active': ['Lazy'],
+    'Lazy': ['Active'],
+    'Clean': ['Messy'],
+    'Messy': ['Clean'],
+    
+    'Logical': ['Goofball', 'Creative'], // 假设逻辑和创意在某种程度互斥，或者也可以共存
+    'Creative': ['Logical', 'Serious'],
+    'Genius': ['Goofball'],
+    'Goofball': ['Serious', 'Genius', 'Logical'],
+    'Serious': ['Goofball']
+};
+
 export const SURNAMES = [
     '李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
     '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗',

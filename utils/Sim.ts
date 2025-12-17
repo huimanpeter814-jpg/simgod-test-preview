@@ -17,7 +17,6 @@ import {
     CommutingState, 
     InteractionState, 
     FollowingState,
-    // [修复] 补充导入缺失的状态类
     CommutingSchoolState,
     SchoolingState,
     PlayingHomeState
@@ -36,6 +35,7 @@ interface SimInitConfig {
     orientation?: string;
     homeId?: string | null;
     money?: number; 
+    traits?: string[]; // 🆕 允许传入性格
 }
 
 export class Sim {
@@ -62,6 +62,10 @@ export class Sim {
 
     mbti: string;
     zodiac: any;
+    
+    // === 🆕 性格特质 ===
+    traits: string[];
+
     age: number;
     ageStage: AgeStage; 
     health: number;
@@ -193,6 +197,10 @@ export class Sim {
 
         this.mbti = MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
         this.zodiac = ZODIACS[Math.floor(Math.random() * ZODIACS.length)];
+        
+        // === 🆕 初始化性格特质 ===
+        this.traits = config.traits || []; 
+
         this.health = 90 + Math.random() * 10; 
         this.lifeGoal = LIFE_GOALS[Math.floor(Math.random() * LIFE_GOALS.length)];
 
@@ -603,6 +611,16 @@ export class Sim {
         if (this.lifeGoal.includes('万人迷') || this.lifeGoal.includes('派对')) { this.metabolism.social *= 1.5; this.socialModifier *= 1.2; }
         if (this.lifeGoal.includes('隐居') || this.lifeGoal.includes('独处')) { this.metabolism.social *= 0.4; }
         if (this.lifeGoal.includes('富翁') || this.lifeGoal.includes('大亨')) { this.metabolism.fun *= 1.2; }
+        
+        // 🆕 应用新特质带来的数值影响
+        if (this.traits.includes('Active')) { this.metabolism.energy *= 0.9; this.skillModifiers.athletics *= 1.3; }
+        if (this.traits.includes('Lazy')) { this.metabolism.energy *= 1.2; this.skillModifiers.athletics *= 0.7; }
+        if (this.traits.includes('Loner')) { this.metabolism.social *= 0.5; this.socialModifier *= 0.8; }
+        if (this.traits.includes('Outgoing')) { this.metabolism.social *= 1.5; this.socialModifier *= 1.2; }
+        if (this.traits.includes('Glutton')) { this.metabolism.hunger *= 1.5; }
+        if (this.traits.includes('Genius')) { this.skillModifiers.logic *= 1.5; this.iq += 10; }
+        if (this.traits.includes('Creative')) { this.skillModifiers.creativity *= 1.5; }
+        if (this.traits.includes('Clean')) { this.metabolism.hygiene *= 1.5; } // 爱干净的人卫生掉得快（需要常洗澡）? 或者保持得好？通常理解为对卫生要求高，下降快。
     }
     applyMonthlyEffects(month: number, holiday?: { name: string, type: string }) {
         this.age += 0.1;

@@ -272,6 +272,9 @@ export interface SimData {
   mbti: string;
   zodiac: Zodiac;
   
+  // === 🆕 新增性格特质 ===
+  traits: string[];
+
   age: number;
   ageStage: AgeStage; // Use Enum
   health: number; 

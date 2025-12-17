@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { CONFIG, SURNAMES, MBTI_TYPES } from '../../constants';
+import { CONFIG, SURNAMES, MBTI_TYPES, TRAIT_POOL, TRAIT_CONFLICTS } from '../../constants';
 import { SocialLogic } from './social';
 import { mixTrait, mixMBTI } from './LifeCycleLogic'; // 复用生命周期中的遗传辅助函数
 import { HousingUnit, AgeStage } from '../../types';
@@ -11,6 +11,92 @@ type FamilyType = 'Standard' | 'MultiGenerational' | 'SingleParent' | 'DINK';
 
 // 生成家庭的逻辑
 export const FamilyGenerator = {
+    /**
+     * 🆕 核心算法：生成性格特质
+     * @param parents 父母数组 (0-2人)
+     */
+    generatePersonality(parents: Sim[]): string[] {
+        const traits: string[] = [];
+        const MAX_TRAITS = 3;
+
+        // 辅助函数：检查冲突和重复
+        const canAdd = (t: string) => {
+            if (traits.includes(t)) return false;
+            if (traits.length >= MAX_TRAITS) return false;
+            const conflicts = TRAIT_CONFLICTS[t];
+            if (conflicts && conflicts.some(c => traits.includes(c))) return false;
+            return true;
+        };
+
+        // 展平所有可用性格池
+        const allTraits = [...TRAIT_POOL.social, ...TRAIT_POOL.lifestyle, ...TRAIT_POOL.mental];
+
+        // Case 0: 初代生成 (无父母) -> 纯随机
+        if (parents.length === 0) {
+            while (traits.length < MAX_TRAITS) {
+                const t = allTraits[Math.floor(Math.random() * allTraits.length)];
+                if (canAdd(t)) traits.push(t);
+            }
+            return traits;
+        }
+
+        const p1 = parents[0];
+        const p2 = parents.length > 1 ? parents[1] : null;
+
+        const p1Traits = p1.traits || [];
+        const p2Traits = p2 ? (p2.traits || []) : [];
+
+        // 1. 强遗传 (Strong Inheritance): 父母双方都有
+        if (p2) {
+            const shared = p1Traits.filter(t => p2Traits.includes(t));
+            shared.forEach(t => {
+                // 80% 概率继承
+                if (Math.random() < 0.8 && canAdd(t)) {
+                    traits.push(t);
+                }
+            });
+        }
+
+        // 2. 普通遗传 (Normal Inheritance): 父母任一方有
+        // 合并父母特质池，去重
+        const parentPool = [...new Set([...p1Traits, ...p2Traits])];
+        
+        // 随机打乱池子顺序，避免偏向前几个特质
+        parentPool.sort(() => Math.random() - 0.5);
+
+        parentPool.forEach(t => {
+            // 如果还没被添加 (强遗传步骤可能已经加了)，则 50% 概率
+            if (!traits.includes(t)) {
+                if (Math.random() < 0.5 && canAdd(t)) {
+                    traits.push(t);
+                }
+            }
+        });
+
+        // 3. 变异 (Mutation): 20% 概率产生新性格
+        // 要求：必须保留产生一个父母都没有的性格的机会
+        if (traits.length < MAX_TRAITS && Math.random() < 0.2) {
+            // 排除掉父母池中的性格
+            const mutationPool = allTraits.filter(t => !parentPool.includes(t));
+            if (mutationPool.length > 0) {
+                const t = mutationPool[Math.floor(Math.random() * mutationPool.length)];
+                if (canAdd(t)) {
+                    traits.push(t);
+                }
+            }
+        }
+
+        // 4. 兜底填充 (Optional): 如果性格太少，随机补全?
+        // 根据需求描述，只说了变异概率，没强制填满。
+        // 为了游戏性，我们至少保证有 1 个性格
+        if (traits.length === 0) {
+             const t = allTraits[Math.floor(Math.random() * allTraits.length)];
+             if (canAdd(t)) traits.push(t);
+        }
+
+        return traits;
+    },
+
     /**
      * 动态年龄逻辑：根据父母的年龄阶段决定孩子的年龄阶段
      */
@@ -76,12 +162,13 @@ export const FamilyGenerator = {
             config.constitution = mixTrait(p1.constitution, p2.constitution);
             config.appearanceScore = mixTrait(p1.appearanceScore, p2.appearanceScore);
             
-            // 3. 性格遗传 (MBTI)
+            // 3. MBTI 遗传
             config.mbti = mixMBTI(p1.mbti, p2.mbti);
-        } else {
-            // 无父母（初代生成），Sim 类构造函数会处理默认随机值
-            // 但我们可以为了多样性在这里预设一些
         }
+
+        // 🆕 4. 性格特质遗传 (Personality Traits)
+        // 无论是初代生成还是后代，都通过此方法计算 traits
+        config.traits = FamilyGenerator.generatePersonality(parents);
 
         return config;
     },
@@ -192,7 +279,6 @@ export const FamilyGenerator = {
                 const config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY + 40, familySurname, familyId, childStage, homeId, 0, parents
                 );
-                // 修正：如果孙辈是继承父母，有概率随父母姓（这里已经是 familySurname 了）
                 
                 const child = new Sim(config);
                 members.push(child);
@@ -203,9 +289,6 @@ export const FamilyGenerator = {
                     SocialLogic.setKinship(child, p, 'parent');
                     p.childrenIds.push(child.id);
                 });
-                
-                // 建立 祖父母 -> 孙子 关系 (简化为 none 或自定义 grandparent，目前 types 里只有 parent/child/sibling/spouse)
-                // 暂不显式设定隔代 kinship 字段，依靠逻辑推断或暂无特殊标识
             }
 
         } else if (familyType === 'DINK') {
@@ -278,8 +361,6 @@ export const FamilyGenerator = {
         }
 
         // 处理兄弟姐妹关系 (所有同辈孩子之间)
-        // 简单处理：同一个 familyId 下，且 kinship 都是 child 的
-        // 这里简化逻辑：遍历 members 数组，找到所有是孩子的
         const children = members.filter(m => 
             [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult].includes(m.ageStage) &&
             members.some(parent => parent.childrenIds.includes(m.id))
