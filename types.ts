@@ -38,7 +38,8 @@ export enum JobType {
     Restaurant = 'restaurant',
     Library = 'library',
     School = 'school',
-    Nightlife = 'nightlife'
+    Nightlife = 'nightlife',
+    Hospital = 'hospital' // 🆕 新增医院职业
 }
 
 export enum NeedType {
@@ -100,7 +101,7 @@ export interface HousingUnit {
     name: string;     
     capacity: number; 
     cost: number;     
-    type: 'public_housing' | 'apartment' | 'villa'; 
+    type: 'public_housing' | 'apartment' | 'villa' | 'elder_care'; // 🆕 新增养老院类型
     area: { x: number, y: number, w: number, h: number }; 
     maxX?: number;
     maxY?: number;

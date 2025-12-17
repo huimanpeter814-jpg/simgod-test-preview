@@ -19,8 +19,8 @@ export const ASSET_CONFIG = {
 };
 
 export const CONFIG = {
-    CANVAS_W: 4600,
-    CANVAS_H: 2500,
+    CANVAS_W: 4600, // 扩大画布以容纳更多地块
+    CANVAS_H: 3000, // 增加高度
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],
         hair: ['#2b2b2b', '#4a3b32', '#8c6b5d', '#d9c2a3', '#a83f3f', '#3e5f8a'], 
@@ -112,7 +112,7 @@ export const JOBS: Job[] = [
     { id: 'store_supervisor', title: '值班经理', level: 3, salary: 500, startHour: 9, endHour: 18, companyType: JobType.Store },
     { id: 'store_manager', title: '店长', level: 4, salary: 800, startHour: 10, endHour: 17, companyType: JobType.Store },
 
-    // Cinema (Also Store for now, or could make a new Entertainment type)
+    // Cinema (Also Store for now)
     { id: 'cinema_trainee', title: '检票员', level: 1, salary: 220, startHour: 10, endHour: 18, companyType: JobType.Store },
     { id: 'cinema_staff', title: '售票员', level: 2, salary: 380, startHour: 10, endHour: 19, companyType: JobType.Store },
 
@@ -126,15 +126,25 @@ export const JOBS: Job[] = [
     { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: JobType.Library, vacationMonths: [2, 7] },
 
     // Education (School)
+    { id: 'teacher_kg_intern', title: '幼教实习', level: 1, salary: 300, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
     { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'teacher_intern', title: '实习教师', level: 1, salary: 350, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
     { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7] },
-    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
     { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7] },
-    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: JobType.School },
+    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'principal', title: '校长', level: 4, salary: 1500, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7] },
+    { id: 'school_chef_helper', title: '食堂帮厨', level: 1, salary: 300, startHour: 6, endHour: 14, companyType: JobType.School },
     { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 550, startHour: 6, endHour: 14, companyType: JobType.School },
+    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: JobType.School },
 
     // Nightlife
-    { id: 'dj', title: 'DJ', level: 3, salary: 1000, startHour: 20, endHour: 4, companyType: JobType.Nightlife },
+    { id: 'dj', title: 'DJ', level: 1, salary: 500, startHour: 20, endHour: 4, companyType: JobType.Nightlife },
+
+    // 🆕 Hospital Careers
+    { id: 'nurse_intern', title: '实习护士', level: 1, salary: 300, startHour: 8, endHour: 18, companyType: JobType.Hospital },
+    { id: 'nurse', title: '注册护士', level: 2, salary: 600, startHour: 8, endHour: 18, companyType: JobType.Hospital },
+    { id: 'doctor_resident', title: '住院医师', level: 3, salary: 1200, startHour: 9, endHour: 19, companyType: JobType.Hospital },
+    { id: 'doctor_chief', title: '主任医师', level: 4, salary: 2500, startHour: 9, endHour: 17, companyType: JobType.Hospital },
 ];
 
 export const BUFFS = {
@@ -195,7 +205,8 @@ export const LIFE_GOALS = [
     '环游世界', '猫狗双全', '隐居山林', '极简主义', '海岛庄园主',
     '派对之王', '美食探店', '健身狂魔', '游戏全成就',
     '摸鱼之王', '外星接触', '长生不老', '收集癖', '八卦队长',
-    '统治世界', '只想睡个好觉', '子孙满堂', '完美家庭'
+    '统治世界', '只想睡个好觉', '子孙满堂', '完美家庭',
+    '桃李满天下'
 ];
 
 export const MBTI_TYPES = [
@@ -205,15 +216,12 @@ export const MBTI_TYPES = [
     'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ'
 ];
 
-// === 🆕 性格特质池 (中文版) ===
 export const TRAIT_POOL = {
-    social: ['外向', '独行侠', '万人迷', '社恐', '刻薄'], // 社交类
-    lifestyle: ['活力', '懒惰', '洁癖', '邋遢', '吃货'],   // 生活类
-    mental: ['有创意', '逻辑强', '天才', '开心果', '严肃'] // 思维类
+    social: ['外向', '独行侠', '万人迷', '社恐', '刻薄'], 
+    lifestyle: ['活力', '懒惰', '洁癖', '邋遢', '吃货'],   
+    mental: ['有创意', '逻辑强', '天才', '开心果', '严肃'] 
 };
 
-// === 🆕 性格互斥表 (中文版) ===
-// Key 不能与 Value 中的任何性格共存
 export const TRAIT_CONFLICTS: Record<string, string[]> = {
     '外向': ['独行侠', '社恐'],
     '独行侠': ['外向', '万人迷', '派对动物'],
@@ -226,7 +234,7 @@ export const TRAIT_CONFLICTS: Record<string, string[]> = {
     '洁癖': ['邋遢'],
     '邋遢': ['洁癖'],
     
-    '逻辑强': ['开心果', '有创意'], // 假设逻辑和创意在某种程度互斥，或者也可以共存
+    '逻辑强': ['开心果', '有创意'], 
     '有创意': ['逻辑强', '严肃'],
     '天才': ['开心果'],
     '开心果': ['严肃', '天才', '逻辑强'],
@@ -295,7 +303,7 @@ export const BASE_DECAY: Record<NeedType, number> = {
     [NeedType.Social]: 0.8,
     [NeedType.Bladder]: 0.8,
     [NeedType.Hygiene]: 0.5,
-    [NeedType.Comfort]: 0.0 // Added Comfort for type safety
+    [NeedType.Comfort]: 0.0 
 };
 
 export const ORIENTATIONS = [
@@ -330,7 +338,6 @@ export const SCHOOL_CONFIG = {
     }
 };
 
-// === 🆕 新增：家庭历史背景生成模板 ===
 export const FAMILY_LORE_TEMPLATES = {
     poor: {
         origins: [

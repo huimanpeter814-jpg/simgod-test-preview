@@ -19,6 +19,7 @@ export const DecisionLogic = {
 
         if (homeId) {
             if (sim.homeId === homeId) return false;
+            // 🆕 养老院目前视为半私有，非住户不能随意使用床位
             const isOccupied = GameStore.sims.some(s => s.homeId === homeId);
             if (isOccupied) return true;
         }
@@ -26,6 +27,12 @@ export const DecisionLogic = {
     },
 
     decideAction(sim: Sim) {
+        // 🆕 1. 紧急医疗逻辑：健康低或生病时优先去医院
+        if (sim.health < 60 || sim.hasBuff('sick')) {
+            DecisionLogic.findObject(sim, 'healing');
+            return;
+        }
+
         let critical = [
             { id: NeedType.Energy, val: sim.needs[NeedType.Energy] },
             { id: NeedType.Hunger, val: sim.needs[NeedType.Hunger] },
@@ -61,9 +68,17 @@ export const DecisionLogic = {
         }
         if (sim.mood < 30) socialScore *= 0.3;
 
+        // 🆕 2. 老年人更喜欢社交
+        if (sim.ageStage === AgeStage.Elder) socialScore *= 1.3;
+
         scores.push({ id: NeedType.Social, score: socialScore, type: 'social' });
 
-        // 🆕 青少年也可兼职
+        // 🆕 3. 超市购物冲动：有钱时随机触发
+        if (sim.money > 200 && Math.random() > 0.85) {
+            scores.push({ id: 'buy_item', score: 60, type: 'obj' });
+        }
+
+        // 青少年兼职逻辑
         if (sim.job.id === 'unemployed' && ![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
             let moneyDesire = 0;
             if (sim.money < 500) moneyDesire = 200; 
@@ -114,6 +129,7 @@ export const DecisionLogic = {
             sim.startWandering();
         }
 
+        // 学生写作业逻辑
         if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage) && sim.job.id === 'unemployed') {
             let studyDesire = 0;
             if (sim.mbti.includes('J')) studyDesire += 40;
@@ -177,13 +193,18 @@ export const DecisionLogic = {
              [NeedType.Bladder]: 'bladder', 
              [NeedType.Hygiene]: 'hygiene',
              [NeedType.Energy]: 'energy',
+             'healing': 'healing', // 🆕 映射
              cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play'
         };
         if (simpleMap[type]) utility = simpleMap[type];
 
         let candidates: Furniture[] = [];
 
-        if (type === NeedType.Fun) {
+        // 🆕 4. 医疗设施查找
+        if (type === 'healing') {
+            candidates = GameStore.furnitureIndex.get('healing') || [];
+        } 
+        else if (type === NeedType.Fun) {
             const funTypes = ['fun', 'cinema_2d', 'cinema_3d', 'cinema_imax', 'art', 'play', 'fishing'];
             if (sim.needs[NeedType.Energy] < 70) funTypes.push('comfort');
             funTypes.forEach(t => {
@@ -201,7 +222,7 @@ export const DecisionLogic = {
             candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('buy_drink') || []);
-            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []);
+            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []); // 超市/小吃摊
         } else if (type === NeedType.Hygiene) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('hygiene') || []);
              candidates = candidates.concat(GameStore.furnitureIndex.get('shower') || []);
@@ -232,6 +253,7 @@ export const DecisionLogic = {
             });
 
             if (candidates.length) {
+                // 找最近的
                 candidates.sort((a: Furniture, b: Furniture) => {
                     const distA = Math.pow(a.x - sim.pos.x, 2) + Math.pow(a.y - sim.pos.y, 2);
                     const distB = Math.pow(b.x - sim.pos.x, 2) + Math.pow(b.y - sim.pos.y, 2);
@@ -250,7 +272,11 @@ export const DecisionLogic = {
                 sim.startMovingToInteraction();
                 return;
             } else {
-                sim.say("没钱/没位置...", 'bad');
+                if (type === 'healing') {
+                    sim.say("医院没床位了...", 'bad');
+                } else {
+                    sim.say("没钱/没位置...", 'bad');
+                }
             }
         }
         sim.startWandering();

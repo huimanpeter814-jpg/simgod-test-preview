@@ -253,13 +253,15 @@ export class Sim {
         for (let key in this.skills) this.skillModifiers[key] = 1.0;
         this.socialModifier = 1.0;
 
+        this.buffs = []; this.mood = 80;
+
         this.applyTraits();
 
         if ([AgeStage.Adult, AgeStage.MiddleAged].includes(this.ageStage)) { this.assignJob(); } 
         else { this.job = JOBS.find(j => j.id === 'unemployed')!; }
         
         this.dailyExpense = 0; this.dailyIncome = 0; this.dailyBudget = 0; this.workPerformance = 0;
-        this.buffs = []; this.mood = 80;
+
 
         this.actionTimer = 0;
         this.calculateDailyBudget();
