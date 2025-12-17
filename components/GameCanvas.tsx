@@ -21,15 +21,8 @@ const PLOT_OPTIONS = [
     { id: 'gallery', label: '文化设施' },
 ];
 
-// [修复] 补上 SIMPLE_COLORS 定义
 const SIMPLE_COLORS = [
-    '#dcdcdc', // 默认灰
-    '#8cb393', // 草地绿
-    '#3d404b', // 柏油黑
-    '#5a8fff', // 水池蓝
-    '#ff7675', // 砖红
-    '#fdcb6e', // 土地黄
-    '#ffffff', // 纯白
+    '#dcdcdc', '#8cb393', '#3d404b', '#5a8fff', '#ff7675', '#fdcb6e', '#ffffff'
 ];
 
 const createWorker = () => {
@@ -70,7 +63,6 @@ const GameCanvas: React.FC = () => {
         height: window.innerHeight
     });
 
-    // 选中的地皮信息，用于显示浮动UI
     const [selectedPlot, setSelectedPlot] = useState<{
         id: string, 
         x: number, 
@@ -86,6 +78,8 @@ const GameCanvas: React.FC = () => {
 
     const isDragging = useRef(false); 
     const lastMousePos = useRef({ x: 0, y: 0 });
+    // 🆕 新增：记录鼠标按下位置，用于区分点击和拖拽
+    const dragStartMousePos = useRef({ x: 0, y: 0 }); 
     const hasDragged = useRef(false); 
     const isPickingUp = useRef(false); 
     
@@ -95,7 +89,6 @@ const GameCanvas: React.FC = () => {
     const lastTimePaletteRef = useRef<string>('');
     const lastStaticUpdateRef = useRef<number>(0); 
 
-    // [新增] 用于强制刷新 UI (当 drawingPlot 等状态变化时)
     const [editorRefresh, setEditorRefresh] = useState(0);
 
     useEffect(() => {
@@ -112,10 +105,8 @@ const GameCanvas: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // 订阅 GameStore 更新以同步选中地皮状态
     useEffect(() => {
         const unsub = GameStore.subscribe(() => {
-            // 强制刷新组件以更新 overlay 提示
             setEditorRefresh(prev => prev + 1);
 
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
@@ -156,22 +147,14 @@ const GameCanvas: React.FC = () => {
 
         const p = getActivePalette();
         
-        // 背景色
         ctx.fillStyle = p.bg;
         ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
 
-        // ============================================================
-        // [修复] 交换渲染顺序：先画系统地皮(地基)，再画自定义房间(上层建筑)
-        // ============================================================
-
-        // 1. 绘制系统房间/地皮 (Layer 0 - Base)
         GameStore.rooms.filter(r => !r.isCustom).forEach((r: any) => {
-            // 如果是正在拖拽的地皮，跳过静态绘制
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && GameStore.editor.isDragging) {
                 if (r.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
             }
 
-            // 地皮背景阴影
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h);
 
@@ -188,7 +171,6 @@ const GameCanvas: React.FC = () => {
                 ctx.fillStyle = r.color;
                 ctx.fillRect(r.x, r.y, r.w, r.h);
                 
-                // [注意] 虽然系统房间很少用 wood，但如果用了也要加上逻辑
                 if (r.pixelPattern === 'wood') {
                     ctx.fillStyle = 'rgba(0,0,0,0.1)';
                     for (let i = 0; i < r.w; i += 20) { ctx.fillRect(r.x + i, r.y, 2, r.h); }
@@ -213,12 +195,9 @@ const GameCanvas: React.FC = () => {
             }
         });
 
-        // 2. 绘制自定义房间/地板 (Layer 1 - Top)
         GameStore.rooms.filter(r => r.isCustom).forEach(r => {
-            // [新增] 如果正在拖拽该房间，跳过静态绘制，改在动态层绘制
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId === r.id && GameStore.editor.isDragging) return;
 
-            // 选中高亮
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId === r.id) {
                 ctx.globalAlpha = 0.8;
             }
@@ -236,7 +215,6 @@ const GameCanvas: React.FC = () => {
                 ctx.fillStyle = r.color;
                 ctx.fillRect(r.x, r.y, r.w, r.h);
                 
-                // [修复] wood 渲染逻辑，包含正确的循环步进
                 if (r.pixelPattern === 'wood') {
                     ctx.fillStyle = 'rgba(0,0,0,0.1)';
                     for (let i = 0; i < r.w; i += 20) { 
@@ -271,7 +249,6 @@ const GameCanvas: React.FC = () => {
                 }
             }
 
-            // 绘制墙壁
             if (r.hasWall) {
                 ctx.strokeStyle = p.wall || '#5a6572';
                 ctx.lineWidth = 4;
@@ -281,7 +258,6 @@ const GameCanvas: React.FC = () => {
             ctx.globalAlpha = 1.0;
         });
 
-        // 3. 绘制家具 (Layer 2)
         GameStore.furniture.forEach((f: any) => {
             if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId === f.id && GameStore.editor.isDragging) return;
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && f.id.startsWith(`${GameStore.editor.selectedPlotId}_`) && GameStore.editor.isDragging) return;
@@ -312,7 +288,6 @@ const GameCanvas: React.FC = () => {
     const draw = (ctx: CanvasRenderingContext2D) => {
         ctx.imageSmoothingEnabled = false;
 
-        // 背景清理
         ctx.fillStyle = '#121212';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
@@ -339,9 +314,8 @@ const GameCanvas: React.FC = () => {
             ctx.drawImage(staticCanvasRef.current, 0, 0);
         }
 
-        // === Editor Preview Layer ===
         if (GameStore.editor.mode !== 'none') {
-            // 绘制网格
+            // ... Editor Grid Drawing Code (No Changes) ...
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.lineWidth = 1;
             const gridSize = 50;
@@ -359,7 +333,6 @@ const GameCanvas: React.FC = () => {
             }
             ctx.stroke();
 
-            // 绘制正在拖拽的框选区域 (Floor/Room Drawing)
             if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor) {
                 const { startX, startY, currX, currY, color } = GameStore.editor.drawingFloor;
                 const x = Math.min(startX, currX);
@@ -382,7 +355,6 @@ const GameCanvas: React.FC = () => {
                 }
             }
 
-            // 绘制正在拖拽的地皮框选区域 (Plot Drawing)
             if (GameStore.editor.mode === 'plot' && GameStore.editor.drawingPlot) {
                 const { startX, startY, currX, currY } = GameStore.editor.drawingPlot;
                 const x = Math.min(startX, currX);
@@ -407,17 +379,15 @@ const GameCanvas: React.FC = () => {
                 }
             }
 
-            // 高亮选中的自定义房间 (如果没有正在拖拽)
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId && !GameStore.editor.isDragging) {
                 const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
                 if (room) {
-                    ctx.strokeStyle = '#39ff14'; // 亮绿色
+                    ctx.strokeStyle = '#39ff14';
                     ctx.lineWidth = 3;
                     ctx.strokeRect(room.x, room.y, room.w, room.h);
                 }
             }
 
-            // 预览放置的物体/地皮/房间移动
             if (GameStore.editor.previewPos) {
                 const { x, y } = GameStore.editor.previewPos;
                 ctx.save();
@@ -471,7 +441,6 @@ const GameCanvas: React.FC = () => {
                         drawFurnPreview(GameStore.editor.placingFurniture, true);
                     }
                 }
-                // [新增] 房间移动预览
                 else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                     const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
                     if (room) {
@@ -498,8 +467,18 @@ const GameCanvas: React.FC = () => {
             }
         }
 
-        // Sims 绘制
-        const renderSims = [...GameStore.sims].sort((a, b) => a.pos.y - b.pos.y);
+        // === Sims 绘制 (修复：层级问题) ===
+        // [关键修复] 自定义排序：如果 a 是 b 的载体 (a抱b)，则 a 需要在 b 之前被处理（即 b 在 a 后面，a 绘制后 b 再绘制 = b 在上层）
+        // 默认 Y 轴排序：Y 小的（远处）先画，Y 大的（近处）后画。
+        const renderSims = [...GameStore.sims].sort((a, b) => {
+            // 如果 a 正在抱着 b，a 必须排在 b 前面 (return -1)，这样 b 才会覆盖 a
+            if (a.carryingSimId === b.id) return -1;
+            // 如果 b 正在抱着 a，b 必须排在 a 前面 (return 1)
+            if (b.carryingSimId === a.id) return 1;
+            
+            return a.pos.y - b.pos.y;
+        });
+
         renderSims.forEach(sim => {
             const renderX = sim.pos.x; 
             const renderY = sim.pos.y; 
@@ -679,6 +658,8 @@ const GameCanvas: React.FC = () => {
             isDragging.current = true;
             hasDragged.current = false;
             lastMousePos.current = { x: e.clientX, y: e.clientY };
+            // 🆕 记录起始点
+            dragStartMousePos.current = { x: e.clientX, y: e.clientY };
 
             const zoom = cameraRef.current.zoom;
             const worldX = e.clientX / zoom + cameraRef.current.x;
@@ -719,7 +700,6 @@ const GameCanvas: React.FC = () => {
                     } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
                         GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
                     }
-                    // [新增] 房间移动结束处理
                     else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                         GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
                     }
@@ -787,7 +767,6 @@ const GameCanvas: React.FC = () => {
                         );
                         if (clickedRoom) {
                             GameStore.editor.selectedRoomId = clickedRoom.id;
-                            // [新增] 房间拖拽开启逻辑
                             GameStore.editor.isDragging = true;
                             isPickingUp.current = true;
                             GameStore.editor.dragOffset = { x: worldX - clickedRoom.x, y: worldY - clickedRoom.y };
@@ -861,6 +840,13 @@ const GameCanvas: React.FC = () => {
     const handleMouseUp = (e: React.MouseEvent) => {
         isDragging.current = false;
 
+        // 🆕 计算移动距离，严格判断是否为点击
+        const dragDist = Math.sqrt(
+            Math.pow(e.clientX - dragStartMousePos.current.x, 2) + 
+            Math.pow(e.clientY - dragStartMousePos.current.y, 2)
+        );
+        const isClick = dragDist < 5; // 允许5像素误差
+
         if (isPickingUp.current) {
             if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor) {
                 isPickingUp.current = false;
@@ -907,7 +893,6 @@ const GameCanvas: React.FC = () => {
                     } else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
                         GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
                     }
-                    // [新增] 房间移动结束处理
                     else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                         GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
                     }
@@ -919,7 +904,8 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        if (e.button === 0 && !hasDragged.current) {
+        // [BugFix] 仅当是真正的点击（未拖动）时才触发选中逻辑
+        if (e.button === 0 && isClick) {
             const rect = canvasRef.current!.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
@@ -929,8 +915,10 @@ const GameCanvas: React.FC = () => {
 
             if (GameStore.editor.mode === 'none') {
                 let hitSim: string | null = null; 
+                // 优先检测最上层的Sim (逆序遍历)
                 for (let i = GameStore.sims.length - 1; i >= 0; i--) {
                     let s = GameStore.sims[i];
+                    // 增加点击判定范围
                     if (Math.abs(worldX - s.pos.x) < 40 && Math.abs(worldY - (s.pos.y - 20)) < 50) {
                         hitSim = s.id; break;
                     }
@@ -990,11 +978,9 @@ const GameCanvas: React.FC = () => {
                 onContextMenu={(e) => e.preventDefault()}
             />
             
-            {/* 浮动UI: 地皮属性编辑器 */}
             {selectedPlot && GameStore.editor.mode === 'plot' && !GameStore.editor.isDragging && !GameStore.editor.drawingPlot && (
                 <div 
                     className="absolute z-50 bg-[#121212]/95 border border-white/20 p-3 rounded-xl shadow-2xl flex flex-col gap-3 animate-[fadeIn_0.1s_ease-out] w-64 backdrop-blur-md"
-                    // [修复] 位置计算：移除 windowSize偏移，确保在正上方
                     style={{ 
                         left: selectedPlot.x - 128, 
                         top: selectedPlot.y - 180 
@@ -1044,7 +1030,6 @@ const GameCanvas: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* [新增] 确认按钮 */}
                     <button
                         onClick={() => {
                             GameStore.editor.selectedPlotId = null;
@@ -1057,7 +1042,6 @@ const GameCanvas: React.FC = () => {
                 </div>
             )}
 
-            {/* [新增] 框选模式下的引导提示 Overlay */}
             {(GameStore.editor.drawingPlot || GameStore.editor.drawingFloor) && !GameStore.editor.isDragging && (
                 <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-full pointer-events-none text-xs font-bold border border-white/20 shadow-lg backdrop-blur-sm animate-pulse z-40 flex items-center gap-2">
                     <span className="text-lg">🖱️</span> 按住鼠标左键拖拽以框选区域

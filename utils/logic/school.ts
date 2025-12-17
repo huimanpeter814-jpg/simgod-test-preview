@@ -3,7 +3,7 @@ import { GameStore } from '../simulation';
 import { SCHOOL_CONFIG, BUFFS, HOLIDAYS } from '../../constants';
 import { DecisionLogic } from './decision';
 import { SimAction, AgeStage, NeedType } from '../../types';
-import { SchoolingState, CommutingSchoolState, IdleState, PlayingHomeState, PickingUpState } from './SimStates';
+import { SchoolingState, CommutingSchoolState, IdleState, PlayingHomeState, PickingUpState, WaitingState } from './SimStates';
 
 export const SchoolLogic = {
     findObjectInArea(sim: Sim, utility: string, area: {minX: number, maxX: number, minY: number, maxY: number}) {
@@ -53,14 +53,15 @@ export const SchoolLogic = {
             targetY = schoolPlot.y + h / 2;
         }
 
-        // 🆕 幼儿园逻辑更新：寻找父母接送
+        // 🆕 幼儿园逻辑优化：父母接送
         if (type === 'kindergarten') {
             const parents = GameStore.sims.filter(s => 
                 (s.id === sim.fatherId || s.id === sim.motherId) &&
                 s.action !== SimAction.Working && 
                 s.action !== SimAction.Commuting &&
                 s.action !== SimAction.Sleeping &&
-                s.action !== SimAction.Escorting
+                s.action !== SimAction.Escorting &&
+                s.action !== SimAction.PickingUp // 避免两个家长同时去接
             );
 
             // 优先选心情好、空闲的父母
@@ -69,22 +70,19 @@ export const SchoolLogic = {
             if (carrier) {
                 // 1. 分配任务给父母：去接孩子
                 carrier.target = { x: sim.pos.x, y: sim.pos.y };
-                carrier.carryingSimId = sim.id; // 标记要接的目标
+                carrier.carryingSimId = sim.id; 
                 carrier.changeState(new PickingUpState());
                 carrier.say("送宝宝上学去~", 'family');
 
-                // 2. 孩子原地等待
-                sim.say("等妈妈/爸爸...", 'normal');
-                sim.target = null;
-                // 暂时保持当前状态或Idle，等待被接
-                sim.changeState(new IdleState()); 
+                // 2. 孩子进入等待模式 (修复：防止孩子乱跑)
+                sim.say("等爸妈来接...", 'normal');
+                // 设为 WaitingState，该状态下不进行任何移动或决策
+                sim.changeState(new WaitingState()); 
                 
                 return true;
             } else {
-                // 🆕 兜底逻辑：没有空闲父母，直接瞬移/保姆接送 (简化为自己去)
-                // 或者是系统提示“没有家长有空”，孩子只能在家玩
+                // 没有空闲父母，暂时留在家中
                 sim.say("没人送我...", 'bad');
-                // 留在家中
                 sim.changeState(new PlayingHomeState());
                 sim.actionTimer = 600; // 10分钟后再试
                 return false; 
@@ -111,33 +109,22 @@ export const SchoolLogic = {
             if (!inKindergarten && 
                 sim.action !== SimAction.BeingEscorted && 
                 sim.action !== SimAction.Schooling &&
-                sim.action !== SimAction.PlayingHome // 如果之前判定了在家玩，暂时不打断? 或者每小时检查一次
+                sim.action !== 'waiting' && // 等待中也不要打断
+                sim.action !== SimAction.PlayingHome 
             ) {
                 // 尝试派送
                 SchoolLogic.sendToSchool(sim, 'kindergarten');
             } 
             else if (inKindergarten) {
+                // 修复：到了幼儿园后设为 SchoolingState，该状态现在允许在校内自由活动
                 if (sim.action === SimAction.Idle) sim.changeState(new SchoolingState());
+                
                 if (sim.needs.social < 80) sim.needs.social += 1; 
                 SchoolLogic.autoReplenishNeeds(sim);
-                
-                if (!sim.target && !sim.interactionTarget) {
-                    const schoolPlot = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
-                    if (schoolPlot) {
-                        const kgArea = { 
-                            minX: schoolPlot.x, 
-                            maxX: schoolPlot.x + (schoolPlot.width || 300), 
-                            minY: schoolPlot.y, 
-                            maxY: schoolPlot.y + (schoolPlot.height || 300) 
-                        };
-                        const actionType = (sim.needs.energy < 60) ? 'nap_crib' : 'play_blocks';
-                        SchoolLogic.findObjectInArea(sim, actionType, kgArea);
-                    }
-                }
             }
         } 
         else {
-            // 放学逻辑 (简化：瞬移回家，或者也可以做接送，但太复杂了先瞬移)
+            // 放学逻辑 (简化：瞬移回家，并通知)
             if (inKindergarten) {
                 const home = sim.getHomeLocation();
                 if (home) {
@@ -145,7 +132,7 @@ export const SchoolLogic = {
                     sim.target = null;
                     sim.interactionTarget = null;
                     sim.changeState(new IdleState());
-                    sim.say("爸爸妈妈来接我啦！", 'love');
+                    sim.say("放学回家咯！", 'love');
                     GameStore.addLog(sim, "放学被接回了家", 'family');
                 }
             }

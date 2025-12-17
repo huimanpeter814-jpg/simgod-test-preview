@@ -3,6 +3,7 @@ import { SimAction, AgeStage, NeedType } from '../../types';
 import { GameStore } from '../simulation';
 import { DecisionLogic } from './decision';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
+import { SchoolLogic } from './school';
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -56,6 +57,23 @@ export class IdleState extends BaseState {
                  sim.decisionTimer = 30 + Math.random() * 30;
             }
         }
+    }
+}
+
+// 🆕 原地等待状态 (防止被接送时乱跑)
+export class WaitingState extends BaseState {
+    actionName = 'waiting';
+    
+    enter(sim: Sim) {
+        sim.target = null;
+        sim.path = [];
+        sim.say("...", 'sys');
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        // 稍微降低需求衰减，表示处于待机模式
+        // 不做任何移动决策
     }
 }
 
@@ -143,7 +161,6 @@ export class WorkingState extends BaseState {
         sim.needs[NeedType.Energy] -= 0.01 * f * Math.max(0.5, fatigueFactor);
 
         if (sim.needs[NeedType.Energy] < 15) {
-            // 需要引入 CareerLogic，这里用 import 解决循环依赖或 Sim.leaveWorkEarly
             sim.leaveWorkEarly();
             return;
         }
@@ -180,13 +197,63 @@ export class CommutingSchoolState extends BaseState {
     }
 }
 
-// --- 上学状态 ---
+// 🆕 上学状态 (修复：不再卡死，可以在校内自由活动)
 export class SchoolingState extends BaseState {
     actionName = SimAction.Schooling;
+    wanderTimer = 0;
 
     update(sim: Sim, dt: number) {
-        sim.needs[NeedType.Fun] -= 0.005 * dt;
+        // 需求衰减 (稍慢)
+        sim.needs[NeedType.Fun] -= 0.002 * dt;
         sim.skills.logic += 0.002 * dt;
+
+        // 如果正在去某个设施的路上
+        if (sim.target) {
+            const arrived = sim.moveTowardsTarget(dt);
+            if (arrived) {
+                // 到达目的地，如果是设施则互动一会
+                if (sim.interactionTarget) {
+                    // 模拟简单的使用设施，不切换状态，只停留
+                    sim.actionTimer = 200; 
+                    sim.target = null;
+                }
+            }
+            return;
+        }
+
+        // 如果正在使用设施/发呆
+        if (sim.actionTimer > 0) {
+            sim.actionTimer -= dt;
+            return;
+        }
+
+        // 决策：在校内活动
+        this.wanderTimer -= dt;
+        if (this.wanderTimer <= 0) {
+            this.wanderTimer = 300 + Math.random() * 300; // 每隔一会活动一次
+            
+            // 确定学校类型和区域
+            let schoolType = 'high_school';
+            if (sim.ageStage === AgeStage.Child) schoolType = 'elementary';
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) schoolType = 'kindergarten';
+
+            const plot = GameStore.worldLayout.find(p => p.templateId === schoolType);
+            if (plot) {
+                // 50% 概率找设施，50% 概率瞎逛
+                if (Math.random() > 0.5) {
+                    const area = { 
+                        minX: plot.x, maxX: plot.x + (plot.width||300), 
+                        minY: plot.y, maxY: plot.y + (plot.height||300) 
+                    };
+                    SchoolLogic.findObjectInArea(sim, 'play', area); // 泛指找好玩的
+                } else {
+                    // 随机移动
+                    const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
+                    const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
+                    sim.target = { x: tx, y: ty };
+                }
+            }
+        }
     }
 }
 
@@ -244,7 +311,7 @@ export class PlayingHomeState extends BaseState {
     }
 }
 
-// 🆕 改进的跟随状态：判断父母行为
+// 🆕 改进的跟随状态
 export class FollowingState extends BaseState {
     actionName = SimAction.Following;
     update(sim: Sim, dt: number) {
@@ -252,17 +319,29 @@ export class FollowingState extends BaseState {
         
         const parent = GameStore.sims.find(s => s.id === sim.motherId) || GameStore.sims.find(s => s.id === sim.fatherId);
         
-        // 1. 如果父母不存在，或在工作/通勤/睡觉/约会，停止跟随
-        if (!parent || 
+        // 1. 停止跟随条件：
+        // - 父母在忙
+        // - 父母在睡觉
+        // - 孩子自己状态良好且不需要照顾 (减少粘人频率)
+        // - 🆕 如果有人正在来接我 (PickingUpState)，原地等待
+        if (sim.carriedBySimId) { // 虽然 PickingUp 阶段 carriedBySimId 还没设，但如果被抱起了就不用跟随了
+             return; 
+        }
+
+        const isParentBusy = !parent || 
             parent.action === SimAction.Working || 
             parent.action === SimAction.Commuting || 
             parent.action === SimAction.Sleeping ||
-            // 简单判断是否在约会：处于 InteractionState 且对象是人且不是孩子自己
-            (parent.interactionTarget && parent.interactionTarget.type === 'human' && parent.interactionTarget.ref?.id !== sim.id)
-        ) {
-            sim.say("我要乖乖在家...", 'sys');
+            (parent.interactionTarget && parent.interactionTarget.type === 'human');
+
+        // 只有心情不好、饥饿或者随机小概率才会粘人
+        const isNeedy = sim.mood < 40 || sim.needs[NeedType.Hunger] < 50 || Math.random() < 0.001;
+
+        if (isParentBusy || !isNeedy) {
+            // 不跟随了，自己玩
+            sim.say("自己玩...", 'sys');
             sim.changeState(new PlayingHomeState());
-            sim.actionTimer = 600; // 在家玩一会
+            sim.actionTimer = 300; 
             return;
         }
 
@@ -274,42 +353,56 @@ export class FollowingState extends BaseState {
     }
 }
 
-// 🆕 家长去接孩子 (PickingUp)
+// 🆕 家长去接孩子 (PickingUp) - 修复闪现 Bug
 export class PickingUpState extends BaseState {
     actionName = SimAction.PickingUp;
     
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
+
+        // [修复] 实时更新目标为孩子的当前位置
+        // 这样即使孩子移动了一点，父母也会平滑转向，而不是走到旧地点后瞬移
+        if (sim.carryingSimId) {
+            const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
+            if (child) {
+                sim.target = { x: child.pos.x, y: child.pos.y };
+            }
+        }
+
         const arrived = sim.moveTowardsTarget(dt);
         
-        if (arrived && sim.carryingSimId) {
-            // 接到孩子了，切换到护送状态
-            // 需要先计算学校坐标
-            const schoolPlot = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
-            if (schoolPlot) {
-                const tx = schoolPlot.x + (schoolPlot.width || 300)/2;
-                const ty = schoolPlot.y + (schoolPlot.height || 300)/2;
-                sim.target = { x: tx, y: ty };
-                
-                // 将孩子状态设为被抱着
-                const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
-                if (child) {
-                    child.carriedBySimId = sim.id;
-                    child.changeState(new BeingEscortedState());
+        // 判定距离而不是依靠 path 结束，防止 path 误差
+        if (sim.carryingSimId) {
+            const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
+            if (child) {
+                const dist = Math.sqrt(Math.pow(sim.pos.x - child.pos.x, 2) + Math.pow(sim.pos.y - child.pos.y, 2));
+                if (dist < 20) { // 接近了
+                    // 切换到护送状态
+                    const schoolPlot = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
+                    if (schoolPlot) {
+                        const tx = schoolPlot.x + (schoolPlot.width || 300)/2;
+                        const ty = schoolPlot.y + (schoolPlot.height || 300)/2;
+                        sim.target = { x: tx, y: ty };
+                        
+                        child.carriedBySimId = sim.id;
+                        child.changeState(new BeingEscortedState());
+                        
+                        sim.changeState(new EscortingState());
+                        sim.say("抓到你了，上学去！", 'family');
+                    } else {
+                        sim.carryingSimId = null;
+                        sim.changeState(new IdleState());
+                    }
                 }
-                
-                sim.changeState(new EscortingState());
-                sim.say("走，上学去咯！", 'family');
-            } else {
-                // 找不到学校，放弃
-                sim.carryingSimId = null;
-                sim.changeState(new IdleState());
             }
+        } else if (arrived) {
+            // 目标丢失
+            sim.changeState(new IdleState());
         }
     }
 }
 
-// 🆕 家长护送/抱着孩子 (Escorting)
+// 🆕 家长护送/抱着孩子 (Escorting) - 修复渲染层级
 export class EscortingState extends BaseState {
     actionName = SimAction.Escorting;
 
@@ -321,9 +414,10 @@ export class EscortingState extends BaseState {
         if (sim.carryingSimId) {
             const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
             if (child) {
-                // 孩子位置吸附在父母身上 (稍微偏上一点)
-                child.pos.x = sim.pos.x;
-                child.pos.y = sim.pos.y - 10;
+                // [修复] 位置偏移：Y轴减小(向上)，X轴稍微偏移，制造“抱在怀里”或“牵手”的视觉
+                // 注意：渲染层级在 GameCanvas 中处理
+                child.pos.x = sim.pos.x + 6; 
+                child.pos.y = sim.pos.y - 12; // 稍微向上提一点
             }
         }
 
@@ -333,7 +427,7 @@ export class EscortingState extends BaseState {
                 const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
                 if (child) {
                     child.carriedBySimId = null;
-                    child.changeState(new SchoolingState());
+                    child.changeState(new SchoolingState()); // 孩子进入上学状态
                     child.say("拜拜~ 👋", 'family');
                 }
                 sim.carryingSimId = null;
@@ -349,8 +443,7 @@ export class BeingEscortedState extends BaseState {
     actionName = SimAction.BeingEscorted;
 
     update(sim: Sim, dt: number) {
-        // 被抱着时，位置完全由 EscortingState 控制，这里只做被动处理
-        // 稍微回复一点 Social
+        // 被抱着时，位置完全由 EscortingState 控制
         sim.needs[NeedType.Social] += 0.01 * dt;
         sim.needs[NeedType.Fun] += 0.01 * dt;
         
