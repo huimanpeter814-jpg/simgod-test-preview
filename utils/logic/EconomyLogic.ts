@@ -4,10 +4,12 @@ import { ITEMS, BUFFS } from '../../constants';
 import { SocialLogic } from './social';
 import { DecisionLogic } from './decision';
 import { CareerLogic } from './career';
+import { AgeStage } from '../../types';
 
 export const EconomyLogic = {
     calculateDailyBudget(sim: Sim) {
-        if (['Infant', 'Toddler', 'Child', 'Teen'].includes(sim.ageStage)) {
+        // 🆕 修复：婴幼儿无预算，但青少年可以有预算
+        if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
             sim.dailyBudget = 0;
             return;
         }
@@ -35,6 +37,9 @@ export const EconomyLogic = {
         if (sim.action !== 'wandering' && sim.action !== 'idle') {
             return;
         }
+        // 🆕 婴幼儿不能消费
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
+        
         if (sim.money <= 0) return;
 
         if (sim.money < 100) {

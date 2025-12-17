@@ -21,7 +21,11 @@ export enum SimAction {
     PlayingHome = 'playing_home',
     Following = 'following',
     MovingHome = 'moving_home',
-    EatingOut = 'eat_out'
+    EatingOut = 'eat_out',
+    // 🆕 新增接送相关状态
+    PickingUp = 'picking_up',   // 父母去接孩子
+    Escorting = 'escorting',    // 父母护送/抱着孩子
+    BeingEscorted = 'being_escorted' // 孩子被护送/抱着
 }
 
 export enum JobType {
@@ -272,10 +276,7 @@ export interface SimData {
   mbti: string;
   zodiac: Zodiac;
   
-  // === 🆕 新增性格特质 ===
   traits: string[];
-  
-  // === 🆕 新增家庭背景故事 ===
   familyLore?: string;
 
   age: number;

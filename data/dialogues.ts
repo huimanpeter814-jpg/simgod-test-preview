@@ -10,6 +10,31 @@ export interface DialogueCategory {
 }
 
 export const DIALOGUE_TEMPLATES: Record<string, DialogueCategory> = {
+    // 🆕 婴幼儿专用对话
+    baby_talk: {
+        default: [
+            "阿巴阿巴...",
+            "麻麻！",
+            "粑粑...",
+            "哇！😶",
+            "👶",
+            "🍼...",
+            "嘻嘻嘻",
+            "(吃手手)",
+            "💤..."
+        ]
+    },
+    // 🆕 逗弄婴幼儿
+    tease_baby: {
+        default: [
+            "叫阿姨/叔叔~",
+            "谁是乖宝宝呀？",
+            "做个鬼脸 😜",
+            "举高高！",
+            "这小脸真胖乎~",
+            "快快长大哦。"
+        ]
+    },
     greet: {
         default: [
             "嘿，{B}！",

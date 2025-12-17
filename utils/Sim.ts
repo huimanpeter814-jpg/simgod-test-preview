@@ -19,7 +19,10 @@ import {
     FollowingState,
     CommutingSchoolState,
     SchoolingState,
-    PlayingHomeState
+    PlayingHomeState,
+    PickingUpState,
+    EscortingState,
+    BeingEscortedState
 } from './logic/SimStates';
 
 interface SimInitConfig {
@@ -35,8 +38,8 @@ interface SimInitConfig {
     orientation?: string;
     homeId?: string | null;
     money?: number; 
-    traits?: string[]; // 🆕 允许传入性格
-    familyLore?: string; // 🆕 允许传入家庭背景
+    traits?: string[]; 
+    familyLore?: string; 
 }
 
 export class Sim {
@@ -64,10 +67,7 @@ export class Sim {
     mbti: string;
     zodiac: any;
     
-    // === 🆕 性格特质 ===
     traits: string[];
-    
-    // === 🆕 家庭背景 ===
     familyLore?: string;
 
     age: number;
@@ -98,7 +98,6 @@ export class Sim {
     morality: number;        
     creativity: number;      
 
-    // [优化] 强类型 Needs，替换 any
     needs: Record<NeedType, number>; 
     skills: any;
     relationships: Record<string, Relationship> = {};
@@ -124,10 +123,7 @@ export class Sim {
 
     memories: Memory[] = [];
 
-    // [New] State Machine Property
     state: SimState;
-    
-    // Legacy action string property, synced with state
     action: SimAction | string; 
     
     actionTimer: number;
@@ -136,6 +132,10 @@ export class Sim {
 
     commuteTimer: number = 0;
     decisionTimer: number = 0; 
+
+    // 🆕 临时引用，用于护送逻辑
+    carryingSimId: string | null = null; // 我正在抱谁
+    carriedBySimId: string | null = null; // 谁正在抱我
 
     constructor(config: SimInitConfig = {}) {
         this.job = JOBS.find(j => j.id === 'unemployed')!;
@@ -202,10 +202,7 @@ export class Sim {
         this.mbti = MBTI_TYPES[Math.floor(Math.random() * MBTI_TYPES.length)];
         this.zodiac = ZODIACS[Math.floor(Math.random() * ZODIACS.length)];
         
-        // === 🆕 初始化性格特质 ===
         this.traits = config.traits || [];
-        
-        // === 🆕 初始化家庭背景 ===
         this.familyLore = config.familyLore;
 
         this.health = 90 + Math.random() * 10; 
@@ -222,7 +219,6 @@ export class Sim {
         this.faithfulness = Math.min(100, Math.max(0, baseFaith + (Math.random() * 40 - 20)));
 
         const randNeed = () => 60 + Math.floor(Math.random() * 40);
-        // [优化] 使用 NeedType 初始化
         this.needs = { 
             [NeedType.Hunger]: randNeed(), 
             [NeedType.Energy]: randNeed(), 
@@ -230,14 +226,20 @@ export class Sim {
             [NeedType.Social]: randNeed(), 
             [NeedType.Bladder]: randNeed(), 
             [NeedType.Hygiene]: randNeed(),
-            [NeedType.Comfort]: 100 // Default comfort
+            [NeedType.Comfort]: 100
         };
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
         if (config.money !== undefined) { this.money = config.money; } 
         else { this.money = 500 + Math.floor(Math.random() * 1000); }
-        if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen].includes(this.ageStage)) { this.money = 50 + Math.floor(Math.random() * 50); }
+        
+        // 🆕 修复：婴幼儿初始资金为 0
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) { 
+            this.money = 0; 
+        } else if ([AgeStage.Child, AgeStage.Teen].includes(this.ageStage)) {
+            this.money = 50 + Math.floor(Math.random() * 50); 
+        }
 
         this.metabolism = {};
         for (let key in BASE_DECAY) this.metabolism[key] = 1.0;
@@ -256,7 +258,6 @@ export class Sim {
         this.actionTimer = 0;
         this.calculateDailyBudget();
 
-        // === 状态机初始化 ===
         this.state = new IdleState();
         this.action = SimAction.Idle;
     }
@@ -268,16 +269,14 @@ export class Sim {
             this.state.exit(this);
         }
         this.state = newState;
-        this.action = newState.actionName; // 保持兼容性
+        this.action = newState.actionName; 
         this.state.enter(this);
     }
 
-    // [New] 供外部逻辑调用的状态切换辅助方法 (切断依赖)
     startCommuting() {
         this.changeState(new CommutingState());
     }
 
-    // [New] 开始普通的移动（非上班/上学通勤）
     startMovingToInteraction() {
         this.changeState(new MovingState(SimAction.Moving));
     }
@@ -294,43 +293,29 @@ export class Sim {
         this.changeState(new InteractionState(actionName));
     }
 
-    // [修复] 存档加载后的状态恢复逻辑
-    // 存档时 JSON.stringify 会把 state 序列化为普通对象，丢失方法
-    // 加载时需要根据 action 字符串重新实例化正确的 State 类
     restoreState() {
         switch (this.action) {
-            case SimAction.Idle:
-                this.state = new IdleState();
-                break;
-            case SimAction.Working:
-                this.state = new WorkingState();
-                break;
-            case SimAction.Commuting:
-                this.state = new CommutingState();
-                break;
-            case SimAction.CommutingSchool:
-                this.state = new CommutingSchoolState();
-                break;
-            case SimAction.Schooling:
-                this.state = new SchoolingState();
-                break;
-            case SimAction.Following:
-                this.state = new FollowingState();
-                break;
-            case SimAction.PlayingHome:
-                this.state = new PlayingHomeState();
-                break;
+            case SimAction.Idle: this.state = new IdleState(); break;
+            case SimAction.Working: this.state = new WorkingState(); break;
+            case SimAction.Commuting: this.state = new CommutingState(); break;
+            case SimAction.CommutingSchool: this.state = new CommutingSchoolState(); break;
+            case SimAction.Schooling: this.state = new SchoolingState(); break;
+            case SimAction.Following: this.state = new FollowingState(); break;
+            case SimAction.PlayingHome: this.state = new PlayingHomeState(); break;
+            // 🆕 恢复新状态
+            case SimAction.PickingUp: this.state = new PickingUpState(); break;
+            case SimAction.Escorting: this.state = new EscortingState(); break;
+            case SimAction.BeingEscorted: this.state = new BeingEscortedState(); break;
+            
             case SimAction.Moving:
             case SimAction.Wandering:
             case SimAction.MovingHome:
                 this.state = new MovingState(this.action);
                 break;
-            // 剩下的通常都是 InteractionState (Eating, Sleeping, Using, Talking 等)
             default:
                 this.state = new InteractionState(this.action);
                 break;
         }
-        // 如果数据损坏严重，兜底回到 Idle
         if (!this.state) {
             this.state = new IdleState();
             this.action = SimAction.Idle;
@@ -358,7 +343,6 @@ export class Sim {
         else {
             const obj = this.interactionTarget as Furniture;
             
-            // 扣费逻辑
             if (obj.cost) {
                 if (this.money < obj.cost) {
                     this.say("太贵了...", 'bad');
@@ -406,7 +390,6 @@ export class Sim {
             else {
                 const u = obj.utility;
                 const timePer100 = RESTORE_TIMES[u] || RESTORE_TIMES.default;
-                // [修复] 安全访问 needs
                 const needKey = u as NeedType;
                 if (this.needs[needKey] !== undefined) {
                     const missing = 100 - this.needs[needKey];
@@ -455,6 +438,17 @@ export class Sim {
         this.path = [];
         this.isSideHustle = false;
         this.commuteTimer = 0;
+        
+        // 🆕 如果是婴儿在家玩耍结束，继续保持在家
+        if (this.ageStage === AgeStage.Infant || this.ageStage === AgeStage.Toddler) {
+             // 继续判断是否要跟随
+             const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
+             if (parent && parent.action === SimAction.Idle) {
+                 this.changeState(new FollowingState());
+                 return;
+             }
+        }
+
         this.changeState(new IdleState());
     }
 
@@ -492,6 +486,9 @@ export class Sim {
             if (this.ageStage === AgeStage.Elder) speedMod = 0.7;
             if (this.isPregnant) speedMod = 0.6; 
 
+            // 🆕 抱着孩子的时候速度变慢
+            if (this.action === SimAction.Escorting) speedMod *= 0.8;
+
             const moveStep = this.speed * speedMod * (dt * 0.1);
 
             if (distToNext <= moveStep) {
@@ -512,7 +509,6 @@ export class Sim {
         return false;
     }
 
-    // [优化] 使用 NeedType 替换字符串字面量
     decayNeeds(dt: number, exclude: NeedType[] = []) {
         const f = 0.0008 * dt;
         
@@ -523,7 +519,6 @@ export class Sim {
         if (!exclude.includes(NeedType.Hygiene)) this.needs[NeedType.Hygiene] -= BASE_DECAY[NeedType.Hygiene] * this.metabolism.hygiene * f;
         if (!exclude.includes(NeedType.Social)) this.needs[NeedType.Social] -= BASE_DECAY[NeedType.Social] * this.metabolism.social * f;
         
-        // 遍历所有 Needs 确保范围
         (Object.keys(this.needs) as NeedType[]).forEach(k => {
             this.needs[k] = Math.max(0, Math.min(100, this.needs[k]));
         });
@@ -534,6 +529,7 @@ export class Sim {
         const f = 0.0008 * dt;
 
         if (minuteChanged) {
+            // 🆕 传入分钟变化
             SchoolLogic.checkKindergarten(this);
             this.updateBuffs(1);
             this.updateMood();
@@ -573,10 +569,13 @@ export class Sim {
             this.health += 0.01 * f;
         }
 
+        // 🆕 跟随逻辑：只有在空闲且没有特殊任务时才尝试跟随
+        // 移至 FollowingState 处理，这里只作为触发入口
         if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) {
-             if (this.action === SimAction.Idle && !this.target) {
+             if (this.action === SimAction.Idle && !this.target && !this.interactionTarget) {
                  const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
                  if (parent) {
+                     // 简单判断距离，详细的状态判断在 State 里做
                      const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
                      if (dist > 50) {
                          this.changeState(new FollowingState());
@@ -624,7 +623,6 @@ export class Sim {
         if (this.lifeGoal.includes('隐居') || this.lifeGoal.includes('独处')) { this.metabolism.social *= 0.4; }
         if (this.lifeGoal.includes('富翁') || this.lifeGoal.includes('大亨')) { this.metabolism.fun *= 1.2; }
         
-        // 🆕 应用新特质带来的数值影响
         if (this.traits.includes('活力')) { this.metabolism.energy *= 0.9; this.skillModifiers.athletics *= 1.3; }
         if (this.traits.includes('懒惰')) { this.metabolism.energy *= 1.2; this.skillModifiers.athletics *= 0.7; }
         if (this.traits.includes('独行侠')) { this.metabolism.social *= 0.5; this.socialModifier *= 0.8; }
@@ -672,7 +670,6 @@ export class Sim {
     hasBuff(id: string) { return this.buffs.some(b => b.id === id); }
     updateMood() {
         let total = 0; let count = 0;
-        // [优化] 使用 NeedType 遍历
         (Object.keys(this.needs) as NeedType[]).forEach(k => { 
             total += this.needs[k]; count++; 
         });
