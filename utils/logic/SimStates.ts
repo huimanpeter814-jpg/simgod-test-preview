@@ -1,5 +1,5 @@
 import type { Sim } from '../Sim';
-import { SimAction, AgeStage } from '../../types';
+import { SimAction, AgeStage, NeedType } from '../../types';
 import { GameStore } from '../simulation';
 import { DecisionLogic } from './decision';
 import { CareerLogic } from './career';
@@ -30,7 +30,8 @@ export abstract class BaseState implements SimState {
     exit(sim: Sim): void {}
 
     // 提取出的通用需求衰减逻辑
-    protected decayNeeds(sim: Sim, dt: number, exclude: string[] = []) {
+    // [优化] 使用 NeedType[] 类型
+    protected decayNeeds(sim: Sim, dt: number, exclude: NeedType[] = []) {
         sim.decayNeeds(dt, exclude);
     }
 }
@@ -130,21 +131,21 @@ export class WorkingState extends BaseState {
         const f = 0.0008 * dt; // Sim.ts 中的系数
         
         // 摸鱼逻辑
-        if (sim.needs.hunger < 20) {
-            sim.needs.hunger = 80;
+        if (sim.needs[NeedType.Hunger] < 20) {
+            sim.needs[NeedType.Hunger] = 80;
             sim.say("摸鱼吃零食 🍫", 'act');
         }
-        if (sim.needs.bladder < 20) {
-            sim.needs.bladder = 80;
+        if (sim.needs[NeedType.Bladder] < 20) {
+            sim.needs[NeedType.Bladder] = 80;
             sim.say("带薪如厕 🚽", 'act');
         }
 
         // 精力衰减
         const fatigueFactor = 1 + (50 - sim.constitution) * 0.01;
-        sim.needs.energy -= 0.01 * f * Math.max(0.5, fatigueFactor);
+        sim.needs[NeedType.Energy] -= 0.01 * f * Math.max(0.5, fatigueFactor);
 
         // 早退检查
-        if (sim.needs.energy < 15) {
+        if (sim.needs[NeedType.Energy] < 15) {
             sim.leaveWorkEarly();
             return;
         }
@@ -200,7 +201,7 @@ export class SchoolingState extends BaseState {
 
     update(sim: Sim, dt: number) {
         // 上学时不衰减常规需求? 原逻辑只衰减 Fun
-        sim.needs.fun -= 0.005 * dt;
+        sim.needs[NeedType.Fun] -= 0.005 * dt;
         sim.skills.logic += 0.002 * dt;
         
         // 保持在学校区域，防止乱跑
@@ -227,16 +228,17 @@ export class InteractionState extends BaseState {
         const getRate = (mins: number) => (100 / (mins * 60)) * dt;
 
         // 特殊状态的需求衰减屏蔽
-        const excludeDecay: string[] = [];
-        if (this.actionName === SimAction.Sleeping) excludeDecay.push('energy');
-        if (this.actionName === SimAction.Eating) excludeDecay.push('hunger');
-        if (this.actionName === SimAction.Talking) excludeDecay.push('social');
+        // [优化] 使用 NeedType 替换字符串
+        const excludeDecay: NeedType[] = [];
+        if (this.actionName === SimAction.Sleeping) excludeDecay.push(NeedType.Energy);
+        if (this.actionName === SimAction.Eating) excludeDecay.push(NeedType.Hunger);
+        if (this.actionName === SimAction.Talking) excludeDecay.push(NeedType.Social);
         
         this.decayNeeds(sim, dt, excludeDecay);
 
         // 社交逻辑
         if (this.actionName === SimAction.Talking) {
-            sim.needs.social += getRate(RESTORE_TIMES.social);
+            sim.needs[NeedType.Social] += getRate(RESTORE_TIMES[NeedType.Social]);
         }
         // 家具交互逻辑
         else if (obj) {

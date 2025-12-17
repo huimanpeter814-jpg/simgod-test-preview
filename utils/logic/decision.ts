@@ -29,10 +29,10 @@ export const DecisionLogic = {
     decideAction(sim: Sim) {
         // 1. 检查紧急需求 (< 40)
         let critical = [
-            { id: NeedType.Energy, val: sim.needs.energy },
-            { id: NeedType.Hunger, val: sim.needs.hunger },
-            { id: NeedType.Bladder, val: sim.needs.bladder },
-            { id: NeedType.Hygiene, val: sim.needs.hygiene }
+            { id: NeedType.Energy, val: sim.needs[NeedType.Energy] },
+            { id: NeedType.Hunger, val: sim.needs[NeedType.Hunger] },
+            { id: NeedType.Bladder, val: sim.needs[NeedType.Bladder] },
+            { id: NeedType.Hygiene, val: sim.needs[NeedType.Hygiene] }
         ].filter(n => n.val < 40);
 
         if (critical.length > 0) {
@@ -44,14 +44,14 @@ export const DecisionLogic = {
         // 2. 计算各需求评分
         // [修复] 显式定义数组类型，允许 id 为 string，解决类型不兼容报错
         let scores: { id: string, score: number, type: string }[] = [
-            { id: NeedType.Energy, score: (100 - sim.needs.energy) * 3.0, type: 'obj' },
-            { id: NeedType.Hunger, score: (100 - sim.needs.hunger) * 2.5, type: 'obj' },
-            { id: NeedType.Bladder, score: (100 - sim.needs.bladder) * 2.8, type: 'obj' },
-            { id: NeedType.Hygiene, score: (100 - sim.needs.hygiene) * 1.5, type: 'obj' },
-            { id: NeedType.Fun, score: (100 - sim.needs.fun) * 1.2, type: 'fun' },
+            { id: NeedType.Energy, score: (100 - sim.needs[NeedType.Energy]) * 3.0, type: 'obj' },
+            { id: NeedType.Hunger, score: (100 - sim.needs[NeedType.Hunger]) * 2.5, type: 'obj' },
+            { id: NeedType.Bladder, score: (100 - sim.needs[NeedType.Bladder]) * 2.8, type: 'obj' },
+            { id: NeedType.Hygiene, score: (100 - sim.needs[NeedType.Hygiene]) * 1.5, type: 'obj' },
+            { id: NeedType.Fun, score: (100 - sim.needs[NeedType.Fun]) * 1.2, type: 'fun' },
         ];
 
-        let socialScore = (100 - sim.needs.social) * 1.5;
+        let socialScore = (100 - sim.needs[NeedType.Social]) * 1.5;
         if (sim.mbti.startsWith('E')) socialScore *= 1.4;
         else if (sim.mbti.startsWith('I')) socialScore *= 0.8;
         if (['air', 'fire'].includes(sim.zodiac.element)) socialScore *= 1.2;
@@ -84,11 +84,11 @@ export const DecisionLogic = {
 
         for (let skillKey in sim.skills) {
             let talent = sim.skillModifiers[skillKey] || 1;
-            let skillScore = (100 - sim.needs.fun) * 0.5 * talent;
+            let skillScore = (100 - sim.needs[NeedType.Fun]) * 0.5 * talent;
             scores.push({ id: `skill_${skillKey}`, score: skillScore, type: 'obj' });
         }
 
-        if (sim.needs.fun < 50 && sim.money > 100) {
+        if (sim.needs[NeedType.Fun] < 50 && sim.money > 100) {
             scores.push({ id: 'cinema_3d', score: 90, type: 'obj' });
             
             let gymScore = 60;
@@ -96,13 +96,13 @@ export const DecisionLogic = {
             scores.push({ id: 'gym_run', score: gymScore, type: 'obj' });
         }
         
-        if (sim.needs.fun < 70) {
+        if (sim.needs[NeedType.Fun] < 70) {
              let artScore = 85;
              if (sim.mbti.includes('N') || sim.skills.creativity > 20 || sim.iq > 70) artScore += 30;
              scores.push({ id: 'art', score: artScore, type: 'obj' });
         }
         
-        if (sim.needs.fun < 60 && (sim.mbti.includes('P') || sim.mood < 40)) {
+        if (sim.needs[NeedType.Fun] < 60 && (sim.mbti.includes('P') || sim.mood < 40)) {
             scores.push({ id: 'play', score: 80, type: 'obj' });
         }
 
@@ -177,6 +177,7 @@ export const DecisionLogic = {
 
     findObject(sim: Sim, type: string) {
         let utility = type;
+        // [优化] 使用 NeedType 常量
         const simpleMap: Record<string, string> = {
              [NeedType.Hunger]: 'hunger', 
              [NeedType.Bladder]: 'bladder', 
@@ -190,7 +191,7 @@ export const DecisionLogic = {
 
         if (type === NeedType.Fun) {
             const funTypes = ['fun', 'cinema_2d', 'cinema_3d', 'cinema_imax', 'art', 'play', 'fishing'];
-            if (sim.needs.energy < 70) funTypes.push('comfort');
+            if (sim.needs[NeedType.Energy] < 70) funTypes.push('comfort');
             funTypes.forEach(t => {
                 const list = GameStore.furnitureIndex.get(t);
                 if (list) candidates = candidates.concat(list);
@@ -198,7 +199,7 @@ export const DecisionLogic = {
         } else if (type === NeedType.Energy) {
              const beds = GameStore.furnitureIndex.get('energy') || [];
              candidates = candidates.concat(beds);
-             if (sim.needs.energy < 30) {
+             if (sim.needs[NeedType.Energy] < 30) {
                  const sofas = GameStore.furnitureIndex.get('comfort') || [];
                  candidates = candidates.concat(sofas);
              }

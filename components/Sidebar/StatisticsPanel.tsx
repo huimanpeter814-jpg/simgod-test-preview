@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GameStore, Sim } from '../../utils/simulation';
-import { JOBS } from '../../constants';
+import { JobType, NeedType } from '../../types';
+import { BUFFS } from '../../constants';
 
 interface StatsPanelProps {
     onClose: () => void;
@@ -46,17 +47,22 @@ const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
         return unsub;
     }, []);
 
-    // 1. 职业统计
+    // 1. 职业统计 [优化：使用 JobType 枚举]
     const jobStats: Record<string, number> = {};
     sims.forEach(s => {
-        const type = s.job.id === 'unemployed' ? '自由职业' : (
-            s.job.companyType === 'internet' ? '互联网' :
-            s.job.companyType === 'design' ? '设计' :
-            s.job.companyType === 'business' ? '商业' :
-            s.job.companyType === 'store' ? '零售' :
-            s.job.companyType === 'restaurant' ? '餐饮' :
-            s.job.companyType === 'library' ? '图书' : '其他'
-        );
+        let type = '其他';
+        switch (s.job.companyType) {
+            case JobType.Unemployed: type = '自由职业'; break;
+            case JobType.Internet: type = '互联网'; break;
+            case JobType.Design: type = '设计'; break;
+            case JobType.Business: type = '商业'; break;
+            case JobType.Store: type = '零售'; break;
+            case JobType.Restaurant: type = '餐饮'; break;
+            case JobType.Library: type = '图书'; break;
+            case JobType.School: type = '教育'; break;
+            case JobType.Nightlife: type = '娱乐'; break;
+            default: type = '其他'; break;
+        }
         jobStats[type] = (jobStats[type] || 0) + 1;
     });
 
@@ -102,11 +108,11 @@ const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
         });
     });
 
-    // 3. 状态统计
+    // 3. 状态统计 [优化：使用 NeedType 和 BUFFS 常量]
     const happyCount = sims.filter(s => s.mood > 80).length;
     const sadCount = sims.filter(s => s.mood < 40).length;
-    const smellyCount = sims.filter(s => s.needs.hygiene < 30 || s.hasBuff('smelly')).length;
-    const hungryCount = sims.filter(s => s.needs.hunger < 30).length;
+    const smellyCount = sims.filter(s => s.needs[NeedType.Hygiene] < 30 || s.hasBuff(BUFFS.smelly.id)).length;
+    const hungryCount = sims.filter(s => s.needs[NeedType.Hunger] < 30).length;
     const richCount = sims.filter(s => s.money > 5000).length;
     const brokeCount = sims.filter(s => s.money < 200).length;
 

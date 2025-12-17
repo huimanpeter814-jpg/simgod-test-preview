@@ -11,8 +11,7 @@ import { LifeCycleLogic } from './logic/LifeCycleLogic';
 import { EconomyLogic } from './logic/EconomyLogic';     
 import { 
     SimState, IdleState, WorkingState, MovingState, CommutingState, 
-    InteractionState, CommutingSchoolState, SchoolingState, 
-    PlayingHomeState, FollowingState 
+    InteractionState, FollowingState 
 } from './logic/SimStates';
 
 interface SimInitConfig {
@@ -82,7 +81,8 @@ export class Sim {
     morality: number;        
     creativity: number;      
 
-    needs: any; 
+    // [优化] 强类型 Needs，替换 any
+    needs: Record<NeedType, number>; 
     skills: any;
     relationships: Record<string, Relationship> = {};
     
@@ -198,7 +198,16 @@ export class Sim {
         this.faithfulness = Math.min(100, Math.max(0, baseFaith + (Math.random() * 40 - 20)));
 
         const randNeed = () => 60 + Math.floor(Math.random() * 40);
-        this.needs = { [NeedType.Hunger]: randNeed(), [NeedType.Energy]: randNeed(), [NeedType.Fun]: randNeed(), [NeedType.Social]: randNeed(), [NeedType.Bladder]: randNeed(), [NeedType.Hygiene]: randNeed() };
+        // [优化] 使用 NeedType 初始化
+        this.needs = { 
+            [NeedType.Hunger]: randNeed(), 
+            [NeedType.Energy]: randNeed(), 
+            [NeedType.Fun]: randNeed(), 
+            [NeedType.Social]: randNeed(), 
+            [NeedType.Bladder]: randNeed(), 
+            [NeedType.Hygiene]: randNeed(),
+            [NeedType.Comfort]: 100 // Default comfort
+        };
         this.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
         this.relationships = {};
 
@@ -325,8 +334,10 @@ export class Sim {
             else {
                 const u = obj.utility;
                 const timePer100 = RESTORE_TIMES[u] || RESTORE_TIMES.default;
-                if (this.needs[u] !== undefined) {
-                    const missing = 100 - this.needs[u];
+                // [修复] 安全访问 needs
+                const needKey = u as NeedType;
+                if (this.needs[needKey] !== undefined) {
+                    const missing = 100 - this.needs[needKey];
                     durationMinutes = (missing / 100) * timePer100 * 1.1; 
                 }
                 durationMinutes = Math.max(10, durationMinutes);
@@ -348,20 +359,24 @@ export class Sim {
 
     finishAction() {
         if (this.action === SimAction.Sleeping) {
-            this.needs.energy = 100;
+            this.needs[NeedType.Energy] = 100;
             this.addBuff(BUFFS.well_rested);
         }
-        if (this.action === SimAction.Eating) this.needs.hunger = 100;
+        if (this.action === SimAction.Eating) this.needs[NeedType.Hunger] = 100;
         
         if (this.interactionTarget && this.interactionTarget.type !== 'human') {
             let u = this.interactionTarget.utility;
             let obj = this.interactionTarget;
             let handler = INTERACTIONS[u] || INTERACTIONS['default'];
             if (handler && handler.onFinish) handler.onFinish(this, obj);
-            if (!u.startsWith('buy_') && this.needs[u] !== undefined && this.needs[u] > 90) this.needs[u] = 100;
+            
+            const needKey = u as NeedType;
+            if (!u.startsWith('buy_') && this.needs[needKey] !== undefined && this.needs[needKey] > 90) {
+                this.needs[needKey] = 100;
+            }
         }
         
-        if (this.action === SimAction.Talking) this.needs.social = 100;
+        if (this.action === SimAction.Talking) this.needs[NeedType.Social] = 100;
         
         this.target = null;
         this.interactionTarget = null;
@@ -425,16 +440,21 @@ export class Sim {
         return false;
     }
 
-    decayNeeds(dt: number, exclude: string[] = []) {
+    // [优化] 使用 NeedType 替换字符串字面量
+    decayNeeds(dt: number, exclude: NeedType[] = []) {
         const f = 0.0008 * dt;
-        if (!exclude.includes('energy')) this.needs.energy -= BASE_DECAY.energy * this.metabolism.energy * f;
-        if (!exclude.includes('hunger')) this.needs.hunger -= BASE_DECAY.hunger * this.metabolism.hunger * f;
-        if (!exclude.includes('fun')) this.needs.fun -= BASE_DECAY.fun * this.metabolism.fun * f;
-        if (!exclude.includes('bladder')) this.needs.bladder -= BASE_DECAY.bladder * this.metabolism.bladder * f;
-        if (!exclude.includes('hygiene')) this.needs.hygiene -= BASE_DECAY.hygiene * this.metabolism.hygiene * f;
-        if (!exclude.includes('social')) this.needs.social -= BASE_DECAY.social * this.metabolism.social * f;
         
-        for (let k in this.needs) this.needs[k] = Math.max(0, Math.min(100, this.needs[k]));
+        if (!exclude.includes(NeedType.Energy)) this.needs[NeedType.Energy] -= BASE_DECAY[NeedType.Energy] * this.metabolism.energy * f;
+        if (!exclude.includes(NeedType.Hunger)) this.needs[NeedType.Hunger] -= BASE_DECAY[NeedType.Hunger] * this.metabolism.hunger * f;
+        if (!exclude.includes(NeedType.Fun)) this.needs[NeedType.Fun] -= BASE_DECAY[NeedType.Fun] * this.metabolism.fun * f;
+        if (!exclude.includes(NeedType.Bladder)) this.needs[NeedType.Bladder] -= BASE_DECAY[NeedType.Bladder] * this.metabolism.bladder * f;
+        if (!exclude.includes(NeedType.Hygiene)) this.needs[NeedType.Hygiene] -= BASE_DECAY[NeedType.Hygiene] * this.metabolism.hygiene * f;
+        if (!exclude.includes(NeedType.Social)) this.needs[NeedType.Social] -= BASE_DECAY[NeedType.Social] * this.metabolism.social * f;
+        
+        // 遍历所有 Needs 确保范围
+        (Object.keys(this.needs) as NeedType[]).forEach(k => {
+            this.needs[k] = Math.max(0, Math.min(100, this.needs[k]));
+        });
     }
 
     update(dt: number, minuteChanged: boolean) {
@@ -460,24 +480,24 @@ export class Sim {
                 SchoolLogic.giveAllowance(this);
             }
 
-            if (this.needs.social < 20 && !this.hasBuff('lonely')) {
+            if (this.needs[NeedType.Social] < 20 && !this.hasBuff('lonely')) {
                 this.addBuff(BUFFS.lonely);
                 this.say("好孤独...", 'bad');
             }
-            if (this.needs.fun < 20 && !this.hasBuff('bored')) {
+            if (this.needs[NeedType.Fun] < 20 && !this.hasBuff('bored')) {
                 this.addBuff(BUFFS.bored);
                 this.say("无聊透顶...", 'bad');
             }
-            if (this.needs.hygiene < 20 && !this.hasBuff('smelly')) {
+            if (this.needs[NeedType.Hygiene] < 20 && !this.hasBuff('smelly')) {
                 this.addBuff(BUFFS.smelly);
                 this.say("身上有味了...", 'bad');
             }
         }
 
-        if (this.needs.energy <= 0 || this.needs.hunger <= 0) {
+        if (this.needs[NeedType.Energy] <= 0 || this.needs[NeedType.Hunger] <= 0) {
             this.health -= 0.05 * f * 10; 
             if (Math.random() > 0.95) this.say("感觉快不行了...", 'bad');
-        } else if (this.health < 100 && this.needs.energy > 80 && this.needs.hunger > 80) {
+        } else if (this.health < 100 && this.needs[NeedType.Energy] > 80 && this.needs[NeedType.Hunger] > 80) {
             this.health += 0.01 * f;
         }
 
@@ -551,7 +571,7 @@ export class Sim {
             this.addBuff(BUFFS.shopping_spree);
             if (this.money > 2000) { this.say("买买买！清空购物车！🛒", 'money'); this.dailyBudget += 500; } 
             else { this.addBuff(BUFFS.broke); this.say("想买但没钱... 💸", 'bad'); }
-        } else if (holiday.type === 'break') { this.addBuff(BUFFS.vacation_chill); this.say("终于放长假了！🌴", 'act'); this.needs.fun = Math.max(50, this.needs.fun); }
+        } else if (holiday.type === 'break') { this.addBuff(BUFFS.vacation_chill); this.say("终于放长假了！🌴", 'act'); this.needs[NeedType.Fun] = Math.max(50, this.needs[NeedType.Fun]); }
     }
     checkDeath(dt: number) { LifeCycleLogic.checkDeath(this, dt); }
     die(cause: string) { LifeCycleLogic.die(this, cause); }
@@ -570,7 +590,10 @@ export class Sim {
     hasBuff(id: string) { return this.buffs.some(b => b.id === id); }
     updateMood() {
         let total = 0; let count = 0;
-        for (let k in this.needs) { total += this.needs[k]; count++; }
+        // [优化] 使用 NeedType 遍历
+        (Object.keys(this.needs) as NeedType[]).forEach(k => { 
+            total += this.needs[k]; count++; 
+        });
         let base = total / count;
         this.buffs.forEach(b => { if (b.type === 'good') base += 15; if (b.type === 'bad') base -= 15; });
         this.mood = Math.max(0, Math.min(100, base));

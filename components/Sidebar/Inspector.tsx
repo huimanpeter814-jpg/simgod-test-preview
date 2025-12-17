@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { GameStore, Sim } from '../../utils/simulation';
 import { drawAvatarHead } from '../../utils/render/pixelArt';
 import { SKILLS, ORIENTATIONS, AGE_CONFIG, HAIR_STYLE_NAMES } from '../../constants';
-import { SimData, Memory } from '../../types';
+import { SimData, Memory, SimAction, NeedType, AgeStage } from '../../types';
 
 interface InspectorProps {
     selectedId: string | null;
@@ -49,17 +49,28 @@ const RelBar: React.FC<{ val: number, type: 'friend' | 'romance' }> = ({ val, ty
     );
 };
 
+// [优化] 使用 SimAction 替换魔法字符串
 const STATUS_MAP: Record<string, string> = {
-    idle: '发呆', moving: '移动中', commuting: '通勤中', wandering: '闲逛',
-    working: '打工', sleeping: '睡觉', eating: '进食', talking: '聊天',
-    using: '忙碌', watching_movie: '看电影', phone: '玩手机'
+    [SimAction.Idle]: '发呆', 
+    [SimAction.Moving]: '移动中', 
+    [SimAction.Commuting]: '通勤中', 
+    [SimAction.Wandering]: '闲逛',
+    [SimAction.Working]: '打工', 
+    [SimAction.Sleeping]: '睡觉', 
+    [SimAction.Eating]: '进食', 
+    [SimAction.Talking]: '聊天',
+    [SimAction.Using]: '忙碌', 
+    [SimAction.WatchingMovie]: '看电影', 
+    [SimAction.Phone]: '玩手机',
+    [SimAction.CommutingSchool]: '上学路上',
+    [SimAction.Schooling]: '在校学习'
 };
 
 // --- Sub Components ---
 
 const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
     let statusText = STATUS_MAP[sim.action] || sim.action;
-    if (sim.action === 'using' && sim.interactionTarget) statusText = `使用 ${sim.interactionTarget.label}`;
+    if (sim.action === SimAction.Using && sim.interactionTarget) statusText = `使用 ${sim.interactionTarget.label}`;
     const displayStatus = (sim.bubble?.type === 'act' && sim.bubble?.text && sim.bubble?.timer > 0) ? sim.bubble.text : statusText;
 
     return (
@@ -75,9 +86,12 @@ const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                 <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">基本需求</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                     {[
-                        { l: '饥饿', v: sim.needs.hunger, c: '#e17055' }, { l: '精力', v: sim.needs.energy, c: '#6c5ce7' },
-                        { l: '社交', v: sim.needs.social, c: '#00b894' }, { l: '娱乐', v: sim.needs.fun, c: '#fdcb6e' },
-                        { l: '卫生', v: sim.needs.hygiene, c: '#74b9ff' }, { l: '如厕', v: sim.needs.bladder, c: '#fab1a0' },
+                        { l: '饥饿', v: sim.needs[NeedType.Hunger], c: '#e17055' }, 
+                        { l: '精力', v: sim.needs[NeedType.Energy], c: '#6c5ce7' },
+                        { l: '社交', v: sim.needs[NeedType.Social], c: '#00b894' }, 
+                        { l: '娱乐', v: sim.needs[NeedType.Fun], c: '#fdcb6e' },
+                        { l: '卫生', v: sim.needs[NeedType.Hygiene], c: '#74b9ff' }, 
+                        { l: '如厕', v: sim.needs[NeedType.Bladder], c: '#fab1a0' },
                     ].map(s => (
                         <div key={s.l}>
                             <div className="flex justify-between text-[10px] text-gray-400 mb-0.5"><span>{s.l}</span></div>
@@ -142,7 +156,7 @@ const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
 
 const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
     const hairName = HAIR_STYLE_NAMES[(sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 17)] || '未知发型';
-    const jobTitle = sim.ageStage === 'Infant' ? '吃奶' : (sim.ageStage === 'Toddler' ? '幼儿园' : (sim.ageStage === 'Child' ? '小学生' : (sim.ageStage === 'Teen' ? '中学生' : sim.job.title)));
+    const jobTitle = sim.ageStage === AgeStage.Infant ? '吃奶' : (sim.ageStage === AgeStage.Toddler ? '幼儿园' : (sim.ageStage === AgeStage.Child ? '小学生' : (sim.ageStage === AgeStage.Teen ? '中学生' : sim.job.title)));
     const homeUnit = GameStore.housingUnits.find(u => u.id === sim.homeId);
     
     return (
@@ -254,7 +268,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
         if (rel && rel.isSpouse) { relStatus = '已婚'; relStatusClass = 'bg-love/10 border-love/30 text-love font-bold'; }
         else { relStatus = '恋爱中'; relStatusClass = 'bg-pink-500/10 border-pink-500/30 text-pink-300'; }
     }
-    const jobTitle = sim.ageStage === 'Infant' ? '吃奶' : (sim.ageStage === 'Toddler' ? '幼儿园' : (sim.ageStage === 'Child' ? '小学生' : (sim.ageStage === 'Teen' ? '中学生' : sim.job.title)));
+    const jobTitle = sim.ageStage === AgeStage.Infant ? '吃奶' : (sim.ageStage === AgeStage.Toddler ? '幼儿园' : (sim.ageStage === AgeStage.Child ? '小学生' : (sim.ageStage === AgeStage.Teen ? '中学生' : sim.job.title)));
 
     return (
         <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
