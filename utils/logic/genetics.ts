@@ -15,7 +15,7 @@ export const FamilyGenerator = {
         let wealthClass: 'poor' | 'middle' | 'rich';
         let baseMoney = 0;
 
-        // 1. 决定阶级
+        // 1. 决定阶级 & 家庭总资金
         if (r < 0.15) { wealthClass = 'rich'; baseMoney = 10000 + Math.floor(Math.random() * 20000); } 
         else if (r < 0.8) { wealthClass = 'middle'; baseMoney = 2500 + Math.floor(Math.random() * 6500); } 
         else { wealthClass = 'poor'; baseMoney = 1000 + Math.floor(Math.random() * 500); }
@@ -48,22 +48,47 @@ export const FamilyGenerator = {
         const getSurname = () => SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
         const members: Sim[] = [];
         
-        // 3. 生成父母
+        // 3. 生成父母 (Parents)
         const parentCount = (count > 1 && Math.random() > 0.3) ? 2 : 1; 
         const isSameSex = parentCount === 2 && Math.random() < 0.1; 
         
+        // [修改] 资金均分：确保所有成年人手里都有钱
+        const moneyPerAdult = Math.floor(baseMoney / parentCount);
+
+        // [修改] 年龄不设限：父母可以是成年、中年或老年
+        const adultStages = [AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Elder];
+        const getRandomParentStage = () => adultStages[Math.floor(Math.random() * adultStages.length)];
+
         const p1Gender: 'M' | 'F' = Math.random() > 0.5 ? 'M' : 'F';
         let p2Gender: 'M' | 'F' = p1Gender === 'M' ? 'F' : 'M';
         if (isSameSex) p2Gender = p1Gender;
 
         const p1Surname = getSurname();
-        const parent1 = new Sim({ x: homeX, y: homeY, surname: p1Surname, familyId, ageStage: AgeStage.Adult, gender: p1Gender, homeId, money: baseMoney });
+        const parent1 = new Sim({ 
+            x: homeX, 
+            y: homeY, 
+            surname: p1Surname, 
+            familyId, 
+            ageStage: getRandomParentStage(), // [修改] 随机年龄段
+            gender: p1Gender, 
+            homeId, 
+            money: moneyPerAdult // [修改] 分配资金
+        });
         members.push(parent1);
 
         let parent2: Sim | null = null;
         if (parentCount === 2) {
             const p2Surname = getSurname(); 
-            parent2 = new Sim({ x: homeX + 10, y: homeY + 10, surname: p2Surname, familyId, ageStage: AgeStage.Adult, gender: p2Gender, homeId, money: 0 });
+            parent2 = new Sim({ 
+                x: homeX + 10, 
+                y: homeY + 10, 
+                surname: p2Surname, 
+                familyId, 
+                ageStage: getRandomParentStage(), // [修改] 随机年龄段
+                gender: p2Gender, 
+                homeId, 
+                money: moneyPerAdult // [修改] 分配资金
+            });
             members.push(parent2);
             SocialLogic.marry(parent1, parent2, true); 
         }
@@ -85,11 +110,13 @@ export const FamilyGenerator = {
             
             // 建立亲属关系
             members.forEach(p => {
-                if (p.ageStage === AgeStage.Adult) {
+                // [修改] 只要不是未成年人，就被视为长辈/监护人建立亲子关系
+                if (![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen].includes(p.ageStage)) {
                     SocialLogic.setKinship(p, child, 'child'); 
                     SocialLogic.setKinship(child, p, 'parent'); 
                     p.childrenIds.push(child.id);
                 } else {
+                    // 如果父母生成得太年轻（比如极端情况下修改逻辑导致），或者兄弟姐妹之间
                     SocialLogic.setKinship(p, child, 'sibling'); 
                     SocialLogic.setKinship(child, p, 'sibling');
                 }
