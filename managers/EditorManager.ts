@@ -18,7 +18,7 @@ export class EditorManager implements EditorState {
     placingTemplateId: string | null = null;
     placingFurniture: Partial<Furniture> | null = null;
 
-    // [新增] 交互状态管理
+    // [新增] 交互状态管理，修复类型错误
     interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing' = 'idle';
     resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null = null;
     
@@ -47,7 +47,7 @@ export class EditorManager implements EditorState {
     history: EditorAction[] = [];
     redoStack: EditorAction[] = [];
     
-    // 快照 (用于取消操作)
+    // 快照
     snapshot: {
         worldLayout: WorldPlot[];
         furniture: Furniture[];
@@ -94,10 +94,9 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
 
-    // [新增] 切换工具的方法
     setTool(tool: 'camera' | 'select') {
         this.activeTool = tool;
-        this.interactionState = 'idle'; // Reset interaction on tool change
+        this.interactionState = 'idle'; 
         GameStore.notify();
     }
 
@@ -220,7 +219,7 @@ export class EditorManager implements EditorState {
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
         this.isDragging = true; 
-        this.interactionState = 'carrying'; // Auto carry
+        this.interactionState = 'carrying'; 
         
         let w = 300, h = 300;
         if (templateId) {
@@ -282,7 +281,7 @@ export class EditorManager implements EditorState {
         this.placingTemplateId = null;
         this.isDragging = false;
         this.interactionState = 'idle';
-        this.selectedPlotId = newId; // Auto select after place
+        this.selectedPlotId = newId; 
         GameStore.notify();
     }
 
@@ -333,19 +332,12 @@ export class EditorManager implements EditorState {
         if (record) this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
         
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
-        
-        // Remove associated base rooms
         GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); 
-        
-        // 保留家具 (or remove if desired)
-        // GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
-        
         this.selectedPlotId = null;
         GameStore.initIndex();
         GameStore.notify();
     }
 
-    // [修改] 缩放地皮/房间的逻辑：支持 x, y, w, h 更新
     resizeEntity(type: 'plot' | 'room', id: string, newRect: { x: number, y: number, w: number, h: number }) {
         if (type === 'plot') {
             const plot = GameStore.worldLayout.find(p => p.id === id);
@@ -354,8 +346,6 @@ export class EditorManager implements EditorState {
                 plot.y = newRect.y;
                 plot.width = Math.max(50, newRect.w);
                 plot.height = Math.max(50, newRect.h);
-                
-                // 只有自定义空地才同步 Base Room (模板地皮不应该改内部房间)
                 if (plot.templateId === 'default_empty' || plot.id.startsWith('plot_custom')) {
                      const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
                      if (baseRoom) {
@@ -380,7 +370,7 @@ export class EditorManager implements EditorState {
     }
     
     finalizeResize(type: 'plot'|'room', id: string, prevRect: {x:number,y:number,w:number,h:number}, newRect: {x:number,y:number,w:number,h:number}) {
-        this.isResizing = false;
+        //this.isResizing = false;
         this.resizeHandle = null;
         this.interactionState = 'idle';
         this.recordAction({ 

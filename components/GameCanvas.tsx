@@ -810,7 +810,7 @@ const GameCanvas: React.FC = () => {
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px]">
                         <div className="flex items-center gap-2"><span className="text-xl">🖱️</span> <span>单击物体: 拿起 / 再次点击放置</span></div>
                         <div className="flex items-center gap-2"><span className="text-xl">🤏</span> <span>拖拽四角: 调整物体大小</span></div>
-                        <div className="flex items-center gap-2"><span className="text-xl">✋</span> <span>空格/漫游: 拖拽移动视角</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">✋</span> <span>漫游: 拖拽移动视角</span></div>
                         <div className="flex items-center gap-2"><span className="text-xl">⌨️</span> <span>Delete键: 删除选中物体</span></div>
                     </div>
                 </div>

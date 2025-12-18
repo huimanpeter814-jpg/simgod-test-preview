@@ -230,7 +230,19 @@ export class CommutingState extends BaseState {
         // 3. 【就近制】全图搜索（仅适用于自由职业或无固定工作地点的职业）
         // 只有当 sim.workplaceId 为空时才执行
         const allCandidates = GameStore.furniture.filter(f => hasRequiredTags(f, requiredTags));
-        const allFree = allCandidates.filter(f => !this.isOccupied(f, sim.id));
+        const allFree = allCandidates.filter(f => {
+            // 1. 如果被占用，跳过
+            if (this.isOccupied(f, sim.id)) return false;
+            
+            // 2. 核心修正：如果家具属于某个家 (homeId存在)
+            if (f.homeId) {
+                // 只有当这个家是市民自己的家时，才可以使用 (比如SOHO办公)
+                // 否则视为私闯民宅，不可作为工位
+                if (f.homeId !== sim.homeId) return false;
+            }
+            
+            return true;
+        });
 
         if (allFree.length > 0) return this.selectBest(sim, allFree);
 
