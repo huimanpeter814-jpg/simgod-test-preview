@@ -112,6 +112,7 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '小黄鸭船', w: 44, h: 34, color: '#ffdd59', utility: 'play', pixelPattern: 'boat_duck' },
             { label: '野餐垫', w: 108, h: 84, color: '#ff6b81', utility: 'hunger', pixelPattern: 'picnic_mat' },
             { label: '冰淇淋车', w: 64, h: 44, color: '#ffd166', utility: 'buy_food', pixelPattern: 'icecream_cart' },
+            { label: '钓鱼位', w: 20, h: 20, color: '#5a8fff', utility: 'fishing', pixelPattern: 'water' },
         ]
     },
     'bathroom': {
@@ -507,12 +508,19 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                         <div className="flex flex-wrap gap-1.5">
                             {COLORS.map(c => (
                                 <button
-                                    key={c}
-                                    onClick={() => handleColorChange(c)}
-                                    className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 ${selectedColor === c ? 'border-white scale-110 shadow-lg' : 'border-white/10'}`}
-                                    style={{ background: c }}
-                                    title={c}
-                                />
+                                key={c}
+                                onClick={() => handleColorChange(c)}
+                                // ✨ 修改 className: 增加 flex 布局以居中显示图标
+                                className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 flex items-center justify-center overflow-hidden ${selectedColor === c ? 'border-white scale-110 shadow-lg' : 'border-white/10'}`}
+                                // ✨ 修改 style:如果是 transparent，显示为深色半透明背景，否则显示颜色
+                                style={{ background: c === 'transparent' ? 'rgba(255,255,255,0.1)' : c }}
+                                title={c === 'transparent' ? '无填充 (透明)' : c}
+                            >
+                                {/* ✨ 如果是透明色，显示一个红色斜杠图标 */}
+                                {c === 'transparent' && (
+                                    <div className="w-full h-px bg-red-500 transform rotate-45 scale-150"></div>
+                                )}
+                            </button>
                             ))}
                         </div>
                     </div>

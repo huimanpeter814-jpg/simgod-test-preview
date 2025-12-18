@@ -91,6 +91,11 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
         if (sim.lifeGoal.includes('派对') || sim.lifeGoal.includes('万人迷')) score += 50;
         return score;
     },
+    [JobType.Hospital]: (sim) => {
+        let score = 0;
+        
+        return score;
+    },
     [JobType.Unemployed]: () => -999 // 除非没得选，否则不主动选失业
 };
 

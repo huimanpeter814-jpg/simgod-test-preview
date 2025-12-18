@@ -6,6 +6,7 @@ const faceFiles = import.meta.glob('/public/assets/face/*.{png,jpg,jpeg,webp}', 
 const hairFiles = import.meta.glob('/public/assets/hair/*.{png,jpg,jpeg,webp}', { eager: true });
 const clothesFiles = import.meta.glob('/public/assets/clothes/*.{png,jpg,jpeg,webp}', { eager: true });
 const pantsFiles = import.meta.glob('/public/assets/pants/*.{png,jpg,jpeg,webp}', { eager: true });
+const bgFiles = import.meta.glob('/public/assets/bg/*.{png,jpg,jpeg,webp}', { eager: true });
 
 function getPathsFromGlob(globResult: Record<string, unknown>): string[] {
     return Object.keys(globResult).map(path => path.replace(/^\/public/, ''));
@@ -15,12 +16,13 @@ export const ASSET_CONFIG = {
     face: getPathsFromGlob(faceFiles),
     hair: getPathsFromGlob(hairFiles),
     clothes: getPathsFromGlob(clothesFiles),
-    pants: getPathsFromGlob(pantsFiles)
+    pants: getPathsFromGlob(pantsFiles),
+    bg: getPathsFromGlob(bgFiles)
 };
 
 export const CONFIG = {
-    CANVAS_W: 4600, // 扩大画布以容纳更多地块
-    CANVAS_H: 3000, // 增加高度
+    CANVAS_W: 3280, // 扩大画布以容纳更多地块
+    CANVAS_H: 2200, // 增加高度
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],
         hair: ['#2b2b2b', '#4a3b32', '#8c6b5d', '#d9c2a3', '#a83f3f', '#3e5f8a'], 

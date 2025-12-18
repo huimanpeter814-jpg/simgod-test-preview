@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { CONFIG, AGE_CONFIG } from '../constants'; 
+import { CONFIG, AGE_CONFIG, ASSET_CONFIG } from '../constants';
 import { GameStore, gameLoopStep, getActivePalette } from '../utils/simulation';
 import { getAsset } from '../utils/assetLoader';
 import { drawAvatarHead, drawPixelProp } from '../utils/render/pixelArt';
@@ -22,7 +22,7 @@ const PLOT_OPTIONS = [
 ];
 
 const SIMPLE_COLORS = [
-    '#dcdcdc', '#8cb393', '#3d404b', '#5a8fff', '#ff7675', '#fdcb6e', '#ffffff'
+    'transparent','#dcdcdc', '#8cb393', '#3d404b', '#5a8fff', '#ff7675', '#fdcb6e', '#ffffff'
 ];
 
 const createWorker = () => {
@@ -145,18 +145,38 @@ const GameCanvas: React.FC = () => {
         const ctx = staticCanvasRef.current.getContext('2d');
         if (!ctx) return;
 
+        ctx.imageSmoothingEnabled = false;
+
         const p = getActivePalette();
-        
-        ctx.fillStyle = p.bg;
-        ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+
+        const bgPath = ASSET_CONFIG.bg?.find(path => path.includes('bg_img')) || ASSET_CONFIG.bg?.[0];
+        const bgImg = getAsset(bgPath);
+
+        if (bgImg) {
+            // 如果有图，绘制图片并拉伸至全图
+            ctx.drawImage(bgImg, 0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+        } else {
+            // 如果没图，回退到原来的纯色背景
+            ctx.fillStyle = p.bg;
+            ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+        }
 
         GameStore.rooms.filter(r => !r.isCustom).forEach((r: any) => {
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && GameStore.editor.isDragging) {
                 if (r.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
             }
 
-            ctx.fillStyle = 'rgba(0,0,0,0.2)';
-            ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h);
+            if (r.color !== 'transparent') {
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h);
+            }
+
+            // 修改判断条件：如果是 'transparent' 颜色，强制绘制边框
+            if (r.color === 'transparent' || (r.id !== 'park_base' && !r.id.startsWith('road') && !r.label.startsWith('空地'))) {
+                ctx.strokeStyle = p.wall;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(r.x, r.y, r.w, r.h);
+            }
 
             const floorImg = getAsset((r as any).imagePath);
             if (floorImg) {
@@ -183,11 +203,11 @@ const GameCanvas: React.FC = () => {
                     ctx.stroke();
                 }
             }
-            if (r.id !== 'park_base' && !r.id.startsWith('road') && !r.label.startsWith('空地')) {
-                ctx.strokeStyle = p.wall;
-                ctx.lineWidth = 4;
-                ctx.strokeRect(r.x, r.y, r.w, r.h);
-            }
+            // if (r.id !== 'park_base' && !r.id.startsWith('road') && !r.label.startsWith('空地')) {
+            //     ctx.strokeStyle = p.wall;
+            //     ctx.lineWidth = 4;
+            //     ctx.strokeRect(r.x, r.y, r.w, r.h);
+            // }
             if (r.label && !r.id.startsWith('road')) {
                 ctx.fillStyle = 'rgba(0,0,0,0.4)';
                 ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
@@ -1020,12 +1040,17 @@ const GameCanvas: React.FC = () => {
                         <div className="flex flex-wrap gap-1.5">
                             {SIMPLE_COLORS.map(c => (
                                 <button
-                                    key={c}
-                                    onClick={() => handleAttributeChange('color', c)}
-                                    className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 ${selectedPlot.customColor === c ? 'border-white scale-110 shadow-lg ring-1 ring-white/50' : 'border-white/20'}`}
-                                    style={{ background: c }}
-                                    title={c}
-                                />
+                                key={c}
+                                onClick={() => handleAttributeChange('color', c)}
+                                // ✨ 同样的按钮样式修改
+                                className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 flex items-center justify-center overflow-hidden ${selectedPlot.customColor === c ? 'border-white scale-110 shadow-lg ring-1 ring-white/50' : 'border-white/20'}`}
+                                style={{ background: c === 'transparent' ? 'rgba(255,255,255,0.1)' : c }}
+                                title={c === 'transparent' ? '无填充' : c}
+                            >
+                                {c === 'transparent' && (
+                                    <div className="w-full h-px bg-red-500 transform rotate-45 scale-150"></div>
+                                )}
+                            </button>
                             ))}
                         </div>
                     </div>

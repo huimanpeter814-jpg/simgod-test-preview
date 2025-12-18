@@ -20,7 +20,8 @@ const App: React.FC = () => {
             ...ASSET_CONFIG.face,
             ...ASSET_CONFIG.hair,
             ...ASSET_CONFIG.clothes,
-            ...ASSET_CONFIG.pants
+            ...ASSET_CONFIG.pants,
+            ...ASSET_CONFIG.bg
         ];
         loadImages(allAssets);
 
