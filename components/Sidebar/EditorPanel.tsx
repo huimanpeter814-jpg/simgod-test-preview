@@ -19,122 +19,122 @@ const COLORS = [
 // 地皮中文映射
 const PLOT_NAMES: Record<string, string> = {
     'default_empty': '自定义空地',
-    'tech': '科技大厦',
+    'tech_hq': '科技总部',
     'finance': '金融中心',
-    'design': '创意园区',
+    'design_v': '创意工坊',
     'kindergarten': '幼儿园',
     'elementary': '第一小学',
-    'high_school': '星海中学',
-    'dorm': '人才公寓',
-    'villa': '湖畔别墅',
+    'school_l': '综合学校',
+    'dorm_std': '人才公寓',
+    'elder_care': '夕阳红养老院', // 🆕
+    'villa_wide': '豪华别墅',
+    'apt_small': '精品公寓',
     'apartment': '公寓楼',
-    'park': '中央公园',
-    'commercial': '商业广场',
-    'service': '公共服务区',
-    'nightlife': '娱乐不夜城',
+    'park_center': '中央公园',
+    'mall_wide': '商业广场',
+    'shop_s': '便民小店',
+    'gym': '健身中心',           // 🆕
+    'nightclub': '不夜城Club',   // 🆕
+    'hospital_l': '综合医院',
     'gallery': '美术馆',
     'netcafe': '网咖',
+    'road_h': '横向道路',
+    'road_v': '纵向道路'
 };
 
-// 家具分类目录 (🆕 已添加 Tags)
+// 家具分类目录 (🆕 已添加 Tags，并且新增了 career 分类)
 const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furniture>[] }> = {
-    'office': {
-        label: '办公',
+    'career': {
+        label: '职业设施', // 🆕 新分类
         items: [
-            { label: '升降办公桌', w: 48, h: 32, color: '#2c3e50', utility: 'none', pixelPattern: 'desk_pixel', tags: ['desk'] },
-            { label: '工位椅', w: 22, h: 22, color: '#8a9ca6', utility: 'work', pixelPattern: 'chair_pixel', tags: ['seat'] },
+            { label: '办公桌(简约)', w: 48, h: 32, color: '#2c3e50', utility: 'none', pixelPattern: 'desk_pixel', tags: ['desk'] },
+            { label: '办公桌(木质)', w: 60, h: 40, color: '#8b4513', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk'] },
+            { label: '老板班台', w: 126, h: 54, color: '#8b4513', utility: 'none', pixelPattern: 'desk_wood', tags: ['desk', 'boss_desk'] },
+            { label: '会议长桌', w: 168, h: 84, color: '#f0f5ff', utility: 'work_group', pixelPattern: 'table_marble', tags: ['meeting'] },
+            { label: '电脑工位', w: 60, h: 50, color: '#dfe6e9', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'desk'] },
+            { label: '服务器机组', w: 64, h: 38, color: '#253048', utility: 'none', pixelPattern: 'server', pixelGlow: true, tags: ['server'] },
+            { label: '收银台', w: 60, h: 44, color: '#2c3e50', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
+            { label: '前台', w: 100, h: 40, color: '#a29bfe', utility: 'work', pixelPattern: 'reception', tags: ['desk', 'reception'] },
+            { label: '画架', w: 44, h: 54, color: '#ff5252', utility: 'paint', pixelPattern: 'easel', tags: ['easel', 'art'] },
+            { label: '课桌', w: 50, h: 30, color: '#fdcb6e', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] },
+            { label: '黑板', w: 100, h: 10, color: '#2d3436', utility: 'none', tags: ['blackboard'] },
+            { label: '医疗床', w: 60, h: 70, color: '#fff', utility: 'healing', pixelPattern: 'bed_king', tags: ['medical_bed', 'bed'] },
+            { label: 'CT扫描仪', w: 60, h: 80, color: '#2d3436', utility: 'none', pixelPattern: 'server', tags: ['medical_device'] },
+            { label: 'DJ控制台', w: 126, h: 54, color: '#7158e2', utility: 'music', pixelPattern: 'dj_stage', pixelGlow: true, tags: ['dj_booth'] },
             { label: '老板椅', w: 44, h: 44, color: '#253048', utility: 'work', pixelPattern: 'chair_boss', tags: ['boss_chair', 'seat'] },
-            { label: '控制台', w: 34, h: 24, color: '#a8b4c8', utility: 'work', pixelPattern: 'console', tags: ['computer'] },
-            { label: '服务器组', w: 64, h: 38, color: '#253048', utility: 'none', pixelPattern: 'server', pixelGlow: true, tags: ['server'] },
-            { label: '会议桌', w: 168, h: 84, color: '#f0f5ff', utility: 'work_group', pixelPattern: 'table_marble', tags: ['meeting'] },
-            { label: '红木班台', w: 126, h: 54, color: '#8b4513', utility: 'none', pixelPattern: 'desk_wood', tags: ['desk', 'boss_desk'] },
-            { label: '保险柜', w: 34, h: 34, color: '#5a6572', utility: 'none', pixelPattern: 'safe', tags: ['decor'] },
         ]
     },
     'home': {
-        label: '居家',
+        label: '居家生活',
         items: [
-            { label: '双人床', w: 100, h: 120, color: '#ff7675', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
+            { label: '双人床(King)', w: 100, h: 120, color: '#ff7675', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
             { label: '单人床', w: 60, h: 90, color: '#74b9ff', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
-            { label: '上下铺', w: 54, h: 84, color: '#ffb142', utility: 'energy', pixelPattern: 'bed_bunk', tags: ['bed', 'sleep'] },
+            { label: '上下铺', w: 50, h: 80, color: '#ffb142', utility: 'energy', pixelPattern: 'bed_bunk', tags: ['bed', 'sleep'] },
             { label: '婴儿床', w: 40, h: 40, color: '#ff9ff3', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] },
             { label: '真皮沙发', w: 120, h: 50, color: '#a29bfe', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa', 'seat'] },
+            { label: '布艺沙发', w: 80, h: 40, color: '#74b9ff', utility: 'comfort', pixelPattern: 'sofa_pixel', tags: ['sofa', 'seat'] },
             { label: '懒人沙发', w: 44, h: 44, color: '#ff7aa8', utility: 'comfort', pixelPattern: 'beanbag', tags: ['sofa', 'seat'] },
             { label: '衣柜', w: 40, h: 100, color: '#636e72', utility: 'none', pixelPattern: 'closet', tags: ['furniture'] },
             { label: '餐桌', w: 64, h: 64, color: '#fab1a0', utility: 'hunger', pixelPattern: 'table_dining', tags: ['table'] },
+            { label: '整体橱柜', w: 100, h: 40, color: '#b2bec3', utility: 'cook', pixelPattern: 'kitchen', tags: ['kitchen', 'stove'] },
             { label: '冰箱', w: 40, h: 40, color: '#fff', utility: 'hunger', pixelPattern: 'fridge', tags: ['kitchen'] },
-            { label: '橱柜', w: 100, h: 40, color: '#b2bec3', utility: 'cook', pixelPattern: 'kitchen', tags: ['kitchen'] },
-        ]
-    },
-    'school': {
-        label: '教育',
-        items: [
-            { label: '课桌', w: 34, h: 24, color: '#fdcb6e', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] },
-            { label: '阅览桌', w: 40, h: 60, color: '#d35400', utility: 'work', pixelPattern: 'desk_library', tags: ['desk', 'study'] },
-            { label: '黑板', w: 100, h: 10, color: '#2d3436', utility: 'none', tags: ['blackboard'] },
-            { label: '科技书架', w: 44, h: 108, color: '#4a7dff', utility: 'buy_book', pixelPattern: 'bookshelf_sci', tags: ['bookshelf'] },
-            { label: '历史书架', w: 44, h: 108, color: '#e67e22', utility: 'buy_book', pixelPattern: 'bookshelf_hist', tags: ['bookshelf'] },
-            { label: '游戏垫', w: 44, h: 44, color: '#74b9ff', utility: 'play_blocks', pixelPattern: 'play_mat', tags: ['play'] },
-            { label: '滑梯', w: 60, h: 100, color: '#ff7675', utility: 'play', pixelPattern: 'slide', tags: ['play'] },
-        ]
-    },
-    'shop': {
-        label: '商业',
-        items: [
-            { label: '货架(零食)', w: 64, h: 28, color: '#ffdd59', utility: 'buy_item', pixelPattern: 'shelf_food', tags: ['shelf'] },
-            { label: '货架(蔬菜)', w: 64, h: 28, color: '#55efc4', utility: 'buy_item', pixelPattern: 'shelf_veg', tags: ['shelf'] },
-            { label: '美妆柜台', w: 54, h: 34, color: '#ff7aa8', utility: 'buy_item', pixelPattern: 'counter_cosmetic', tags: ['shelf', 'counter'] },
-            { label: '收银台', w: 60, h: 44, color: '#2c3e50', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
-            { label: '自动贩卖机', w: 44, h: 34, color: '#ff5252', utility: 'buy_drink', pixelPattern: 'vending', tags: ['shop'] },
-            { label: '抓娃娃机', w: 44, h: 44, color: '#ff7aa8', utility: 'play', pixelPattern: 'claw_machine', tags: ['game'] },
-            { label: '爆米花机', w: 44, h: 44, color: '#ffd32a', utility: 'buy_food', pixelPattern: 'popcorn_machine', tags: ['shop'] },
-        ]
-    },
-    'fun': {
-        label: '娱乐',
-        items: [
-            { label: '网吧电脑', w: 44, h: 34, color: '#3742fa', utility: 'work', pixelPattern: 'pc_pixel', tags: ['computer', 'game'] },
-            { label: '电竞椅', w: 24, h: 24, color: '#747d8c', utility: 'none', pixelPattern: 'chair_pixel', tags: ['seat'] },
-            { label: '赛车游戏机', w: 54, h: 74, color: '#8a7cff', utility: 'play', pixelPattern: 'arcade_racing', pixelGlow: true, tags: ['game'] },
-            { label: '跳舞机', w: 64, h: 64, color: '#ff7aa8', utility: 'dance', pixelPattern: 'dance_machine', pixelGlow: true, tags: ['game'] },
-            { label: '跑步机', w: 44, h: 84, color: '#2c3e50', utility: 'run', pixelPattern: 'treadmill', tags: ['gym'] },
-            { label: '哑铃架', w: 44, h: 44, color: '#5a6572', utility: 'lift', pixelPattern: 'weights_rack', tags: ['gym'] },
-            { label: 'DJ台', w: 126, h: 54, color: '#7158e2', utility: 'music', pixelPattern: 'dj_stage', pixelGlow: true, tags: ['dj_booth'] },
-            { label: '酒吧椅', w: 24, h: 24, color: '#ffffff', utility: 'sit', pixelPattern: 'stool_bar', tags: ['seat'] },
-        ]
-    },
-    'park': {
-        label: '户外',
-        items: [
-            { label: '公园长椅', w: 54, h: 24, color: '#e17055', utility: 'comfort', pixelPattern: 'bench_park', tags: ['seat'] },
-            { label: '喷泉池', w: 126, h: 126, color: '#a8b4c8', utility: 'none', pixelPattern: 'fountain_base', tags: ['decor'] },
-            { label: '小黄鸭船', w: 44, h: 34, color: '#ffdd59', utility: 'play', pixelPattern: 'boat_duck', tags: ['play'] },
-            { label: '野餐垫', w: 108, h: 84, color: '#ff6b81', utility: 'hunger', pixelPattern: 'picnic_mat', tags: ['seat', 'picnic'] },
-            { label: '冰淇淋车', w: 64, h: 44, color: '#ffd166', utility: 'buy_food', pixelPattern: 'icecream_cart', tags: ['shop'] },
-            { label: '钓鱼位', w: 20, h: 20, color: '#5a8fff', utility: 'fishing', pixelPattern: 'water', tags: ['fishing'] },
+            { label: '钢琴', w: 60, h: 80, color: '#2d3436', utility: 'play', pixelPattern: 'piano', tags: ['piano', 'instrument'] },
         ]
     },
     'bathroom': {
-        label: '卫浴',
+        label: '卫浴洗护',
         items: [
             { label: '马桶', w: 30, h: 30, color: '#fff', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-            { label: '淋浴间', w: 34, h: 44, color: '#81ecec', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
+            { label: '淋浴间', w: 40, h: 40, color: '#81ecec', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
             { label: '浴缸', w: 80, h: 60, color: '#fff', utility: 'hygiene', pixelPattern: 'bath_tub', tags: ['bath'] },
+            { label: '公厕隔间', w: 40, h: 100, color: '#fff', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        ]
+    },
+    'shop': {
+        label: '商业娱乐',
+        items: [
+            { label: '食品货架', w: 60, h: 160, color: '#ffdd59', utility: 'buy_item', pixelPattern: 'shelf_food', tags: ['shelf'] },
+            { label: '蔬菜货架', w: 64, h: 28, color: '#55efc4', utility: 'buy_item', pixelPattern: 'shelf_veg', tags: ['shelf'] },
+            { label: '服装挂架', w: 10, h: 60, color: '#a29bfe', utility: 'buy_item', pixelPattern: 'clothes_rack', tags: ['shelf'] },
+            { label: '美妆柜台', w: 54, h: 34, color: '#ff7aa8', utility: 'buy_item', pixelPattern: 'counter_cosmetic', tags: ['shelf', 'counter'] },
+            { label: '自动贩卖机', w: 44, h: 34, color: '#ff5252', utility: 'buy_drink', pixelPattern: 'vending', tags: ['shop'] },
+            { label: '美食推车', w: 60, h: 40, color: '#fdcb6e', utility: 'buy_food', pixelPattern: 'food_cart', tags: ['shop'] },
+            { label: '爆米花机', w: 44, h: 44, color: '#ffd32a', utility: 'buy_food', pixelPattern: 'popcorn_machine', tags: ['shop'] },
+            { label: '冰淇淋车', w: 64, h: 44, color: '#ffd166', utility: 'buy_food', pixelPattern: 'icecream_cart', tags: ['shop'] },
+            { label: '抓娃娃机', w: 44, h: 44, color: '#ff7aa8', utility: 'play', pixelPattern: 'claw_machine', tags: ['game'] },
+            { label: '赛车游戏机', w: 54, h: 74, color: '#8a7cff', utility: 'play', pixelPattern: 'arcade_racing', pixelGlow: true, tags: ['game'] },
+            { label: '跳舞机', w: 64, h: 64, color: '#ff7aa8', utility: 'dance', pixelPattern: 'dance_machine', pixelGlow: true, tags: ['game'] },
+            { label: '网吧电脑', w: 44, h: 34, color: '#3742fa', utility: 'work', pixelPattern: 'pc_pixel', tags: ['computer', 'game'] },
+        ]
+    },
+    'fitness': {
+        label: '运动设施',
+        items: [
+            { label: '跑步机', w: 44, h: 84, color: '#0984e3', utility: 'run', pixelPattern: 'treadmill', tags: ['gym'] },
+            { label: '哑铃架', w: 44, h: 44, color: '#d63031', utility: 'lift', pixelPattern: 'weights_rack', tags: ['gym'] },
+            { label: '篮球架', w: 20, h: 40, color: '#e17055', utility: 'play', pixelPattern: 'hoop', tags: ['sports'] },
+            { label: '滑梯', w: 60, h: 100, color: '#ff7675', utility: 'play', pixelPattern: 'slide', tags: ['play'] },
+            { label: '游戏垫', w: 44, h: 44, color: '#74b9ff', utility: 'play_blocks', pixelPattern: 'play_mat', tags: ['play'] },
         ]
     },
     'decor': {
-        label: '装饰',
+        label: '环境装饰',
         items: [
+            { label: '公园长椅', w: 50, h: 20, color: '#e17055', utility: 'comfort', pixelPattern: 'bench_park', tags: ['seat'] },
+            { label: '喷泉池', w: 150, h: 150, color: '#74b9ff', utility: 'none', pixelPattern: 'water', tags: ['decor'] },
+            { label: '小黄鸭船', w: 44, h: 34, color: '#ffdd59', utility: 'play', pixelPattern: 'boat_duck', tags: ['play'] },
+            { label: '野餐垫', w: 108, h: 84, color: '#ff6b81', utility: 'hunger', pixelPattern: 'picnic_mat', tags: ['seat', 'picnic'] },
             { label: '地毯(艺术)', w: 108, h: 108, color: '#ff9c8a', utility: 'none', pixelPattern: 'rug_art', tags: ['decor'] },
             { label: '地毯(波斯)', w: 230, h: 108, color: '#c23636', utility: 'none', pixelPattern: 'rug_persian', tags: ['decor'] },
-            { label: '雕像', w: 34, h: 34, color: '#ffffff', utility: 'art', pixelPattern: 'statue', tags: ['art'] },
-            { label: '画架', w: 44, h: 54, color: '#ff5252', utility: 'paint', pixelPattern: 'easel', tags: ['easel', 'art'] },
+            { label: '纪念碑', w: 30, h: 30, color: '#ffffff', utility: 'none', pixelPattern: 'statue', tags: ['decor'] },
+            { label: '雕像', w: 50, h: 50, color: '#ffffff', utility: 'art', pixelPattern: 'statue', tags: ['art'] },
             { label: '展示柜', w: 40, h: 40, color: '#00d2d3', utility: 'art', pixelPattern: 'display_case', pixelGlow: true, tags: ['art'] },
             { label: '梧桐树', w: 42, h: 42, color: '#253048', utility: 'none', pixelPattern: 'tree_pixel', pixelOutline: true, tags: ['tree'] },
-            { label: '灌木丛', w: 34, h: 34, color: '#00b894', utility: 'gardening', pixelPattern: 'bush', tags: ['plant'] },
-            { label: '花坛(红)', w: 44, h: 44, color: '#ff6b81', utility: 'gardening', pixelPattern: 'flower_rose', tags: ['plant'] },
+            { label: '灌木丛', w: 40, h: 40, color: '#27ae60', utility: 'none', pixelPattern: 'bush', tags: ['plant'] },
+            { label: '玫瑰花坛', w: 44, h: 44, color: '#ff6b81', utility: 'gardening', pixelPattern: 'flower_rose', tags: ['plant'] },
             { label: '消防栓', w: 18, h: 18, color: '#ff5252', utility: 'none', pixelOutline: true, tags: ['decor'] },
             { label: '垃圾桶', w: 24, h: 24, color: '#2c3e50', utility: 'none', pixelPattern: 'trash', tags: ['decor'] },
+            { label: '保险柜', w: 34, h: 34, color: '#5a6572', utility: 'none', pixelPattern: 'safe', tags: ['decor'] },
         ]
     }
 };
@@ -158,7 +158,7 @@ const ROOM_TYPES = [
 const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     // 模式状态：Plot(地皮) | Floor(房间) | Furniture(家具)
     const [mode, setMode] = useState<'plot' | 'furniture' | 'floor'>('plot');
-    const [category, setCategory] = useState('office');
+    const [category, setCategory] = useState('career'); // 默认显示职业
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
     
     // 编辑状态
@@ -186,7 +186,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             setCanUndo(GameStore.history.length > 0);
             setCanRedo(GameStore.redoStack.length > 0);
             
-            // 同步 Store 中的工具状态，将内部的 'move'/'resize' 统一映射为 'select'
+            // 同步 Store 中的工具状态
             // @ts-ignore
             if (GameStore.editor.activeTool) {
                 // @ts-ignore
@@ -256,7 +256,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         }
     };
     
-    // [核心修改] 工具切换：只在 漫游 和 编辑 之间切换
+    // [核心修改] 工具切换
     const handleToolChange = (tool: 'camera' | 'select') => {
         GameStore.editor.setTool(tool);
         setActiveTool(tool);
@@ -393,7 +393,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                 </div>
             </div>
 
-            {/* [核心修改] 工具栏 (Toolbar) - 只有两个大按钮 */}
+            {/* 工具栏 */}
             <div className="flex gap-2 p-2 bg-black/20 border-b border-white/10 justify-center">
                 <button
                     onClick={() => handleToolChange('camera')}
@@ -479,7 +479,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                             <div className="grid grid-cols-2 gap-2 pb-2">
                                 {Object.entries(PLOTS).filter(([k]) => !k.startsWith('road') && !k.startsWith('default')).map(([key, template]) => (
                                     <button key={key} onClick={() => handleStartPlacingPlot(key)} className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex flex-col gap-1 transition-all active:scale-95">
-                                        <span className="text-xs font-bold text-gray-200 truncate w-full">{PLOT_NAMES[key.replace('_template', '')] || key.replace('_template', '')}</span>
+                                        <span className="text-xs font-bold text-gray-200 truncate w-full">{PLOT_NAMES[key] || PLOT_NAMES[key.replace('_template', '')] || key}</span>
                                         <span className="text-[9px] text-gray-500">{template.width}x{template.height}</span>
                                     </button>
                                 ))}
