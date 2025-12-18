@@ -159,8 +159,9 @@ export class CommutingState extends BaseState {
             }
         } 
         else {
-            sim.say("没地方办公...", 'bad');
-            sim.changeState(new IdleState());
+            // 自由职业者无固定地点，直接开始工作（原地或回家）
+            sim.say("开始搬砖", 'act');
+            sim.changeState(new WorkingState());
         }
     }
 
@@ -211,7 +212,7 @@ export class CommutingState extends BaseState {
             return reserved;
         }
 
-        // 2. 【地皮制】如果在公司，优先找公司范围内的
+        // 2. 【地皮制】如果在公司，**必须**在公司范围内找
         if (sim.workplaceId) {
             const plotFurniture = GameStore.furniture.filter(f => f.id.startsWith(sim.workplaceId!));
             const candidates = plotFurniture.filter(f => hasRequiredTags(f, requiredTags));
@@ -220,9 +221,14 @@ export class CommutingState extends BaseState {
             const free = candidates.filter(f => !this.isOccupied(f, sim.id));
             
             if (free.length > 0) return this.selectBest(sim, free);
+            
+            // ⚠️ [修复] 如果有固定工作地点但在地点内找不到家具，直接返回 null，
+            // 禁止回退到全图搜索，否则护工会去别人家睡床。
+            return null;
         }
 
-        // 3. 【就近制】全图搜索（兜底方案，或自由职业）
+        // 3. 【就近制】全图搜索（仅适用于自由职业或无固定工作地点的职业）
+        // 只有当 sim.workplaceId 为空时才执行
         const allCandidates = GameStore.furniture.filter(f => hasRequiredTags(f, requiredTags));
         const allFree = allCandidates.filter(f => !this.isOccupied(f, sim.id));
 
@@ -327,7 +333,9 @@ export class WorkingState extends BaseState {
             const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
             sim.target = { x: tx, y: ty };
             sim.moveTowardsTarget(dt);
-            if (sim.target) sim.action = "working_patrol"; 
+            
+            // ⚠️ [修复] 不要修改 action 字符串，否则 checkSchedule 会误判为没在工作，导致无限循环
+            // if (sim.target) sim.action = "working_patrol"; 
         }
         // 教师
         else if (jobType === JobType.School && (jobTitle.includes('师') || jobTitle.includes('教'))) {

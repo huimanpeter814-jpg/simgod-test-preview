@@ -530,11 +530,10 @@ const GameCanvas: React.FC = () => {
         const mouseX = e.clientX / zoom + cameraRef.current.x;
         const mouseY = e.clientY / zoom + cameraRef.current.y;
 
-        if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
-            if (!isDraggingCamera.current && !isDraggingObject.current) isCameraLocked.current = false;
-        }
+
 
         if (isDraggingCamera.current) {
+            isCameraLocked.current = false;
             const targetX = cameraRef.current.x - dx;
             const targetY = cameraRef.current.y - dy;
             const clamped = clampCamera(targetX, targetY, zoom);
@@ -594,11 +593,13 @@ const GameCanvas: React.FC = () => {
 
         const dragDist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));
         // [修复] 放宽点击判定范围，从 5px 增加到 15px，防止稍微手抖就无法选中
-        const isClick = dragDist < 15;
+        const isClick = dragDist < 10;
 
         if (isDraggingCamera.current) {
             isDraggingCamera.current = false;
-            return; 
+            // 只有当不是点击（即发生了长距离拖拽）时，才直接返回
+            // 如果是点击（isClick 为 true），则继续向下执行去尝试选中市民
+            if (!isClick) return; 
         }
 
         if (isResizing.current) {
@@ -675,8 +676,21 @@ const GameCanvas: React.FC = () => {
         const newZoom = Math.min(Math.max(oldZoom - e.deltaY * zoomSpeed, minZoom), maxZoom);
         
         const rect = canvasRef.current!.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+
+        // [修复] 关键修改开始：决定缩放的锚点 (Pivot)
+        let mouseX, mouseY;
+
+        if (GameStore.selectedSimId && isCameraLocked.current) {
+            // 如果处于锁定跟随状态，强制以“屏幕中心”为缩放点
+            // 这样缩放时，被跟随的市民会稳稳地待在画面中间
+            mouseX = rect.width / 2;
+            mouseY = rect.height / 2;
+        } else {
+            // 否则（自由模式），以“鼠标指针”为缩放点
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        }
+        
         const worldX = mouseX / oldZoom + cameraRef.current.x;
         const worldY = mouseY / oldZoom + cameraRef.current.y;
         
