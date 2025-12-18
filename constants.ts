@@ -141,13 +141,20 @@ export const JOBS: Job[] = [
     { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: JobType.School },
 
     // Nightlife
-    { id: 'dj', title: 'DJ', level: 1, salary: 500, startHour: 20, endHour: 4, companyType: JobType.Nightlife },
+    { id: 'bartender', title: '调酒师', level: 1, salary: 400, startHour: 19, endHour: 3, companyType: JobType.Nightlife },
+    { id: 'dj', title: 'DJ', level: 2, salary: 800, startHour: 20, endHour: 4, companyType: JobType.Nightlife },
 
-    // 🆕 Hospital Careers
+    // Hospital Careers
     { id: 'nurse_intern', title: '实习护士', level: 1, salary: 300, startHour: 8, endHour: 18, companyType: JobType.Hospital },
     { id: 'nurse', title: '注册护士', level: 2, salary: 600, startHour: 8, endHour: 18, companyType: JobType.Hospital },
     { id: 'doctor_resident', title: '住院医师', level: 3, salary: 1200, startHour: 9, endHour: 19, companyType: JobType.Hospital },
     { id: 'doctor_chief', title: '主任医师', level: 4, salary: 2500, startHour: 9, endHour: 17, companyType: JobType.Hospital },
+
+    // 新增 Elder Care (养老院)
+    { id: 'caregiver_intern', title: '见习护工', level: 1, salary: 250, startHour: 7, endHour: 16, companyType: JobType.ElderCare },
+    { id: 'caregiver', title: '护工', level: 2, salary: 450, startHour: 7, endHour: 16, companyType: JobType.ElderCare },
+    { id: 'care_manager', title: '护理主管', level: 3, salary: 800, startHour: 8, endHour: 17, companyType: JobType.ElderCare },
+
 ];
 
 export const BUFFS = {

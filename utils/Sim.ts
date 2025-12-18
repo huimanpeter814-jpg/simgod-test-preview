@@ -48,6 +48,8 @@ export class Sim {
     familyId: string;
     homeId: string | null = null;
     workplaceId?: string; // 🆕 固定工作地点
+    commutePreTime: number = 30; // 默认提前30分钟通勤
+    lastPunchInTime?: number;    // 记录当天打卡时间
     
     pos: Vector2;
     prevPos: Vector2; 
