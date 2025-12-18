@@ -5,7 +5,41 @@ import { getAsset } from '../utils/assetLoader';
 import { drawAvatarHead, drawPixelProp } from '../utils/render/pixelArt';
 import { PLOTS } from '../data/plots';
 
-// 创建 Web Worker 处理游戏循环
+// 地皮选项映射
+const PLOT_OPTIONS = [
+    { id: 'tech', label: '科技园区' },
+    { id: 'finance', label: '金融中心' },
+    { id: 'design', label: '创意园区' },
+    { id: 'kindergarten', label: '幼儿园' },
+    { id: 'elementary', label: '小学' },
+    { id: 'high_school', label: '中学' },
+    { id: 'dorm', label: '公寓/宿舍' },
+    { id: 'villa', label: '别墅区' },
+    { id: 'park', label: '公园' },
+    { id: 'commercial', label: '商业街' },
+    { id: 'nightlife', label: '娱乐区' },
+    { id: 'gallery', label: '文化设施' },
+];
+
+const SIMPLE_COLORS = [
+    '#dcdcdc', '#8cb393', '#3d404b', '#5a8fff', '#ff7675', '#fdcb6e', '#ffffff'
+];
+
+// 兼容性更好的圆角矩形绘制函数
+const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+};
+
 const createWorker = () => {
     const blob = new Blob([`
         let interval = null;
@@ -47,11 +81,11 @@ const GameCanvas: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number | null>(null);
 
-    const initialZoom = 0.8;
-    const initialX = (CONFIG.CANVAS_W - window.innerWidth / initialZoom) / 2;
-    const initialY = (CONFIG.CANVAS_H - window.innerHeight / initialZoom) / 2;
-
-    const cameraRef = useRef({ x: initialX, y: initialY, zoom: initialZoom });
+    const cameraRef = useRef({ 
+        x: 1800 - window.innerWidth / 2, 
+        y: 800 - window.innerHeight / 2, 
+        zoom: 0.8 
+    });
 
     // Refs
     const hoveredTarget = useRef<any>(null);
@@ -112,14 +146,16 @@ const GameCanvas: React.FC = () => {
     useEffect(() => {
         const unsub = GameStore.subscribe(() => {
             setEditorRefresh(prev => prev + 1);
-            // 同步选中地皮状态
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
                     const zoom = cameraRef.current.zoom;
                     const screenX = (plot.x - cameraRef.current.x) * zoom;
                     const screenY = (plot.y - cameraRef.current.y) * zoom;
-                    setSelectedPlot({ id: plot.id, x: screenX, y: screenY, templateId: plot.templateId });
+                    setSelectedPlot({ 
+                        id: plot.id, x: screenX, y: screenY, templateId: plot.templateId,
+                        customName: plot.customName, customColor: plot.customColor, customType: plot.customType 
+                    });
                 }
             } else {
                 setSelectedPlot(null);
@@ -146,17 +182,14 @@ const GameCanvas: React.FC = () => {
         if (bgImg) ctx.drawImage(bgImg, 0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
         else { ctx.fillStyle = p.bg; ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H); }
 
-        // 绘制所有房间 (移除了 !isCustom 限制，使其显示统一)
+        // 绘制所有房间
         const allRooms = [...GameStore.rooms.filter(r => !r.isCustom), ...GameStore.rooms.filter(r => r.isCustom)];
         allRooms.forEach((r: any) => {
-            // 拖拽时隐藏原始物体 (Ghost效果)
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && isDraggingObject.current && r.id.startsWith(`${GameStore.editor.selectedPlotId}_`)) return;
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId === r.id && isDraggingObject.current) return;
             
-            // 选中时半透明
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId === r.id) ctx.globalAlpha = 0.6;
 
-            // 绘制逻辑
             if (r.color !== 'transparent' && !r.isCustom) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(r.x + 6, r.y + 6, r.w, r.h); }
             if (r.color === 'transparent' || !r.label.startsWith('空地')) { ctx.strokeStyle = p.wall; ctx.lineWidth = 1; ctx.strokeRect(r.x, r.y, r.w, r.h); }
             
@@ -173,7 +206,6 @@ const GameCanvas: React.FC = () => {
         // 绘制家具
         GameStore.furniture.forEach((f: any) => {
             if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId === f.id && isDraggingObject.current) return;
-            // 如果是在拖拽地皮，隐藏上面的家具
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && f.id.startsWith(`${GameStore.editor.selectedPlotId}_`) && isDraggingObject.current) return;
             
             if (f.pixelPattern !== 'zebra') { ctx.fillStyle = p.furniture_shadow || 'rgba(0,0,0,0.2)'; ctx.fillRect(f.x + 4, f.y + 4, f.w, f.h); }
@@ -214,17 +246,15 @@ const GameCanvas: React.FC = () => {
             for (let y = startY; y < endY; y += gridSize) { ctx.moveTo(startX, y); ctx.lineTo(endX, y); }
             ctx.stroke();
 
-            // 1. 地皮选中框
+            // 选中框绘制 (地皮/房间/家具) ... (逻辑保持不变)
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
                     ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 2; ctx.strokeRect(plot.x, plot.y, plot.width || 300, plot.height || 300);
-                    // 仅在编辑工具下显示缩放手柄
                     // @ts-ignore
                     if (GameStore.editor.activeTool !== 'camera') drawResizeHandle(ctx, plot.x, plot.y, plot.width || 300, plot.height || 300);
                 }
             }
-            // 2. 房间选中框 (Floor Mode)
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                 const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
                 if (room) {
@@ -233,17 +263,15 @@ const GameCanvas: React.FC = () => {
                     if (GameStore.editor.activeTool !== 'camera') drawResizeHandle(ctx, room.x, room.y, room.w, room.h);
                 }
             }
-            // 3. 家具选中框
             if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
                 const furn = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
                 if (furn) { ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 2; ctx.strokeRect(furn.x, furn.y, furn.w, furn.h); }
             }
 
-            // 拖拽时的半透明预览 (Ghost)
+            // 预览框 (Ghost) ...
             if (GameStore.editor.previewPos) {
                 const { x, y } = GameStore.editor.previewPos;
                 ctx.save(); ctx.globalAlpha = 0.8;
-                
                 if (GameStore.editor.mode === 'furniture' && (GameStore.editor.selectedFurnitureId || GameStore.editor.placingFurniture)) {
                     let f = GameStore.furniture.find(i => i.id === GameStore.editor.selectedFurnitureId) || GameStore.editor.placingFurniture;
                     if (f) { const previewF = { ...f, x, y }; drawPixelProp(ctx, previewF, p); ctx.strokeStyle = '#ffff00'; ctx.strokeRect(x, y, f.w||0, f.h||0); }
@@ -258,8 +286,7 @@ const GameCanvas: React.FC = () => {
                 }
                 ctx.restore();
             }
-
-            // 框选时的预览
+            // 框选预览 ...
             if ((GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) && isPickingUp.current) {
                 const d = GameStore.editor.drawingFloor || GameStore.editor.drawingPlot;
                 if (d) {
@@ -278,18 +305,86 @@ const GameCanvas: React.FC = () => {
             if (b.carryingSimId === a.id) return 1;
             return a.pos.y - b.pos.y;
         });
+        
         renderSims.forEach(sim => {
-            const renderX = sim.pos.x; const renderY = sim.pos.y;
-            ctx.save(); ctx.translate(renderX, renderY);
-            if (GameStore.selectedSimId === sim.id) { ctx.fillStyle = '#39ff14'; ctx.beginPath(); ctx.ellipse(0, 5, 12, 6, 0, 0, Math.PI * 2); ctx.fill(); }
+            // [修复] 使用 Math.floor 防止亚像素渲染导致的抖动
+            const renderX = Math.floor(sim.pos.x); 
+            const renderY = Math.floor(sim.pos.y);
+            
+            ctx.save();
+            ctx.translate(renderX, renderY);
+            
+            // 选中特效
+            if (GameStore.selectedSimId === sim.id) {
+                // 内圈
+                ctx.fillStyle = '#39ff14';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, 12, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 外圈扩散
+                const rippleScale = (Date.now() % 1000) / 1000;
+                ctx.globalAlpha = (1 - rippleScale) * 0.6;
+                ctx.strokeStyle = '#39ff14';
+                ctx.lineWidth = 3 / zoom;
+                ctx.beginPath();
+                ctx.ellipse(0, 5, 10 + rippleScale * 15, 5 + rippleScale * 7, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                // 悬浮箭头
+                const floatY = -65 + Math.sin(Date.now() / 150) * 4;
+                ctx.fillStyle = '#39ff14';
+                ctx.beginPath();
+                ctx.moveTo(0, floatY);
+                ctx.lineTo(-10, floatY - 12);
+                ctx.lineTo(10, floatY - 12);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath(); 
+                ctx.ellipse(0, 5, 10, 4, 0, 0, Math.PI * 2); 
+                ctx.fill();
+            }
             // @ts-ignore
             const ageConfig = AGE_CONFIG[sim.ageStage] || AGE_CONFIG.Adult;
             const w = ageConfig.width || 20; const h = ageConfig.height || 42; const headSize = ageConfig.headSize || 13; const headY = -h + (headSize * 0.4);
+            
             drawAvatarHead(ctx, 0, headY, headSize, sim, 'back');
-            ctx.fillStyle = sim.pantsColor || '#455A64'; ctx.fillRect(-w / 2, -h * 0.45, w, h * 0.45);
-            ctx.fillStyle = sim.clothesColor; ctx.fillRect(-w / 2, -h + (headSize * 0.6), w, (-h * 0.25) - (-h + (headSize * 0.6))); 
+            
+            if (sim.ageStage === 'Infant' || sim.ageStage === 'Toddler') {
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(-w / 2 + 1, -h * 0.45, w - 2, h * 0.45, 4); ctx.fill();
+                ctx.fillStyle = sim.clothesColor; ctx.fillRect(-w / 2, -h + (headSize * 1), w, h * 0.4);
+            } else {
+                ctx.fillStyle = sim.pantsColor || '#455A64'; ctx.fillRect(-w / 2, -h * 0.45, w, h * 0.45);
+                const shoulderY = -h + (headSize * 0.6); const shirtBottomY = -h * 0.25;
+                ctx.fillStyle = sim.clothesColor; ctx.fillRect(-w / 2, shoulderY, w, shirtBottomY - shoulderY); 
+            }
+            
             drawAvatarHead(ctx, 0, headY, headSize, sim, 'front');
-            if (sim.bubble.timer > 0 && sim.bubble.text) { ctx.font='10px sans-serif'; ctx.fillStyle='#fff'; ctx.fillText(sim.bubble.text, 0, -h-20); }
+
+            if (sim.action === 'phone') {
+                ctx.fillStyle = '#ECEFF1'; ctx.fillRect(w/2 - 2, -h * 0.4 + 5, 6, 9);
+                ctx.fillStyle = '#81D4FA'; ctx.fillRect(w/2 - 1, -h * 0.4 + 6, 4, 7);
+            }
+
+            if (sim.bubble.timer > 0 && sim.bubble.text) {
+                ctx.font = 'bold 10px "Microsoft YaHei", sans-serif';
+                let width = ctx.measureText(sim.bubble.text).width + 12;
+                let bg = '#fff', border='#2d3436', textC='#2d3436';
+                if (sim.bubble.type === 'love') { bg = '#fd79a8'; border = '#e84393'; textC = '#fff'; }
+                else if (sim.bubble.type === 'bad') { bg = '#ff7675'; border = '#d63031'; textC = '#fff'; }
+                else if (sim.bubble.type === 'money') { bg = '#ffeaa7'; border = '#fdcb6e'; textC = '#d35400'; }
+
+                ctx.fillStyle = border;
+                ctx.beginPath(); ctx.moveTo(0, -h - 5); ctx.lineTo(-4, -h - 15); ctx.lineTo(4, -h - 15); ctx.fill();
+                ctx.fillStyle = bg; ctx.strokeStyle = border; ctx.lineWidth = 1.5 / zoom;
+                ctx.beginPath(); ctx.roundRect(-width / 2, -h - 38, width, 24, 4); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = textC; ctx.textAlign = 'center';
+                ctx.fillText(sim.bubble.text, 0, -h - 22);
+                ctx.textAlign = 'left';
+            }
             ctx.restore();
         });
 
@@ -342,19 +437,15 @@ const GameCanvas: React.FC = () => {
         lastMousePos.current = { x: e.clientX, y: e.clientY };
         dragStartMousePos.current = { x: e.clientX, y: e.clientY };
 
-        // 1. 生活模式 (始终是漫游)
         if (GameStore.editor.mode === 'none') {
             isDraggingCamera.current = true;
             if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
             return;
         }
 
-        // 2. 编辑模式
-        // 注意：EditorPanel 把 'select' 映射为了 'move'，所以这里检查 move
         // @ts-ignore
         const activeTool = GameStore.editor.activeTool || 'select';
 
-        // 放置新物体优先级最高 (Override all tools)
         if (GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture || GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) {
             isPickingUp.current = true;
             isDraggingObject.current = true;
@@ -366,25 +457,20 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        // 1. 漫游模式 (Camera)
         if (activeTool === 'camera') {
             isDraggingCamera.current = true;
             if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
             return;
         }
 
-        // 2. 编辑模式 (Select) - 统一处理移动和缩放
         if (activeTool === 'select') {
-            const zoom = cameraRef.current.zoom;
             const handleSize = 20 / zoom; 
             let targetFound = false;
 
-            // --- A. 检测缩放手柄 (仅当已选中物体时) ---
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
                     const w = plot.width || 300; const h = plot.height || 300;
-                    // 检测右下角区域
                     if (worldX >= plot.x + w - handleSize && worldX <= plot.x + w + handleSize && worldY >= plot.y + h - handleSize && worldY <= plot.y + h + handleSize) {
                         isResizing.current = true; isDraggingObject.current = true; targetFound = true;
                     }
@@ -398,9 +484,8 @@ const GameCanvas: React.FC = () => {
                 }
             }
 
-            if (targetFound) return; // 如果点到了缩放手柄，直接开始缩放，不进行移动判定
+            if (targetFound) return;
 
-            // --- B. 检测物体点击 (移动) ---
             let hitFound = false;
             if (GameStore.editor.mode === 'plot') {
                 const clickedRoom = GameStore.rooms.find(r => worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h);
@@ -420,7 +505,6 @@ const GameCanvas: React.FC = () => {
                     hitFound = true;
                 }
             } else if (GameStore.editor.mode === 'floor') {
-                // [修改] 解锁默认地板：移除 !r.isCustom 判断，允许选中所有地板
                 const clickedRoom = [...GameStore.rooms].reverse().find(r => worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h);
                 if (clickedRoom) {
                     GameStore.editor.selectedRoomId = clickedRoom.id; GameStore.editor.isDragging = true; isPickingUp.current = true; isDraggingObject.current = true;
@@ -432,7 +516,6 @@ const GameCanvas: React.FC = () => {
             if (hitFound) {
                 GameStore.notify();
             } else {
-                // 点击空地 -> 取消选择
                 GameStore.editor.selectedPlotId = null; GameStore.editor.selectedFurnitureId = null; GameStore.editor.selectedRoomId = null;
                 GameStore.notify();
             }
@@ -447,12 +530,10 @@ const GameCanvas: React.FC = () => {
         const mouseX = e.clientX / zoom + cameraRef.current.x;
         const mouseY = e.clientY / zoom + cameraRef.current.y;
 
-        // 解锁跟随
         if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
             if (!isDraggingCamera.current && !isDraggingObject.current) isCameraLocked.current = false;
         }
 
-        // 1. 镜头漫游
         if (isDraggingCamera.current) {
             const targetX = cameraRef.current.x - dx;
             const targetY = cameraRef.current.y - dy;
@@ -462,7 +543,6 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        // 2. 缩放逻辑
         if (isResizing.current) {
             const snapSize = 50;
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
@@ -471,7 +551,6 @@ const GameCanvas: React.FC = () => {
                     let newW = mouseX - plot.x; let newH = mouseY - plot.y;
                     newW = Math.max(50, Math.round(newW / snapSize) * snapSize); newH = Math.max(50, Math.round(newH / snapSize) * snapSize);
                     plot.width = newW; plot.height = newH;
-                    // 同时更新关联的基础地板
                     const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
                     if (baseRoom) { baseRoom.w = newW; baseRoom.h = newH; }
                     GameStore.initIndex(); GameStore.notify();
@@ -489,7 +568,6 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        // 3. 物体移动 / 框选
         if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor && isPickingUp.current) {
             const gridX = Math.round(mouseX / 50) * 50; const gridY = Math.round(mouseY / 50) * 50;
             GameStore.editor.drawingFloor.currX = gridX; GameStore.editor.drawingFloor.currY = gridY;
@@ -502,7 +580,6 @@ const GameCanvas: React.FC = () => {
             const newX = Math.round(rawX / gridSize) * gridSize; const newY = Math.round(rawY / gridSize) * gridSize;
             GameStore.editor.previewPos = { x: newX, y: newY };
         } else if (GameStore.editor.mode === 'none') {
-            // Life Mode Hover
             const hit = GameStore.worldGrid.queryHit(mouseX, mouseY);
             if (hit && hit.type === 'furniture') { hoveredTarget.current = hit.ref; if(canvasRef.current) canvasRef.current.style.cursor = 'pointer'; } 
             else { hoveredTarget.current = null; if(canvasRef.current) canvasRef.current.style.cursor = 'default'; }
@@ -516,7 +593,8 @@ const GameCanvas: React.FC = () => {
         if (canvasRef.current) canvasRef.current.style.cursor = 'default';
 
         const dragDist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));
-        const isClick = dragDist < 5;
+        // [修复] 放宽点击判定范围，从 5px 增加到 15px，防止稍微手抖就无法选中
+        const isClick = dragDist < 15;
 
         if (isDraggingCamera.current) {
             isDraggingCamera.current = false;
@@ -525,11 +603,11 @@ const GameCanvas: React.FC = () => {
 
         if (isResizing.current) {
             isResizing.current = false;
+            // @ts-ignore
             GameStore.editor.finalizeResize();
             return;
         }
 
-        // 框选结束
         if (isPickingUp.current) {
             if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor) {
                 isPickingUp.current = false;
@@ -551,10 +629,8 @@ const GameCanvas: React.FC = () => {
             }
         }
 
-        // 放置物体/移动结束
         if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
             if (isPickingUp.current) {
-                // 如果是移动操作，结束移动并更新位置
                 if (!isClick || GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture) {
                     GameStore.editor.isDragging = false;
                     const finalPos = GameStore.editor.previewPos || {x:0, y:0};
@@ -572,8 +648,8 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        // Life Mode: Select Sim
-        if (isClick && GameStore.editor.mode === 'none') {
+        // [修复] Life Mode: Select Sim
+        if (e.button === 0 && isClick && GameStore.editor.mode === 'none') {
             const zoom = cameraRef.current.zoom;
             const worldX = e.clientX / zoom + cameraRef.current.x;
             const worldY = e.clientY / zoom + cameraRef.current.y;
@@ -582,7 +658,10 @@ const GameCanvas: React.FC = () => {
                 let s = GameStore.sims[i];
                 if (Math.abs(worldX - s.pos.x) < 40 && Math.abs(worldY - (s.pos.y - 20)) < 50) { hitSim = s.id; break; }
             }
-            if (hitSim) { if (GameStore.selectedSimId === hitSim) isCameraLocked.current = true; else GameStore.selectedSimId = hitSim; } 
+            if (hitSim) { 
+                if (GameStore.selectedSimId === hitSim) isCameraLocked.current = true; 
+                else GameStore.selectedSimId = hitSim; 
+            } 
             else { GameStore.selectedSimId = null; }
             GameStore.notify();
         }

@@ -1,11 +1,12 @@
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
-import { SimAction, JobType, NeedType, AgeStage } from '../../types'; // ✅ 引入 AgeStage
+import { SimAction, JobType, NeedType, AgeStage, Furniture } from '../../types';
 import { CareerLogic } from './career';
 import { DecisionLogic } from './decision';
 import { SocialLogic } from './social';
-import { SchoolLogic } from './school'; // ✅ 引入 SchoolLogic
-import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry'; // ✅ 引入 INTERACTIONS, RESTORE_TIMES
+import { SchoolLogic } from './school';
+import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
+import { hasRequiredTags } from '../simulationHelpers'; // 需确保 simulationHelpers.ts 中已导出此函数
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -119,29 +120,46 @@ export class MovingState extends BaseState {
     }
 }
 
-// --- 🆕 增强版通勤状态：先去地块入口 -> 再找具体设施 ---
+// --- 🆕 重构版通勤状态：全自动查找工位 + 修复站位 ---
 export class CommutingState extends BaseState {
     actionName = SimAction.Commuting;
-    phase: 'to_plot' | 'to_station' = 'to_plot';
+    phase: 'to_plot' | 'to_station' = 'to_station';
 
     enter(sim: Sim) {
         sim.path = [];
-        this.phase = 'to_plot';
         
-        if (!sim.workplaceId) {
-            // 没有固定单位，直接取消
-            sim.changeState(new IdleState());
-            return;
-        }
-
-        const plot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
-        if (plot) {
-            // 阶段1: 走到地块边缘/入口 (简单模拟)
+        // 尝试基于 Tags 查找工位
+        const station = this.findWorkstation(sim);
+        
+        if (station) {
+            this.phase = 'to_station';
+            // [修复] 关键修改：站位偏移
+            // 让小人站在家具的"前方"（Y轴下方），而不是中心
+            // 这避免了小人和家具在同一 Y 坐标导致的图层排序闪烁（抖动）
             sim.target = { 
-                x: plot.x + (plot.width||300)/2 + (Math.random()-0.5)*50, 
-                y: plot.y + (plot.height||300)/2 + (Math.random()-0.5)*50 
+                x: station.x + station.w/2, 
+                y: station.y + station.h + 5 
             };
-        } else {
+            sim.interactionTarget = { ...station, utility: 'work' };
+            sim.say("去工位...", 'act');
+        } 
+        else if (sim.workplaceId) {
+            // 没找到具体工位，先去地皮
+            this.phase = 'to_plot';
+            const plot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
+            if (plot) {
+                sim.target = { 
+                    x: plot.x + (plot.width||300)/2 + (Math.random()-0.5)*50, 
+                    y: plot.y + (plot.height||300)/2 + (Math.random()-0.5)*50 
+                };
+                sim.say("去单位...", 'act');
+            } else {
+                sim.say("公司倒闭了?!", 'bad');
+                sim.changeState(new IdleState());
+            }
+        } 
+        else {
+            sim.say("没地方办公...", 'bad');
             sim.changeState(new IdleState());
         }
     }
@@ -152,11 +170,9 @@ export class CommutingState extends BaseState {
 
         if (arrived) {
             if (this.phase === 'to_plot') {
-                // 到达单位门口 -> 打卡 -> 找工位
-                this.phase = 'to_station';
+                // 到达单位门口 -> 打卡
                 sim.lastPunchInTime = GameStore.time.hour + GameStore.time.minute / 60;
                 
-                // 迟到判定
                 if (sim.lastPunchInTime > sim.job.startHour + 0.1) {
                     sim.say("迟到了！😱", 'bad');
                     sim.workPerformance -= 5;
@@ -164,14 +180,18 @@ export class CommutingState extends BaseState {
                     sim.say("打卡成功", 'sys');
                 }
 
-                // 寻找专属工位
+                // 再次尝试寻找工位
                 const station = this.findWorkstation(sim);
                 if (station) {
-                    sim.target = { x: station.x + station.w/2, y: station.y + station.h/2 };
+                    this.phase = 'to_station';
+                    sim.target = { 
+                        x: station.x + station.w/2, 
+                        y: station.y + station.h + 5 // [修复] 偏移
+                    };
                     sim.interactionTarget = { ...station, utility: 'work' };
                 } else {
-                    // 没工位，原地进入工作状态 (站立办公)
-                    sim.say("没抢到位置...", 'bad');
+                    sim.say("没位置了...", 'bad');
+                    // 没工位也进入工作状态（站立摸鱼）
                     sim.changeState(new WorkingState());
                 }
             } else {
@@ -181,60 +201,77 @@ export class CommutingState extends BaseState {
         }
     }
 
-    private findWorkstation(sim: Sim) {
-        if (!sim.workplaceId) return null;
-        
-        const plotFurniture = GameStore.furniture.filter(f => f.id.startsWith(sim.workplaceId!));
-        
-        let keywords: string[] = [];
-        const type = sim.job.companyType;
-        const title = sim.job.title;
+    private findWorkstation(sim: Sim): Furniture | null {
+        // 获取职业所需标签，默认为 'work'
+        const requiredTags = sim.job.requiredTags || ['work']; 
 
-        if (type === JobType.School) {
-            if (title.includes('厨')) keywords = ['灶', '厨'];
-            else if (title.includes('师')) keywords = ['讲台', '黑板', '办公桌'];
-            else keywords = ['保安'];
-        } else if (type === JobType.Hospital) {
-            if (title.includes('医')) keywords = ['办公桌', '电脑', '病床'];
-            else keywords = ['护士站', '柜台', '病床'];
-        } else if (type === JobType.ElderCare) {
-            keywords = ['床', '柜台', '沙发'];
-        } else if (type === JobType.Restaurant) {
-            if (title.includes('厨')) keywords = ['灶'];
-            else keywords = ['前台', '收银'];
-        } else if (type === JobType.Nightlife) {
-            if (title.includes('DJ')) keywords = ['DJ'];
-            else keywords = ['吧台'];
-        } else {
-            keywords = ['工位', '电脑', '桌'];
+        // 1. 【分配制】优先查找是否有专门预留给自己的工位
+        const reserved = GameStore.furniture.find(f => f.reserved === sim.id);
+        if (reserved && hasRequiredTags(reserved, requiredTags)) {
+            return reserved;
         }
 
-        const candidates = plotFurniture.filter(f => keywords.some(k => f.label.includes(k)));
-        const free = candidates.filter(f => !GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id));
-        
-        if (free.length > 0) return free[Math.floor(Math.random() * free.length)];
-        if (candidates.length > 0) return candidates[Math.floor(Math.random() * candidates.length)];
+        // 2. 【地皮制】如果在公司，优先找公司范围内的
+        if (sim.workplaceId) {
+            const plotFurniture = GameStore.furniture.filter(f => f.id.startsWith(sim.workplaceId!));
+            const candidates = plotFurniture.filter(f => hasRequiredTags(f, requiredTags));
+            
+            // 过滤掉被别人占用的
+            const free = candidates.filter(f => !this.isOccupied(f, sim.id));
+            
+            if (free.length > 0) return this.selectBest(sim, free);
+        }
+
+        // 3. 【就近制】全图搜索（兜底方案，或自由职业）
+        const allCandidates = GameStore.furniture.filter(f => hasRequiredTags(f, requiredTags));
+        const allFree = allCandidates.filter(f => !this.isOccupied(f, sim.id));
+
+        if (allFree.length > 0) return this.selectBest(sim, allFree);
+
         return null;
+    }
+
+    private isOccupied(f: Furniture, selfId: string): boolean {
+        if (f.multiUser) return false;
+        // 检查是否有人正在使用，或者正走在去使用的路上
+        return GameStore.sims.some(s => 
+            s.id !== selfId && 
+            (s.interactionTarget?.id === f.id || (s.target && s.target.x === f.x + f.w/2 && Math.abs(s.target.y - (f.y + f.h)) < 10))
+        );
+    }
+
+    private selectBest(sim: Sim, candidates: Furniture[]): Furniture {
+        // 如果候选很少，随机选一个防止拥挤
+        if (candidates.length < 5) return candidates[Math.floor(Math.random() * candidates.length)];
+        
+        // 否则选最近的
+        let best = candidates[0];
+        let minDist = Number.MAX_VALUE;
+        
+        candidates.forEach(f => {
+            const dist = Math.pow(f.x - sim.pos.x, 2) + Math.pow(f.y - sim.pos.y, 2);
+            if (dist < minDist) {
+                minDist = dist;
+                best = f;
+            }
+        });
+        return best;
     }
 }
 
-// --- 🆕 增强版工作状态：职业专属行为 & 同事社交 ---
+// --- 增强版工作状态 ---
 export class WorkingState extends BaseState {
     actionName = SimAction.Working;
     subStateTimer = 0;
 
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
-        
-        // 1. 技能提升
         this.gainSkills(sim, dt);
 
-        // 2. 同事社交
         if (Math.random() < 0.0005 * dt) {
             this.tryColleagueInteraction(sim);
         }
 
-        // 3. 职业专属行为模式
         this.handleJobBehavior(sim, dt);
     }
 
@@ -276,16 +313,16 @@ export class WorkingState extends BaseState {
 
         const jobType = sim.job.companyType;
         const jobTitle = sim.job.title;
-        const plot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
-        if (!plot) return;
+        // 允许自由职业
+        const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
 
         // 巡逻模式 (服务员/护士/店员/护工)
-        if (
+        if (plot && (
             (jobType === JobType.Restaurant && jobTitle.includes('服务')) ||
             (jobType === JobType.Store && !jobTitle.includes('收银')) ||
             (jobType === JobType.Hospital && jobTitle.includes('护士')) ||
             (jobType === JobType.ElderCare)
-        ) {
+        )) {
             const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
             const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
             sim.target = { x: tx, y: ty };
@@ -296,12 +333,13 @@ export class WorkingState extends BaseState {
         else if (jobType === JobType.School && (jobTitle.includes('师') || jobTitle.includes('教'))) {
             if (Math.random() > 0.7) sim.say("同学们看黑板...", 'act');
         }
-        // 医生
+        // 医生巡房
         else if (jobType === JobType.Hospital && jobTitle.includes('医')) {
-             if (Math.random() > 0.8) {
+             if (Math.random() > 0.8 && sim.workplaceId) {
                  const bed = GameStore.furniture.find(f => f.id.startsWith(sim.workplaceId!) && f.label.includes('病床'));
                  if (bed) {
-                     sim.target = { x: bed.x + 20, y: bed.y };
+                     // [修复] 医生巡房站在床边，不进去
+                     sim.target = { x: bed.x + 20, y: bed.y + bed.h + 5 };
                  }
              }
         }

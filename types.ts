@@ -71,6 +71,7 @@ export interface Furniture {
   color: string;
   label: string;
   utility: string;
+  tags?: string[]; // 🆕 功能标签系统 (e.g., ['computer', 'gaming'])
   dir?: string;
   multiUser?: boolean;
   gender?: string;
@@ -101,7 +102,7 @@ export interface HousingUnit {
     name: string;     
     capacity: number; 
     cost: number;     
-    type: 'public_housing' | 'apartment' | 'villa' | 'elder_care'; // 🆕 新增养老院类型
+    type: 'public_housing' | 'apartment' | 'villa' | 'elder_care'; 
     area: { x: number, y: number, w: number, h: number }; 
     maxX?: number;
     maxY?: number;
@@ -229,6 +230,7 @@ export interface Job {
   endHour: number;
   vacationMonths?: number[]; 
   companyType?: JobType | string; // Use Enum
+  requiredTags?: string[]; // 🆕 职业所需的家具标签 (e.g., ['computer'], ['stove'])
 }
 
 export interface Buff {
