@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { GameStore, Sim } from '../../utils/simulation';
 import { drawAvatarHead } from '../../utils/render/pixelArt';
 import { SKILLS, ORIENTATIONS, AGE_CONFIG, HAIR_STYLE_NAMES } from '../../constants';
-import { SimData, Memory, SimAction, NeedType, AgeStage } from '../../types';
+import { SimData, SimAction, NeedType, AgeStage } from '../../types';
 
 interface InspectorProps {
     selectedId: string | null;
@@ -67,7 +67,11 @@ const STATUS_MAP: Record<string, string> = {
     [SimAction.WatchingMovie]: '看电影', 
     [SimAction.Phone]: '玩手机',
     [SimAction.CommutingSchool]: '上学路上',
-    [SimAction.Schooling]: '在校学习'
+    [SimAction.Schooling]: '在校学习',
+    [SimAction.PickingUp]: '接送中',
+    [SimAction.Escorting]: '护送中',
+    [SimAction.BeingEscorted]: '被护送',
+    [SimAction.Waiting]: '等待中'
 };
 
 // --- Sub Components ---
@@ -211,7 +215,7 @@ const FamilyTab: React.FC<{ sim: Sim, sims: Sim[] }> = ({ sim, sims }) => {
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Family Lore Section - Moved here */}
+            {/* Family Lore Section */}
             {sim.familyLore && (
                 <div className="p-3 rounded bg-gradient-to-br from-yellow-900/30 to-orange-900/30 border border-yellow-500/20 text-[11px] shadow-sm">
                     <div className="text-[9px] text-yellow-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
@@ -298,7 +302,7 @@ const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                         </div>
                     </div>
                     
-                    {/* 🆕 增加性格特质显示 */}
+                    {/* Character Traits */}
                     <div className="flex flex-col gap-1 col-span-2 pb-2 mb-2 border-b border-white/5">
                         <span className="text-gray-500 text-[9px]">性格特质 (Traits)</span>
                         <div className="flex flex-wrap gap-1">
@@ -359,8 +363,53 @@ const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
 
 const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
     const [tab, setTab] = useState<'status' | 'attr' | 'memories' | 'family'>('status');
+    
+    // [新增] 拖拽相关状态
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState({ x: window.innerWidth - 360, y: 80 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
     const sim = sims.find(s => s.id === selectedId);
-    useEffect(() => { setTab('status'); }, [selectedId]);
+    
+    useEffect(() => { 
+        setTab('status'); 
+    }, [selectedId]);
+
+    // [新增] 全局拖拽事件监听
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isDragging) {
+                setPosition({
+                    x: e.clientX - dragOffset.x,
+                    y: e.clientY - dragOffset.y
+                });
+            }
+        };
+        const handleMouseUp = () => setIsDragging(false);
+
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, dragOffset]);
+
+    // [新增] 开始拖拽处理
+    const startDrag = (e: React.MouseEvent) => {
+        if (panelRef.current) {
+            setIsDragging(true);
+            const rect = panelRef.current.getBoundingClientRect();
+            setDragOffset({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            });
+        }
+    };
+
     if (!sim) return null;
 
     let moodColor = sim.mood > 80 ? '#00b894' : (sim.mood < 40 ? '#ff7675' : '#b2bec3');
@@ -376,18 +425,32 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
     const jobTitle = sim.ageStage === AgeStage.Infant ? '吃奶' : (sim.ageStage === AgeStage.Toddler ? '幼儿园' : (sim.ageStage === AgeStage.Child ? '小学生' : (sim.ageStage === AgeStage.Teen ? '中学生' : sim.job.title)));
 
     return (
-        <div className="w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0]">
-            <div className="flex gap-4 p-4 border-b border-white/10 shrink-0 bg-white/5">
-                <div className="w-16 h-16 bg-black/40 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden shrink-0 relative">
+        <div 
+            ref={panelRef}
+            style={{ left: position.x, top: position.y }}
+            className="fixed w-[340px] max-h-[calc(100vh-160px)] flex flex-col bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto animate-[fadeIn_0.2s_ease-out] text-[#e0e0e0] z-40"
+        >
+            {/* Header */}
+            <div 
+                onMouseDown={startDrag}
+                className="flex gap-4 p-4 border-b border-white/10 shrink-0 bg-white/5 cursor-move select-none rounded-t-xl"
+            >
+                <div className="w-16 h-16 bg-black/40 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden shrink-0 relative pointer-events-none">
                     <InspectorFace sim={sim} />
                     <div className="absolute bottom-1 right-1 w-3 h-3 rounded-full border-2 border-[#121212]" style={{ background: moodColor }}></div>
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <div className="flex justify-between items-start">
                         <h2 className="text-xl font-bold truncate tracking-tight flex items-center gap-2">{sim.name}<span className={`text-sm font-bold ${genderColor}`}>{genderIcon}</span></h2>
-                        <button onClick={() => { GameStore.selectedSimId = null; GameStore.notify(); }} className="text-white/30 hover:text-white transition-colors">✕</button>
+                        <button 
+                            onMouseDown={(e) => e.stopPropagation()} 
+                            onClick={() => { GameStore.selectedSimId = null; GameStore.notify(); }} 
+                            className="text-white/30 hover:text-white transition-colors"
+                        >
+                            ✕
+                        </button>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-2 pointer-events-auto" onMouseDown={(e) => e.stopPropagation()}>
                         <span className="text-[10px] px-2 py-0.5 rounded border" style={{ color: ageInfo.color, borderColor: ageInfo.color + '40', background: ageInfo.color + '20' }}>{ageInfo.label} ({Math.floor(sim.age)}岁)</span>
                         <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30" title="星座">{sim.zodiac.name}</span>
                         <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/20 text-pink-200 border border-pink-500/30" title="性取向">{ORIENTATIONS.find(o => o.type === sim.orientation)?.label}</span>
@@ -401,13 +464,18 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                 </div>
             </div>
 
-            <div className="flex border-b border-white/10 shrink-0">
+            {/* Tabs */}
+            <div className="flex border-b border-white/10 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
                 {[{ id: 'status', label: '状态' }, { id: 'attr', label: '属性' }, { id: 'family', label: '族谱' }, { id: 'memories', label: `记忆 (${sim.memories.length})` }].map(t => (
                     <button key={t.id} onClick={() => setTab(t.id as any)} className={`flex-1 py-2 text-[10px] font-bold transition-colors uppercase ${tab === t.id ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}>{t.label}</button>
                 ))}
             </div>
 
-            <div className="overflow-y-auto p-4 custom-scrollbar flex flex-col gap-6">
+            {/* Content */}
+            <div 
+                className="overflow-y-auto p-4 custom-scrollbar flex flex-col gap-6"
+                onMouseDown={(e) => e.stopPropagation()} 
+            >
                 {tab === 'status' && <StatusTab sim={sim} />}
                 {tab === 'family' && <FamilyTab sim={sim} sims={sims} />}
                 {tab === 'attr' && <AttrTab sim={sim} />}

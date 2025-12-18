@@ -63,9 +63,7 @@ const GameOverlay: React.FC = () => {
 
             {/* Right Panel: Inspector */}
             {selectedId && !showEditor && (
-                <div className="absolute right-4 top-20 bottom-4 pointer-events-none flex flex-col justify-start">
-                    <Inspector selectedId={selectedId} sims={sims} />
-                </div>
+                <Inspector selectedId={selectedId} sims={sims} />
             )}
 
             {/* Editor Panel */}

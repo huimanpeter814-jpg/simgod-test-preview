@@ -67,11 +67,16 @@ const GameCanvas: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number | null>(null);
 
-    // 相机状态
+    // 1. 初始化相机位置：居中显示地图
+    // 计算初始 Zoom 以适应屏幕，或者给一个默认值
+    const initialZoom = 0.8;
+    const initialX = (CONFIG.CANVAS_W - window.innerWidth / initialZoom) / 2;
+    const initialY = (CONFIG.CANVAS_H - window.innerHeight / initialZoom) / 2;
+
     const cameraRef = useRef({ 
-        x: 1800 - window.innerWidth / 2, 
-        y: 800 - window.innerHeight / 2, 
-        zoom: 0.8 
+        x: initialX, 
+        y: initialY, 
+        zoom: initialZoom 
     });
 
     // 交互状态 Refs
@@ -104,6 +109,33 @@ const GameCanvas: React.FC = () => {
     const lastStaticUpdateRef = useRef<number>(0); 
 
     const [editorRefresh, setEditorRefresh] = useState(0);
+
+    // [新增] 限制相机范围的辅助函数
+    const clampCamera = (targetX: number, targetY: number, currentZoom: number) => {
+        const padding = 200; // 允许超出地图边缘的缓冲距离
+        
+        // 视口在世界坐标系中的宽高
+        // const viewW = window.innerWidth / currentZoom; 
+        // const viewH = window.innerHeight / currentZoom;
+
+        // 限制 X: 不能太左 (<-padding)，也不能太右 (超过地图宽度)
+        // 注意：camera.x 是视口左上角的世界坐标
+        const minX = -padding;
+        const maxX = CONFIG.CANVAS_W - (window.innerWidth / currentZoom) + padding;
+        
+        // 限制 Y
+        const minY = -padding;
+        const maxY = CONFIG.CANVAS_H - (window.innerHeight / currentZoom) + padding;
+
+        // 如果视口比地图还大，允许居中或左对齐，这里做简单限制
+        // 使用 Math.max(min, Math.min(val, max)) 来限制范围
+        // 但如果 maxX < minX (视口比地图大)，我们需要特殊处理，这里简化为允许负值移动以便查看
+        
+        const clampedX = Math.max(Math.min(minX, maxX), Math.min(targetX, Math.max(minX, maxX)));
+        const clampedY = Math.max(Math.min(minY, maxY), Math.min(targetY, Math.max(minY, maxY)));
+
+        return { x: clampedX, y: clampedY };
+    };
 
     // 1. 窗口大小监听
     useEffect(() => {
@@ -730,10 +762,16 @@ const GameCanvas: React.FC = () => {
             if (!isDraggingCamera.current && !isDraggingObject.current) isCameraLocked.current = false;
         }
 
-        // 1. 镜头漫游
+        // 1. 镜头漫游 [修改]：加入限制逻辑
         if (isDraggingCamera.current) {
-            cameraRef.current.x -= dx;
-            cameraRef.current.y -= dy;
+            const targetX = cameraRef.current.x - dx;
+            const targetY = cameraRef.current.y - dy;
+            
+            const clamped = clampCamera(targetX, targetY, zoom);
+            
+            cameraRef.current.x = clamped.x;
+            cameraRef.current.y = clamped.y;
+            
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             return;
         }
@@ -897,15 +935,31 @@ const GameCanvas: React.FC = () => {
     const handleWheel = (e: React.WheelEvent) => {
         const zoomSpeed = 0.001;
         const oldZoom = cameraRef.current.zoom;
-        const newZoom = Math.min(Math.max(oldZoom - e.deltaY * zoomSpeed, 0.2), 4);
+        
+        // [修改] 限制缩放范围
+        // 最小缩放：确保能看到大部分地图，但不至于太小
+        const minZoom = Math.max(0.2, Math.min(window.innerWidth / CONFIG.CANVAS_W, window.innerHeight / CONFIG.CANVAS_H) * 0.95);
+        const maxZoom = 4; // 最大放大倍数
+
+        const newZoom = Math.min(Math.max(oldZoom - e.deltaY * zoomSpeed, minZoom), maxZoom);
+        
         const rect = canvasRef.current!.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
+        
+        // 计算缩放后的世界坐标
         const worldX = mouseX / oldZoom + cameraRef.current.x;
         const worldY = mouseY / oldZoom + cameraRef.current.y;
+        
+        let targetCamX = worldX - mouseX / newZoom;
+        let targetCamY = worldY - mouseY / newZoom;
+
+        // [修改] 缩放时也应用边界限制，防止缩放导致出界
+        const clamped = clampCamera(targetCamX, targetCamY, newZoom);
+
         cameraRef.current.zoom = newZoom;
-        cameraRef.current.x = worldX - mouseX / newZoom;
-        cameraRef.current.y = worldY - mouseY / newZoom;
+        cameraRef.current.x = clamped.x;
+        cameraRef.current.y = clamped.y;
     };
 
     return (
