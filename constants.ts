@@ -1,28 +1,29 @@
 /// <reference types="vite/client" />
 import { Job, JobType, AgeStage, NeedType } from './types';
 
-// 1. 资源加载
-const faceFiles = import.meta.glob('/public/assets/face/*.{png,jpg,jpeg,webp}', { eager: true });
-const hairFiles = import.meta.glob('/public/assets/hair/*.{png,jpg,jpeg,webp}', { eager: true });
-const clothesFiles = import.meta.glob('/public/assets/clothes/*.{png,jpg,jpeg,webp}', { eager: true });
-const pantsFiles = import.meta.glob('/public/assets/pants/*.{png,jpg,jpeg,webp}', { eager: true });
-const bgFiles = import.meta.glob('/public/assets/bg/*.{png,jpg,jpeg,webp}', { eager: true });
+// 1. 资源加载 (修改为从 /src/assets 加载，并使用 import: 'default' 直接获取 URL)
+const faceFiles = import.meta.glob('/src/assets/face/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
+const hairFiles = import.meta.glob('/src/assets/hair/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
+const clothesFiles = import.meta.glob('/src/assets/clothes/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
+const pantsFiles = import.meta.glob('/src/assets/pants/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
+const bgFiles = import.meta.glob('/src/assets/bg/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 
-function getPathsFromGlob(globResult: Record<string, unknown>): string[] {
-    return Object.keys(globResult).map(path => path.replace(/^\/public/, ''));
+// 辅助函数：提取 glob 结果中的 URL 值
+function getValues(globResult: Record<string, unknown>): string[] {
+    return Object.values(globResult) as string[];
 }
 
 export const ASSET_CONFIG = {
-    face: getPathsFromGlob(faceFiles),
-    hair: getPathsFromGlob(hairFiles),
-    clothes: getPathsFromGlob(clothesFiles),
-    pants: getPathsFromGlob(pantsFiles),
-    bg: getPathsFromGlob(bgFiles)
+    face: getValues(faceFiles),
+    hair: getValues(hairFiles),
+    clothes: getValues(clothesFiles),
+    pants: getValues(pantsFiles),
+    bg: getValues(bgFiles)
 };
 
 export const CONFIG = {
-    CANVAS_W: 3280, // 扩大画布以容纳更多地块
-    CANVAS_H: 2200, // 增加高度
+    CANVAS_W: 3280, 
+    CANVAS_H: 2200, 
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],
         hair: ['#2b2b2b', '#4a3b32', '#8c6b5d', '#d9c2a3', '#a83f3f', '#3e5f8a'], 

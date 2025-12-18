@@ -20,7 +20,7 @@ const HELP_CONTENT: HelpSection[] = [
                     <div className="grid grid-cols-1 gap-3">
                         <div className="bg-white/5 p-3 rounded flex items-center justify-between">
                             <span className="text-gray-300 text-xs">移动视角</span>
-                            <span className="text-white text-xs font-bold bg-white/10 px-2 py-1 rounded">按住左键拖拽</span>
+                            <span className="text-white text-xs font-bold bg-white/10 px-2 py-1 rounded">按下空格并按住左键拖拽</span>
                         </div>
                         <div className="bg-white/5 p-3 rounded flex items-center justify-between">
                             <span className="text-gray-300 text-xs">缩放画面</span>
@@ -248,7 +248,7 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     </div>
 
                     <div className="p-4 border-t border-white/10 text-center">
-                        <p className="text-[10px] text-gray-600">SimGod v9.0</p>
+                        <p className="text-[10px] text-gray-600">SimGod v9.6</p>
                     </div>
                 </div>
 

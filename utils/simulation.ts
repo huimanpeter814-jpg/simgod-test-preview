@@ -458,11 +458,13 @@ export class GameStore {
         }
     }
 
-    static loadGame(slotIndex: number = 1): boolean {
+    static loadGame(slotIndex: number = 1, silent: boolean = false): boolean {
         const data = SaveManager.loadFromSlot(slotIndex);
         
         if (!data) {
-            this.showToast(`❌ 读取存档失败`);
+            if (!silent) {
+                this.showToast(`❌ 读取存档失败`);
+            }
             return false;
         }
 
@@ -486,12 +488,14 @@ export class GameStore {
             this.initIndex();
             this.refreshFurnitureOwnership();
             
-            this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
+            if (!silent) {
+                this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
+            }
             this.notify();
             return true;
         } catch (e) {
             console.error("[GameStore] Hydration failed:", e);
-            this.showToast(`❌ 存档数据损坏，无法恢复`);
+            if (!silent) this.showToast(`❌ 存档数据损坏，无法恢复`);
             return false;
         }
     }
@@ -552,7 +556,7 @@ export function initGame() {
 
     GameStore.rebuildWorld(true); 
 
-    if (GameStore.loadGame(1)) {
+    if (GameStore.loadGame(1,true)) {
         GameStore.addLog(null, "自动读取存档 1 成功", "sys");
     } else {
         GameStore.addLog(null, "正在初始化新城市人口...", "sys");

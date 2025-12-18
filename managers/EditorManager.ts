@@ -14,6 +14,10 @@ export class EditorManager implements EditorState {
     
     placingTemplateId: string | null = null;
     placingFurniture: Partial<Furniture> | null = null;
+
+    // [新增] 缩放相关状态
+    isResizing: boolean = false;
+    resizeHandle: string | null = null; // 记录正在拖拽哪个手柄 (例如 'se' 代表右下角)
     
     drawingPlot: {
         startX: number;
@@ -279,12 +283,56 @@ export class EditorManager implements EditorState {
         const plot = GameStore.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
         if (record) this.recordAction({ type: 'remove', entityType: 'plot', id: plotId, prevData: plot });
+        
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
-        GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
-        GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
-        GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+        
+        // GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); // 房间通常依附于地皮，建议保留删除，或者也注释掉看你需要
+        
+        // [修改] 注释掉下面这行，保留家具！
+        // GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
+        
+        // 同时也保留 HousingUnits，防止家具失去归属（可选，视逻辑而定）
+        // GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+        
         this.selectedPlotId = null;
         GameStore.initIndex();
+        GameStore.notify();
+    }
+
+    // [新增] 缩放地皮/房间的逻辑
+    resizeEntity(type: 'plot' | 'room', id: string, newRect: { w: number, h: number }) {
+        if (type === 'plot') {
+            const plot = GameStore.worldLayout.find(p => p.id === id);
+            if (plot) {
+                plot.width = Math.max(50, newRect.w); // 最小限制
+                plot.height = Math.max(50, newRect.h);
+                // 重新实例化地皮内容（如重新生成地板房），稍微复杂，这里简单处理只改大小
+                // 如果需要连带更新内部房间位置，需要更复杂的逻辑。
+                // 这里假设是调整自定义空地的大小。
+                if (plot.templateId === 'default_empty' || plot.id.startsWith('plot_custom')) {
+                     // 找到关联的基础地板并更新
+                     const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
+                     if (baseRoom) {
+                         baseRoom.w = plot.width;
+                         baseRoom.h = plot.height;
+                     }
+                }
+            }
+        } else if (type === 'room') {
+            const room = GameStore.rooms.find(r => r.id === id);
+            if (room) {
+                room.w = Math.max(50, newRect.w);
+                room.h = Math.max(50, newRect.h);
+            }
+        }
+        GameStore.initIndex(); // 重建空间索引
+        GameStore.notify();
+    }
+    
+    // [新增] 完成缩放（用于记录历史，这里简化，暂不记录Resize的历史）
+    finalizeResize() {
+        this.isResizing = false;
+        this.resizeHandle = null;
         GameStore.notify();
     }
 
