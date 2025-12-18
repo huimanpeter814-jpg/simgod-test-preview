@@ -131,6 +131,7 @@ export interface WorldPlot {
 
 export interface EditorState {
   mode: 'none' | 'plot' | 'furniture' | 'floor'; 
+  activeTool: 'camera' | 'select';
   selectedPlotId: string | null;
   selectedFurnitureId: string | null;
   selectedRoomId: string | null;
@@ -140,7 +141,7 @@ export interface EditorState {
   
   placingTemplateId: string | null;
   placingFurniture: Partial<Furniture> | null;
-  
+
   drawingPlot: {
       startX: number;
       startY: number;

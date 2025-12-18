@@ -5,6 +5,9 @@ import { Furniture, WorldPlot, RoomDef, EditorAction, EditorState } from '../typ
 export class EditorManager implements EditorState {
     // === 状态 ===
     mode: 'none' | 'plot' | 'furniture' | 'floor' = 'none';
+
+    activeTool: 'camera' | 'select' = 'select';
+
     selectedPlotId: string | null = null;
     selectedFurnitureId: string | null = null;
     selectedRoomId: string | null = null;
@@ -90,8 +93,15 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
 
+    // [新增] 切换工具的方法
+    setTool(tool: 'camera' | 'select') {
+        this.activeTool = tool;
+        GameStore.notify();
+    }
+
     resetState() {
         this.mode = 'none';
+        this.activeTool = 'select'; 
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
         this.selectedRoomId = null;
