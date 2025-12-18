@@ -18,9 +18,9 @@ export class EditorManager implements EditorState {
     placingTemplateId: string | null = null;
     placingFurniture: Partial<Furniture> | null = null;
 
-    // [新增] 缩放相关状态
-    isResizing: boolean = false;
-    resizeHandle: string | null = null; // 记录正在拖拽哪个手柄 (例如 'se' 代表右下角)
+    // [新增] 交互状态管理
+    interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing' = 'idle';
+    resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null = null;
     
     drawingPlot: {
         startX: number;
@@ -65,6 +65,7 @@ export class EditorManager implements EditorState {
         };
         this.history = [];
         this.redoStack = [];
+        this.interactionState = 'idle';
         GameStore.time.speed = 0; 
         GameStore.notify();
     }
@@ -96,6 +97,7 @@ export class EditorManager implements EditorState {
     // [新增] 切换工具的方法
     setTool(tool: 'camera' | 'select') {
         this.activeTool = tool;
+        this.interactionState = 'idle'; // Reset interaction on tool change
         GameStore.notify();
     }
 
@@ -110,6 +112,8 @@ export class EditorManager implements EditorState {
         this.drawingFloor = null;
         this.drawingPlot = null;
         this.isDragging = false;
+        this.interactionState = 'idle';
+        this.resizeHandle = null;
         this.previewPos = null;
     }
 
@@ -148,7 +152,7 @@ export class EditorManager implements EditorState {
 
     private applyUndoRedo(action: EditorAction, isUndo: boolean) {
         const data = isUndo ? action.prevData : action.newData;
-        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : (action.type === 'modify' ? 'modify' : 'move'))) : action.type;
+        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : (action.type === 'modify' ? 'modify' : (action.type === 'resize' ? 'resize' : 'move')))) : action.type;
 
         if (type === 'move') {
             if (action.entityType === 'plot') {
@@ -176,6 +180,29 @@ export class EditorManager implements EditorState {
                     if (data.templateId) plot.templateId = data.templateId;
                     GameStore.rebuildWorld(false);
                 }
+            } else if (action.entityType === 'room' && data) {
+                const room = GameStore.rooms.find(r => r.id === action.id);
+                if (room) {
+                    if (data.color) room.color = data.color;
+                    if (data.pixelPattern) room.pixelPattern = data.pixelPattern;
+                }
+            }
+        } else if (type === 'resize') {
+            const entityId = action.id;
+            const entityType = action.entityType;
+            if (entityType === 'plot') {
+                const plot = GameStore.worldLayout.find(p => p.id === entityId);
+                if (plot && data) {
+                    plot.x = data.x; plot.y = data.y; plot.width = data.w; plot.height = data.h;
+                    // 同步 base room
+                    const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
+                    if (baseRoom) { baseRoom.x = data.x; baseRoom.y = data.y; baseRoom.w = data.w; baseRoom.h = data.h; }
+                }
+            } else if (entityType === 'room') {
+                const room = GameStore.rooms.find(r => r.id === entityId);
+                if (room && data) {
+                    room.x = data.x; room.y = data.y; room.w = data.w; room.h = data.h;
+                }
             }
         }
         GameStore.initIndex();
@@ -193,6 +220,7 @@ export class EditorManager implements EditorState {
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
         this.isDragging = true; 
+        this.interactionState = 'carrying'; // Auto carry
         
         let w = 300, h = 300;
         if (templateId) {
@@ -211,6 +239,7 @@ export class EditorManager implements EditorState {
         this.drawingFloor = null;
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
+        this.interactionState = 'drawing';
         GameStore.notify();
     }
 
@@ -223,6 +252,7 @@ export class EditorManager implements EditorState {
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
         this.isDragging = true;
+        this.interactionState = 'carrying';
         this.dragOffset = { x: (template.w || 0) / 2, y: (template.h || 0) / 2 };
         GameStore.notify();
     }
@@ -236,6 +266,7 @@ export class EditorManager implements EditorState {
         this.selectedPlotId = null;
         this.selectedFurnitureId = null;
         this.selectedRoomId = null;
+        this.interactionState = 'drawing';
         GameStore.notify();
     }
 
@@ -250,6 +281,8 @@ export class EditorManager implements EditorState {
         GameStore.initIndex(); 
         this.placingTemplateId = null;
         this.isDragging = false;
+        this.interactionState = 'idle';
+        this.selectedPlotId = newId; // Auto select after place
         GameStore.notify();
     }
 
@@ -261,6 +294,7 @@ export class EditorManager implements EditorState {
         GameStore.instantiatePlot(newPlot);
         GameStore.initIndex();
         this.selectedPlotId = newId;
+        this.interactionState = 'idle';
         GameStore.notify();
     }
 
@@ -274,6 +308,8 @@ export class EditorManager implements EditorState {
         GameStore.refreshFurnitureOwnership();
         this.placingFurniture = null;
         this.isDragging = false;
+        this.interactionState = 'idle';
+        this.selectedFurnitureId = newItem.id;
         GameStore.notify();
     }
 
@@ -286,6 +322,8 @@ export class EditorManager implements EditorState {
         this.recordAction({ type: 'add', entityType: 'room', id: newRoom.id, newData: newRoom });
         GameStore.rooms.push(newRoom);
         GameStore.initIndex();
+        this.selectedRoomId = newRoom.id;
+        this.interactionState = 'idle';
         GameStore.notify();
     }
 
@@ -296,33 +334,33 @@ export class EditorManager implements EditorState {
         
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
         
-        // GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); // 房间通常依附于地皮，建议保留删除，或者也注释掉看你需要
+        // Remove associated base rooms
+        GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); 
         
-        // [修改] 注释掉下面这行，保留家具！
+        // 保留家具 (or remove if desired)
         // GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
-        
-        // 同时也保留 HousingUnits，防止家具失去归属（可选，视逻辑而定）
-        // GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
         
         this.selectedPlotId = null;
         GameStore.initIndex();
         GameStore.notify();
     }
 
-    // [新增] 缩放地皮/房间的逻辑
-    resizeEntity(type: 'plot' | 'room', id: string, newRect: { w: number, h: number }) {
+    // [修改] 缩放地皮/房间的逻辑：支持 x, y, w, h 更新
+    resizeEntity(type: 'plot' | 'room', id: string, newRect: { x: number, y: number, w: number, h: number }) {
         if (type === 'plot') {
             const plot = GameStore.worldLayout.find(p => p.id === id);
             if (plot) {
-                plot.width = Math.max(50, newRect.w); // 最小限制
+                plot.x = newRect.x;
+                plot.y = newRect.y;
+                plot.width = Math.max(50, newRect.w);
                 plot.height = Math.max(50, newRect.h);
-                // 重新实例化地皮内容（如重新生成地板房），稍微复杂，这里简单处理只改大小
-                // 如果需要连带更新内部房间位置，需要更复杂的逻辑。
-                // 这里假设是调整自定义空地的大小。
+                
+                // 只有自定义空地才同步 Base Room (模板地皮不应该改内部房间)
                 if (plot.templateId === 'default_empty' || plot.id.startsWith('plot_custom')) {
-                     // 找到关联的基础地板并更新
                      const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
                      if (baseRoom) {
+                         baseRoom.x = newRect.x;
+                         baseRoom.y = newRect.y;
                          baseRoom.w = plot.width;
                          baseRoom.h = plot.height;
                      }
@@ -331,18 +369,27 @@ export class EditorManager implements EditorState {
         } else if (type === 'room') {
             const room = GameStore.rooms.find(r => r.id === id);
             if (room) {
+                room.x = newRect.x;
+                room.y = newRect.y;
                 room.w = Math.max(50, newRect.w);
                 room.h = Math.max(50, newRect.h);
             }
         }
-        GameStore.initIndex(); // 重建空间索引
+        GameStore.initIndex(); 
         GameStore.notify();
     }
     
-    // [新增] 完成缩放（用于记录历史，这里简化，暂不记录Resize的历史）
-    finalizeResize() {
+    finalizeResize(type: 'plot'|'room', id: string, prevRect: {x:number,y:number,w:number,h:number}, newRect: {x:number,y:number,w:number,h:number}) {
         this.isResizing = false;
         this.resizeHandle = null;
+        this.interactionState = 'idle';
+        this.recordAction({ 
+            type: 'resize', 
+            entityType: type, 
+            id, 
+            prevData: prevRect, 
+            newData: newRect 
+        });
         GameStore.notify();
     }
 
@@ -380,6 +427,21 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
 
+    modifyRoom(roomId: string, changes: Partial<RoomDef>) {
+        const room = GameStore.rooms.find(r => r.id === roomId);
+        if (!room) return;
+        const prevData = { color: room.color, pixelPattern: room.pixelPattern };
+        
+        let changed = false;
+        if (changes.color) { room.color = changes.color; changed = true; }
+        if (changes.pixelPattern) { room.pixelPattern = changes.pixelPattern; changed = true; }
+        
+        if (changed) {
+            this.recordAction({ type: 'modify', entityType: 'room', id: roomId, prevData, newData: changes });
+            GameStore.notify();
+        }
+    }
+
     finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
         if (!this.previewPos) return;
         const { x, y } = this.previewPos;
@@ -411,6 +473,7 @@ export class EditorManager implements EditorState {
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
             if (entityType === 'furniture') {
+                // 如果家具被移动了，更新正在使用它的市民的位置
                 GameStore.sims.forEach(sim => {
                     if (sim.interactionTarget && sim.interactionTarget.id === id) {
                         if (sim.action === 'using' || sim.action === 'working' || sim.action === 'sleeping') {
@@ -421,6 +484,10 @@ export class EditorManager implements EditorState {
                 });
             }
         }
+        
+        // Reset state after move
+        this.isDragging = false;
+        this.interactionState = 'idle';
         this.previewPos = null;
         GameStore.notify();
     }

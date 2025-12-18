@@ -26,15 +26,15 @@ const PLOT_NAMES: Record<string, string> = {
     'elementary': '第一小学',
     'school_l': '综合学校',
     'dorm_std': '人才公寓',
-    'elder_care': '夕阳红养老院', // 🆕
+    'elder_care': '夕阳红养老院', 
     'villa_wide': '豪华别墅',
     'apt_small': '精品公寓',
     'apartment': '公寓楼',
     'park_center': '中央公园',
     'mall_wide': '商业广场',
     'shop_s': '便民小店',
-    'gym': '健身中心',           // 🆕
-    'nightclub': '不夜城Club',   // 🆕
+    'gym': '健身中心',           
+    'nightclub': '不夜城Club',   
     'hospital_l': '综合医院',
     'gallery': '美术馆',
     'netcafe': '网咖',
@@ -42,10 +42,10 @@ const PLOT_NAMES: Record<string, string> = {
     'road_v': '纵向道路'
 };
 
-// 家具分类目录 (🆕 已添加 Tags，并且新增了 career 分类)
+// 家具分类目录
 const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furniture>[] }> = {
     'career': {
-        label: '职业设施', // 🆕 新分类
+        label: '职业设施', 
         items: [
             { label: '办公桌(简约)', w: 48, h: 32, color: '#2c3e50', utility: 'none', pixelPattern: 'desk_pixel', tags: ['desk'] },
             { label: '办公桌(木质)', w: 60, h: 40, color: '#8b4513', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk'] },
@@ -147,12 +147,15 @@ const SURFACE_TYPES = [
     { label: '水池', color: '#5a8fff', pattern: 'water' },
 ];
 
-// 2. 室内房间材质 (Room Mode) - 默认带墙
-const ROOM_TYPES = [
-    { label: '基础房间', color: '#dfe6e9', pattern: 'simple' }, // 纯色
-    { label: '木地板', color: '#dce4f0', pattern: 'wood' },
-    { label: '瓷砖', color: '#dfe6e9', pattern: 'tile' },
-    { label: '地砖', color: '#9ca6b4', pattern: 'pave_fancy' },
+// 2. [新增] 房间/地板材质 (Selection Mode)
+// 这些选项现在只在选中房间后显示
+const FLOOR_PATTERNS = [
+    { label: '基础', pattern: 'simple' },
+    { label: '木地板', pattern: 'wood' },
+    { label: '瓷砖', pattern: 'tile' },
+    { label: '地砖', pattern: 'pave_fancy' },
+    { label: '商场', pattern: 'mall' },
+    { label: '网格', pattern: 'grid' },
 ];
 
 const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
@@ -290,6 +293,12 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         GameStore.startPlacingFurniture({ ...tpl, id: '', x: 0, y: 0, color: initialColor });
     };
 
+    // [修改] 统一的创建房间入口
+    const handleStartDrawingRoom = () => {
+        // 默认创建一个白色、基础纹理、带墙的房间
+        GameStore.startDrawingFloor('simple', '#ffffff', '房间', true);
+    };
+
     const handleStartDrawingFloor = (type: any, hasWall: boolean) => {
         const initialColor = selectedColor || type.color;
         GameStore.startDrawingFloor(type.pattern, initialColor, type.label, hasWall);
@@ -305,7 +314,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         }
     };
 
-    // 更改家具颜色
+    // 更改家具/房间颜色
     const handleColorChange = (color: string) => {
         setSelectedColor(color);
         if (GameStore.editor.placingFurniture) {
@@ -320,6 +329,14 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         } else if (GameStore.editor.selectedRoomId) {
             const r = GameStore.rooms.find(rm => rm.id === GameStore.editor.selectedRoomId);
             if (r) { r.color = color; GameStore.notify(); }
+        }
+    };
+
+    // [新增] 更改房间图案 (材质)
+    const handlePatternChange = (pattern: string) => {
+        if (GameStore.editor.selectedRoomId) {
+            const r = GameStore.rooms.find(rm => rm.id === GameStore.editor.selectedRoomId);
+            if (r) { r.pixelPattern = pattern; GameStore.notify(); }
         }
     };
 
@@ -436,7 +453,29 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                     )}
                 </div>
 
-                {/* Color Picker */}
+                {/* [新增] Room Pattern Picker (Only when Room is Selected) */}
+                {mode === 'floor' && GameStore.editor.selectedRoomId && (
+                    <div className="bg-white/5 p-2 rounded border border-white/5">
+                        <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">更换地面材质</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            {FLOOR_PATTERNS.map(fp => {
+                                const currentRoom = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
+                                const isActive = currentRoom?.pixelPattern === fp.pattern;
+                                return (
+                                    <button
+                                        key={fp.pattern}
+                                        onClick={() => handlePatternChange(fp.pattern)}
+                                        className={`text-[10px] py-1 rounded border transition-all ${isActive ? 'bg-accent/30 border-accent text-white' : 'bg-black/20 border-white/10 text-gray-400 hover:text-gray-200'}`}
+                                    >
+                                        {fp.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Color Picker (Always visible for Furniture/Floor) */}
                 {(mode === 'furniture' || mode === 'floor') && (
                     <div className="bg-white/5 p-2 rounded border border-white/5">
                         <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">更改颜色</div>
@@ -487,14 +526,18 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                         </>
                     ) : mode === 'floor' ? (
                         <>
-                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">框选建造房间</div>
-                            <div className="grid grid-cols-2 gap-2 pb-2">
-                                {ROOM_TYPES.map((type) => (
-                                    <button key={type.pattern} onClick={() => handleStartDrawingFloor(type, true)} className={`bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-2 text-left flex items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'border-yellow-400 bg-yellow-400/10' : ''}`}>
-                                        <div className="w-4 h-4 border border-white/20 rounded" style={{background: type.color}}></div>
-                                        <span className={`text-xs font-bold ${GameStore.editor.drawingFloor?.pattern === type.pattern ? 'text-yellow-400' : 'text-gray-200'}`}>{type.label}</span>
-                                    </button>
-                                ))}
+                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">建造工具</div>
+                            <div className="mb-3">
+                                <button 
+                                    onClick={handleStartDrawingRoom} 
+                                    className={`w-full bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/30 rounded p-3 text-center flex justify-center items-center gap-2 transition-all active:scale-95 ${GameStore.editor.drawingFloor ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' : ''}`}
+                                >
+                                    <span className="text-lg">🏗️</span>
+                                    <span className={`text-xs font-bold ${GameStore.editor.drawingFloor ? 'text-yellow-400' : 'text-gray-200'}`}>框选建造房间</span>
+                                </button>
+                            </div>
+                            <div className="text-[10px] text-gray-400 px-1">
+                                💡 提示：建造完成后，选中房间可修改地面的颜色和图案。
                             </div>
                         </>
                     ) : (

@@ -61,19 +61,31 @@ const lerp = (start: number, end: number, factor: number) => {
     return start + (end - start) * factor;
 };
 
-// 绘制缩放手柄 (白色小方块)
-const drawResizeHandle = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    const handleSize = 12;
-    const hx = x + w - handleSize / 2;
-    const hy = y + h - handleSize / 2;
+// --- 新增：绘制4个角的缩放手柄 ---
+const drawResizeHandles = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    const handleSize = 10;
+    const half = handleSize / 2;
+    
     ctx.save();
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
-    ctx.fill();
-    ctx.stroke();
+    ctx.lineWidth = 1;
+
+    // Defines corners: TL, TR, BL, BR
+    const corners = [
+        { x: x - half, y: y - half }, // NW
+        { x: x + w - half, y: y - half }, // NE
+        { x: x - half, y: y + h - half }, // SW
+        { x: x + w - half, y: y + h - half } // SE
+    ];
+
+    corners.forEach(c => {
+        ctx.beginPath();
+        ctx.rect(c.x, c.y, handleSize, handleSize);
+        ctx.fill();
+        ctx.stroke();
+    });
+
     ctx.restore();
 };
 
@@ -94,19 +106,21 @@ const GameCanvas: React.FC = () => {
     
     // 交互状态
     const isDraggingCamera = useRef(false);
+    
+    // [New] Sticky Drag State (Click to Pickup)
+    const isStickyDragging = useRef(false);
+    
     const isResizing = useRef(false);
+    const activeResizeHandle = useRef<string | null>(null); // 'nw', 'ne', 'sw', 'se'
+    const resizeStartRect = useRef({ x: 0, y: 0, w: 0, h: 0 }); // Snapshot for resizing
+
     const isDraggingObject = useRef(false);
     
     const lastMousePos = useRef({ x: 0, y: 0 });
     const dragStartMousePos = useRef({ x: 0, y: 0 });
-    const isPickingUp = useRef(false); 
     const dragStartPos = useRef({ x: 0, y: 0 }); 
 
     const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-    const [selectedPlot, setSelectedPlot] = useState<any>(null);
-    const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
-    const lastTimePaletteRef = useRef<string>('');
-    const lastStaticUpdateRef = useRef<number>(0); 
     const [editorRefresh, setEditorRefresh] = useState(0);
 
     // 限制相机边界
@@ -146,23 +160,13 @@ const GameCanvas: React.FC = () => {
     useEffect(() => {
         const unsub = GameStore.subscribe(() => {
             setEditorRefresh(prev => prev + 1);
-            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
-                const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
-                if (plot) {
-                    const zoom = cameraRef.current.zoom;
-                    const screenX = (plot.x - cameraRef.current.x) * zoom;
-                    const screenY = (plot.y - cameraRef.current.y) * zoom;
-                    setSelectedPlot({ 
-                        id: plot.id, x: screenX, y: screenY, templateId: plot.templateId,
-                        customName: plot.customName, customColor: plot.customColor, customType: plot.customType 
-                    });
-                }
-            } else {
-                setSelectedPlot(null);
-            }
         });
         return unsub;
     }, []);
+
+    const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const lastTimePaletteRef = useRef<string>('');
+    const lastStaticUpdateRef = useRef<number>(0); 
 
     // 渲染静态层 (背景/地板/家具)
     const renderStaticLayer = () => {
@@ -246,13 +250,13 @@ const GameCanvas: React.FC = () => {
             for (let y = startY; y < endY; y += gridSize) { ctx.moveTo(startX, y); ctx.lineTo(endX, y); }
             ctx.stroke();
 
-            // 选中框绘制 (地皮/房间/家具) ... (逻辑保持不变)
+            // 选中框绘制 (地皮/房间/家具)
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
                 if (plot) {
                     ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 2; ctx.strokeRect(plot.x, plot.y, plot.width || 300, plot.height || 300);
                     // @ts-ignore
-                    if (GameStore.editor.activeTool !== 'camera') drawResizeHandle(ctx, plot.x, plot.y, plot.width || 300, plot.height || 300);
+                    if (GameStore.editor.activeTool !== 'camera') drawResizeHandles(ctx, plot.x, plot.y, plot.width || 300, plot.height || 300);
                 }
             }
             if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
@@ -260,7 +264,7 @@ const GameCanvas: React.FC = () => {
                 if (room) {
                     ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.strokeRect(room.x, room.y, room.w, room.h);
                     // @ts-ignore
-                    if (GameStore.editor.activeTool !== 'camera') drawResizeHandle(ctx, room.x, room.y, room.w, room.h);
+                    if (GameStore.editor.activeTool !== 'camera') drawResizeHandles(ctx, room.x, room.y, room.w, room.h);
                 }
             }
             if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
@@ -268,7 +272,7 @@ const GameCanvas: React.FC = () => {
                 if (furn) { ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 2; ctx.strokeRect(furn.x, furn.y, furn.w, furn.h); }
             }
 
-            // 预览框 (Ghost) ...
+            // 预览框 (Ghost)
             if (GameStore.editor.previewPos) {
                 const { x, y } = GameStore.editor.previewPos;
                 ctx.save(); ctx.globalAlpha = 0.8;
@@ -286,8 +290,8 @@ const GameCanvas: React.FC = () => {
                 }
                 ctx.restore();
             }
-            // 框选预览 ...
-            if ((GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) && isPickingUp.current) {
+            // 框选预览
+            if ((GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) && isDraggingObject.current) {
                 const d = GameStore.editor.drawingFloor || GameStore.editor.drawingPlot;
                 if (d) {
                     const x = Math.min(d.startX, d.currX); const y = Math.min(d.startY, d.currY);
@@ -307,7 +311,6 @@ const GameCanvas: React.FC = () => {
         });
         
         renderSims.forEach(sim => {
-            // [修复] 使用 Math.floor 防止亚像素渲染导致的抖动
             const renderX = Math.floor(sim.pos.x); 
             const renderY = Math.floor(sim.pos.y);
             
@@ -316,36 +319,17 @@ const GameCanvas: React.FC = () => {
             
             // 选中特效
             if (GameStore.selectedSimId === sim.id) {
-                // 内圈
                 ctx.fillStyle = '#39ff14';
-                ctx.beginPath();
-                ctx.ellipse(0, 5, 12, 6, 0, 0, Math.PI * 2);
-                ctx.fill();
-
-                // 外圈扩散
+                ctx.beginPath(); ctx.ellipse(0, 5, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
                 const rippleScale = (Date.now() % 1000) / 1000;
-                ctx.globalAlpha = (1 - rippleScale) * 0.6;
-                ctx.strokeStyle = '#39ff14';
-                ctx.lineWidth = 3 / zoom;
-                ctx.beginPath();
-                ctx.ellipse(0, 5, 10 + rippleScale * 15, 5 + rippleScale * 7, 0, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.globalAlpha = (1 - rippleScale) * 0.6; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 3 / zoom;
+                ctx.beginPath(); ctx.ellipse(0, 5, 10 + rippleScale * 15, 5 + rippleScale * 7, 0, 0, Math.PI * 2); ctx.stroke();
                 ctx.globalAlpha = 1.0;
-
-                // 悬浮箭头
                 const floatY = -65 + Math.sin(Date.now() / 150) * 4;
-                ctx.fillStyle = '#39ff14';
-                ctx.beginPath();
-                ctx.moveTo(0, floatY);
-                ctx.lineTo(-10, floatY - 12);
-                ctx.lineTo(10, floatY - 12);
-                ctx.closePath();
-                ctx.fill();
+                ctx.fillStyle = '#39ff14'; ctx.beginPath(); ctx.moveTo(0, floatY); ctx.lineTo(-10, floatY - 12); ctx.lineTo(10, floatY - 12); ctx.closePath(); ctx.fill();
             } else {
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
-                ctx.beginPath(); 
-                ctx.ellipse(0, 5, 10, 4, 0, 0, Math.PI * 2); 
-                ctx.fill();
+                ctx.beginPath(); ctx.ellipse(0, 5, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
             }
             // @ts-ignore
             const ageConfig = AGE_CONFIG[sim.ageStage] || AGE_CONFIG.Adult;
@@ -437,6 +421,24 @@ const GameCanvas: React.FC = () => {
         lastMousePos.current = { x: e.clientX, y: e.clientY };
         dragStartMousePos.current = { x: e.clientX, y: e.clientY };
 
+        // [New] 如果正处于 "PickUp" 状态 (吸附拖拽中)，这次点击意味着"放置"
+        if (isStickyDragging.current) {
+            GameStore.editor.isDragging = false;
+            const finalPos = GameStore.editor.previewPos || {x:0, y:0};
+
+            // 执行放置逻辑
+            if (GameStore.editor.placingTemplateId) GameStore.placePlot(finalPos.x, finalPos.y);
+            else if (GameStore.editor.placingFurniture) GameStore.placeFurniture(finalPos.x, finalPos.y);
+            else if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
+            else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
+            else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
+            
+            isStickyDragging.current = false;
+            isDraggingObject.current = false;
+            renderStaticLayer();
+            return;
+        }
+
         if (GameStore.editor.mode === 'none') {
             isDraggingCamera.current = true;
             if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
@@ -447,7 +449,6 @@ const GameCanvas: React.FC = () => {
         const activeTool = GameStore.editor.activeTool || 'select';
 
         if (GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture || GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) {
-            isPickingUp.current = true;
             isDraggingObject.current = true;
             if (GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) {
                 const gridSnapX = Math.round(worldX / 50) * 50; const gridSnapY = Math.round(worldY / 50) * 50;
@@ -465,60 +466,74 @@ const GameCanvas: React.FC = () => {
 
         if (activeTool === 'select') {
             const handleSize = 20 / zoom; 
-            let targetFound = false;
-
+            
+            // Check Resize Handles first (4 corners)
+            // [Fix] Explicitly typing resizeTarget to resolve TS error
+            let resizeTarget: { x: number, y: number, w: number, h: number } | null = null;
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
-                if (plot) {
-                    const w = plot.width || 300; const h = plot.height || 300;
-                    if (worldX >= plot.x + w - handleSize && worldX <= plot.x + w + handleSize && worldY >= plot.y + h - handleSize && worldY <= plot.y + h + handleSize) {
-                        isResizing.current = true; isDraggingObject.current = true; targetFound = true;
-                    }
-                }
+                if (plot) resizeTarget = { x: plot.x, y: plot.y, w: plot.width || 300, h: plot.height || 300 };
             } else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                 const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
-                if (room) {
-                    if (worldX >= room.x + room.w - handleSize && worldX <= room.x + room.w + handleSize && worldY >= room.y + room.h - handleSize && worldY <= room.y + room.h + handleSize) {
-                        isResizing.current = true; isDraggingObject.current = true; targetFound = true;
-                    }
+                if (room) resizeTarget = { x: room.x, y: room.y, w: room.w, h: room.h };
+            }
+
+            if (resizeTarget) {
+                const { x, y, w, h } = resizeTarget;
+                const half = handleSize / 2;
+                // Check 4 corners
+                if (Math.abs(worldX - (x)) < half && Math.abs(worldY - (y)) < half) activeResizeHandle.current = 'nw';
+                else if (Math.abs(worldX - (x + w)) < half && Math.abs(worldY - (y)) < half) activeResizeHandle.current = 'ne';
+                else if (Math.abs(worldX - (x)) < half && Math.abs(worldY - (y + h)) < half) activeResizeHandle.current = 'sw';
+                else if (Math.abs(worldX - (x + w)) < half && Math.abs(worldY - (y + h)) < half) activeResizeHandle.current = 'se';
+
+                if (activeResizeHandle.current) {
+                    isResizing.current = true;
+                    resizeStartRect.current = { x, y, w, h };
+                    isDraggingObject.current = true;
+                    return;
                 }
             }
 
-            if (targetFound) return;
-
+            // Hit Test for Selection
             let hitFound = false;
+            let hitObj: any = null;
+            let hitType = '';
+
             if (GameStore.editor.mode === 'plot') {
                 const clickedRoom = GameStore.rooms.find(r => worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h);
                 if (clickedRoom) {
                     const plot = GameStore.worldLayout.find(p => clickedRoom.id.startsWith(p.id + '_'));
-                    if (plot) {
-                        GameStore.editor.selectedPlotId = plot.id; GameStore.editor.isDragging = true; isPickingUp.current = true; isDraggingObject.current = true;
-                        GameStore.editor.dragOffset = { x: worldX - plot.x, y: worldY - plot.y }; GameStore.editor.previewPos = { x: plot.x, y: plot.y }; dragStartPos.current = { x: plot.x, y: plot.y };
-                        hitFound = true;
-                    }
+                    if (plot) { hitObj = plot; hitType = 'plot'; }
                 }
             } else if (GameStore.editor.mode === 'furniture') {
                 const clickedFurn = [...GameStore.furniture].reverse().find(f => worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h);
-                if (clickedFurn) {
-                    GameStore.editor.selectedFurnitureId = clickedFurn.id; GameStore.editor.isDragging = true; isPickingUp.current = true; isDraggingObject.current = true;
-                    GameStore.editor.dragOffset = { x: worldX - clickedFurn.x, y: worldY - clickedFurn.y }; GameStore.editor.previewPos = { x: clickedFurn.x, y: clickedFurn.y }; dragStartPos.current = { x: clickedFurn.x, y: clickedFurn.y };
-                    hitFound = true;
-                }
+                if (clickedFurn) { hitObj = clickedFurn; hitType = 'furniture'; }
             } else if (GameStore.editor.mode === 'floor') {
                 const clickedRoom = [...GameStore.rooms].reverse().find(r => worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h);
-                if (clickedRoom) {
-                    GameStore.editor.selectedRoomId = clickedRoom.id; GameStore.editor.isDragging = true; isPickingUp.current = true; isDraggingObject.current = true;
-                    GameStore.editor.dragOffset = { x: worldX - clickedRoom.x, y: worldY - clickedRoom.y }; GameStore.editor.previewPos = { x: clickedRoom.x, y: clickedRoom.y }; dragStartPos.current = { x: clickedRoom.x, y: clickedRoom.y };
-                    hitFound = true;
-                }
+                if (clickedRoom) { hitObj = clickedRoom; hitType = 'room'; }
             }
 
-            if (hitFound) {
-                GameStore.notify();
+            if (hitObj) {
+                // Select Logic
+                if (hitType === 'plot') GameStore.editor.selectedPlotId = hitObj.id;
+                else if (hitType === 'furniture') GameStore.editor.selectedFurnitureId = hitObj.id;
+                else if (hitType === 'room') GameStore.editor.selectedRoomId = hitObj.id;
+                
+                // Initialize Dragging State (for "Pickup" or standard drag)
+                GameStore.editor.isDragging = true;
+                isDraggingObject.current = true;
+                GameStore.editor.dragOffset = { x: worldX - hitObj.x, y: worldY - hitObj.y };
+                GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y };
+                dragStartPos.current = { x: hitObj.x, y: hitObj.y };
+                
+                // Note: We don't set isStickyDragging here yet. 
+                // We decide if it's sticky (click) or drag (hold) in MouseUp.
+                hitFound = true;
             } else {
                 GameStore.editor.selectedPlotId = null; GameStore.editor.selectedFurnitureId = null; GameStore.editor.selectedRoomId = null;
-                GameStore.notify();
             }
+            GameStore.notify();
             return;
         }
     };
@@ -530,8 +545,7 @@ const GameCanvas: React.FC = () => {
         const mouseX = e.clientX / zoom + cameraRef.current.x;
         const mouseY = e.clientY / zoom + cameraRef.current.y;
 
-
-
+        // 1. Camera Pan
         if (isDraggingCamera.current) {
             isCameraLocked.current = false;
             const targetX = cameraRef.current.x - dx;
@@ -542,43 +556,109 @@ const GameCanvas: React.FC = () => {
             return;
         }
 
-        if (isResizing.current) {
+        // 2. Resize Logic (4 Corners)
+        if (isResizing.current && activeResizeHandle.current) {
             const snapSize = 50;
+            const startR = resizeStartRect.current;
+            let newRect = { ...startR };
+            
+            // Calculate total delta from start
+            const totalDx = mouseX - (dragStartMousePos.current.x / zoom + cameraRef.current.x);
+            const totalDy = mouseY - (dragStartMousePos.current.y / zoom + cameraRef.current.y);
+            // Wait, simpler to just use current mouseX relative to object start
+            
+            // Based on handle, update rect
+            if (activeResizeHandle.current === 'se') {
+                newRect.w = Math.max(50, mouseX - startR.x);
+                newRect.h = Math.max(50, mouseY - startR.y);
+            } else if (activeResizeHandle.current === 'sw') {
+                newRect.w = Math.max(50, (startR.x + startR.w) - mouseX);
+                newRect.h = Math.max(50, mouseY - startR.y);
+                newRect.x = startR.x + startR.w - newRect.w;
+            } else if (activeResizeHandle.current === 'ne') {
+                newRect.w = Math.max(50, mouseX - startR.x);
+                newRect.h = Math.max(50, (startR.y + startR.h) - mouseY);
+                newRect.y = startR.y + startR.h - newRect.h;
+            } else if (activeResizeHandle.current === 'nw') {
+                newRect.w = Math.max(50, (startR.x + startR.w) - mouseX);
+                newRect.h = Math.max(50, (startR.y + startR.h) - mouseY);
+                newRect.x = startR.x + startR.w - newRect.w;
+                newRect.y = startR.y + startR.h - newRect.h;
+            }
+
+            // Snap
+            newRect.w = Math.round(newRect.w / snapSize) * snapSize;
+            newRect.h = Math.round(newRect.h / snapSize) * snapSize;
+            if (activeResizeHandle.current.includes('w')) newRect.x = startR.x + startR.w - newRect.w;
+            if (activeResizeHandle.current.includes('n')) newRect.y = startR.y + startR.h - newRect.h;
+
+            // Apply Change
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                 const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
-                if (plot) {
-                    let newW = mouseX - plot.x; let newH = mouseY - plot.y;
-                    newW = Math.max(50, Math.round(newW / snapSize) * snapSize); newH = Math.max(50, Math.round(newH / snapSize) * snapSize);
-                    plot.width = newW; plot.height = newH;
+                if (plot) { 
+                    plot.x = newRect.x; plot.y = newRect.y; plot.width = newRect.w; plot.height = newRect.h; 
+                    // Update linked base room size if exists
                     const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
-                    if (baseRoom) { baseRoom.w = newW; baseRoom.h = newH; }
-                    GameStore.initIndex(); GameStore.notify();
+                    if (baseRoom) { baseRoom.x = newRect.x; baseRoom.y = newRect.y; baseRoom.w = newRect.w; baseRoom.h = newRect.h; }
                 }
             } else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
                 const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
-                if (room) {
-                    let newW = mouseX - room.x; let newH = mouseY - room.y;
-                    newW = Math.max(50, Math.round(newW / snapSize) * snapSize); newH = Math.max(50, Math.round(newH / snapSize) * snapSize);
-                    room.w = newW; room.h = newH;
-                    GameStore.initIndex(); GameStore.notify();
-                }
+                if (room) { room.x = newRect.x; room.y = newRect.y; room.w = newRect.w; room.h = newRect.h; }
             }
+            
+            GameStore.initIndex(); GameStore.notify();
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             return;
         }
 
-        if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor && isPickingUp.current) {
+        // 3. Drawing Box (Floor/Plot)
+        if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor && isDraggingObject.current) {
             const gridX = Math.round(mouseX / 50) * 50; const gridY = Math.round(mouseY / 50) * 50;
             GameStore.editor.drawingFloor.currX = gridX; GameStore.editor.drawingFloor.currY = gridY;
-        } else if (GameStore.editor.mode === 'plot' && GameStore.editor.drawingPlot && isPickingUp.current) {
+        } else if (GameStore.editor.mode === 'plot' && GameStore.editor.drawingPlot && isDraggingObject.current) {
             const gridX = Math.round(mouseX / 50) * 50; const gridY = Math.round(mouseY / 50) * 50;
             GameStore.editor.drawingPlot.currX = gridX; GameStore.editor.drawingPlot.currY = gridY;
-        } else if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
+        } 
+        
+        // 4. Moving Object (Drag or Sticky)
+        else if (GameStore.editor.mode !== 'none' && (GameStore.editor.isDragging || isStickyDragging.current)) {
             const gridSize = 10; 
             const rawX = mouseX - GameStore.editor.dragOffset.x; const rawY = mouseY - GameStore.editor.dragOffset.y;
             const newX = Math.round(rawX / gridSize) * gridSize; const newY = Math.round(rawY / gridSize) * gridSize;
             GameStore.editor.previewPos = { x: newX, y: newY };
-        } else if (GameStore.editor.mode === 'none') {
+        } 
+        
+        // 5. Hover Effects (Editor Mode)
+        else if (GameStore.editor.mode !== 'none' && !isDraggingObject.current) {
+            const handleSize = 15 / zoom;
+            // [Fix] Explicitly typing resizeTarget to resolve TS error
+            let resizeTarget: { x: number, y: number, w: number, h: number } | null = null;
+            if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
+                const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
+                if (plot) resizeTarget = { x: plot.x, y: plot.y, w: plot.width || 300, h: plot.height || 300 };
+            } else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
+                const room = GameStore.rooms.find(r => r.id === GameStore.editor.selectedRoomId);
+                if (room) resizeTarget = { x: room.x, y: room.y, w: room.w, h: room.h };
+            }
+
+            if (resizeTarget && canvasRef.current) {
+                const { x, y, w, h } = resizeTarget;
+                const half = handleSize;
+                // Cursor Logic
+                if ((Math.abs(mouseX - x) < half && Math.abs(mouseY - y) < half) || (Math.abs(mouseX - (x + w)) < half && Math.abs(mouseY - (y + h)) < half)) {
+                    canvasRef.current.style.cursor = 'nwse-resize';
+                } else if ((Math.abs(mouseX - (x + w)) < half && Math.abs(mouseY - y) < half) || (Math.abs(mouseX - x) < half && Math.abs(mouseY - (y + h)) < half)) {
+                    canvasRef.current.style.cursor = 'nesw-resize';
+                } else {
+                    canvasRef.current.style.cursor = 'default';
+                }
+            } else if (canvasRef.current) {
+                canvasRef.current.style.cursor = 'default';
+            }
+        }
+        
+        // 6. Hover Effects (Play Mode)
+        else if (GameStore.editor.mode === 'none') {
             const hit = GameStore.worldGrid.queryHit(mouseX, mouseY);
             if (hit && hit.type === 'furniture') { hoveredTarget.current = hit.ref; if(canvasRef.current) canvasRef.current.style.cursor = 'pointer'; } 
             else { hoveredTarget.current = null; if(canvasRef.current) canvasRef.current.style.cursor = 'default'; }
@@ -589,67 +669,74 @@ const GameCanvas: React.FC = () => {
 
     const handleMouseUp = (e: React.MouseEvent) => {
         isDraggingObject.current = false;
-        if (canvasRef.current) canvasRef.current.style.cursor = 'default';
-
+        
         const dragDist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));
-        // [修复] 放宽点击判定范围，从 5px 增加到 15px，防止稍微手抖就无法选中
         const isClick = dragDist < 10;
 
+        // Camera Drag End
         if (isDraggingCamera.current) {
             isDraggingCamera.current = false;
-            // 只有当不是点击（即发生了长距离拖拽）时，才直接返回
-            // 如果是点击（isClick 为 true），则继续向下执行去尝试选中市民
+            if (canvasRef.current) canvasRef.current.style.cursor = 'default';
             if (!isClick) return; 
         }
 
+        // Resize End
         if (isResizing.current) {
             isResizing.current = false;
+            activeResizeHandle.current = null;
             // @ts-ignore
             GameStore.editor.finalizeResize();
             return;
         }
 
-        if (isPickingUp.current) {
+        // Drawing Box End
+        if (GameStore.editor.mode !== 'none' && (GameStore.editor.drawingFloor || GameStore.editor.drawingPlot)) {
             if (GameStore.editor.mode === 'floor' && GameStore.editor.drawingFloor) {
-                isPickingUp.current = false;
                 const { startX, startY, currX, currY, pattern, color, label, hasWall } = GameStore.editor.drawingFloor;
                 const x = Math.min(startX, currX); const y = Math.min(startY, currY);
                 const w = Math.abs(currX - startX); const h = Math.abs(currY - startY);
                 if (w >= 50 && h >= 50) GameStore.createCustomRoom({x, y, w, h}, pattern, color, label, hasWall);
-                GameStore.editor.drawingFloor = null; GameStore.notify(); renderStaticLayer();
-                return;
+                GameStore.editor.drawingFloor = null;
             }
             if (GameStore.editor.mode === 'plot' && GameStore.editor.drawingPlot) {
-                isPickingUp.current = false;
                 const { startX, startY, currX, currY, templateId } = GameStore.editor.drawingPlot;
                 const x = Math.min(startX, currX); const y = Math.min(startY, currY);
                 const w = Math.abs(currX - startX); const h = Math.abs(currY - startY);
                 if (w >= 50 && h >= 50) GameStore.createCustomPlot({x, y, w, h}, templateId);
-                GameStore.editor.drawingPlot = null; GameStore.notify(); renderStaticLayer();
-                return;
+                GameStore.editor.drawingPlot = null; 
             }
+            GameStore.notify(); renderStaticLayer();
+            return;
         }
 
+        // [New] Sticky Drag Logic
         if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
-            if (isPickingUp.current) {
-                if (!isClick || GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture) {
-                    GameStore.editor.isDragging = false;
-                    const finalPos = GameStore.editor.previewPos || {x:0, y:0};
+            // Case 1: Just clicked (Selection -> Pickup)
+            // If it was a clean click on an object, we ENTER sticky drag mode
+            if (isClick && !isStickyDragging.current && !GameStore.editor.placingTemplateId && !GameStore.editor.placingFurniture) {
+                isStickyDragging.current = true;
+                // Keep GameStore.editor.isDragging = true
+                return; 
+            }
 
-                    if (GameStore.editor.placingTemplateId) GameStore.placePlot(finalPos.x, finalPos.y);
-                    else if (GameStore.editor.placingFurniture) GameStore.placeFurniture(finalPos.x, finalPos.y);
-                    else if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
-                    else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
-                    else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
-                    
-                    renderStaticLayer();
-                } 
-                isPickingUp.current = false;
+            // Case 2: Held drag release
+            // If we were holding mouse (not a click), we finish move immediately
+            if (!isClick && !isStickyDragging.current) {
+                GameStore.editor.isDragging = false;
+                const finalPos = GameStore.editor.previewPos || {x:0, y:0};
+                
+                if (GameStore.editor.placingTemplateId) GameStore.placePlot(finalPos.x, finalPos.y);
+                else if (GameStore.editor.placingFurniture) GameStore.placeFurniture(finalPos.x, finalPos.y);
+                else if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
+                else if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
+                else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
+                
+                renderStaticLayer();
             }
             return;
         }
 
-        // [修复] Life Mode: Select Sim
+        // Play Mode: Select Sim
         if (e.button === 0 && isClick && GameStore.editor.mode === 'none') {
             const zoom = cameraRef.current.zoom;
             const worldX = e.clientX / zoom + cameraRef.current.x;
@@ -666,6 +753,8 @@ const GameCanvas: React.FC = () => {
             else { GameStore.selectedSimId = null; }
             GameStore.notify();
         }
+        
+        if (canvasRef.current) canvasRef.current.style.cursor = 'default';
     };
 
     const handleWheel = (e: React.WheelEvent) => {
@@ -676,17 +765,12 @@ const GameCanvas: React.FC = () => {
         const newZoom = Math.min(Math.max(oldZoom - e.deltaY * zoomSpeed, minZoom), maxZoom);
         
         const rect = canvasRef.current!.getBoundingClientRect();
-
-        // [修复] 关键修改开始：决定缩放的锚点 (Pivot)
         let mouseX, mouseY;
 
         if (GameStore.selectedSimId && isCameraLocked.current) {
-            // 如果处于锁定跟随状态，强制以“屏幕中心”为缩放点
-            // 这样缩放时，被跟随的市民会稳稳地待在画面中间
             mouseX = rect.width / 2;
             mouseY = rect.height / 2;
         } else {
-            // 否则（自由模式），以“鼠标指针”为缩放点
             mouseX = e.clientX - rect.left;
             mouseY = e.clientY - rect.top;
         }
@@ -717,6 +801,20 @@ const GameCanvas: React.FC = () => {
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
             />
+            {/* Editor Instruction Overlay */}
+            {GameStore.editor.mode !== 'none' && (
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none bg-black/60 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-lg border border-white/10 shadow-xl flex flex-col items-center gap-1 z-20">
+                    <div className="font-bold text-warning border-b border-white/20 pb-1 mb-1 w-full text-center">
+                        编辑模式指引
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px]">
+                        <div className="flex items-center gap-2"><span className="text-xl">🖱️</span> <span>单击物体: 拿起 / 再次点击放置</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">🤏</span> <span>拖拽四角: 调整物体大小</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">✋</span> <span>空格/漫游: 拖拽移动视角</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">⌨️</span> <span>Delete键: 删除选中物体</span></div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

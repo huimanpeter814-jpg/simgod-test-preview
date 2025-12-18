@@ -137,11 +137,15 @@ export interface EditorState {
   selectedFurnitureId: string | null;
   selectedRoomId: string | null;
   
-  isDragging: boolean;
+  isDragging: boolean; // 用于指示是否正在预览移动（渲染Ghost）
   dragOffset: { x: number, y: number };
   
   placingTemplateId: string | null;
   placingFurniture: Partial<Furniture> | null;
+
+  // [新增] 记录当前正在进行的操作状态，用于UI交互（如 Click-Move-Click）
+  interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing';
+  resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null;
 
   drawingPlot: {
       startX: number;
@@ -166,7 +170,7 @@ export interface EditorState {
 }
 
 export interface EditorAction {
-    type: 'add' | 'remove' | 'move' | 'modify';
+    type: 'add' | 'remove' | 'move' | 'modify' | 'resize';
     entityType: 'plot' | 'furniture' | 'room';
     id: string;
     prevData?: any; 
