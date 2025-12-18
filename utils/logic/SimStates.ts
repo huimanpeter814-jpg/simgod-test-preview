@@ -203,46 +203,56 @@ export class CommutingState extends BaseState {
     }
 
     private findWorkstation(sim: Sim): Furniture | null {
-        // 获取职业所需标签，默认为 'work'
-        const requiredTags = sim.job.requiredTags || ['work']; 
+        const requiredTags = sim.job.requiredTags || ['work'];
 
-        // 1. 【分配制】优先查找是否有专门预留给自己的工位
-        const reserved = GameStore.furniture.find(f => f.reserved === sim.id);
-        if (reserved && hasRequiredTags(reserved, requiredTags)) {
-            return reserved;
-        }
-
-        // 2. 【地皮制】如果在公司，**必须**在公司范围内找
+        // 1. 【公司员工】如果有固定工作地点，严禁去别处！
         if (sim.workplaceId) {
-            const plotFurniture = GameStore.furniture.filter(f => f.id.startsWith(sim.workplaceId!));
+            // 直接从索引里取，不需要遍历全图！
+            const plotFurniture = GameStore.furnitureByPlot.get(sim.workplaceId) || [];
+            
+            // 筛选符合职业需求的家具
             const candidates = plotFurniture.filter(f => hasRequiredTags(f, requiredTags));
             
-            // 过滤掉被别人占用的
+            // 筛选未被占用的
             const free = candidates.filter(f => !this.isOccupied(f, sim.id));
-            
+
             if (free.length > 0) return this.selectBest(sim, free);
-            
-            // ⚠️ [修复] 如果有固定工作地点但在地点内找不到家具，直接返回 null，
-            // 禁止回退到全图搜索，否则护工会去别人家睡床。
-            return null;
+
+            // ❌ 如果公司里没位置，直接返回 null。
+            // 绝对不要回退到全图搜索，否则他就会去隔壁老王家上班。
+            // 可以在这里加个气泡提示
+            if (Math.random() < 0.1) sim.say("公司没位置了...", 'bad');
+            return null; 
         }
 
-        // 3. 【就近制】全图搜索（仅适用于自由职业或无固定工作地点的职业）
-        // 只有当 sim.workplaceId 为空时才执行
-        const allCandidates = GameStore.furniture.filter(f => hasRequiredTags(f, requiredTags));
-        const allFree = allCandidates.filter(f => {
-            // 1. 如果被占用，跳过
-            if (this.isOccupied(f, sim.id)) return false;
-            
-            // 2. 核心修正：如果家具属于某个家 (homeId存在)
-            if (f.homeId) {
-                // 只有当这个家是市民自己的家时，才可以使用 (比如SOHO办公)
-                // 否则视为私闯民宅，不可作为工位
-                if (f.homeId !== sim.homeId) return false;
-            }
-            
-            return true;
+        // 2. 【自由职业/无固定地点】
+        // 这种情况下，我们只允许在“自己家”或者“公共办公场所（如图书馆/网吧）”寻找
+        
+        let validCandidates: Furniture[] = [];
+
+        // A. 在自己家找 (SOHO)
+        if (sim.homeId) {
+            // 需要你在 GameStore.housingUnits 里反查属于该 housingUnit 的家具
+            // 或者简单点，利用 GameStore.furniture 的 homeId 属性 (如果有的话)
+            const homeFurniture = GameStore.furniture.filter(f => f.homeId === sim.homeId);
+            validCandidates = validCandidates.concat(homeFurniture.filter(f => hasRequiredTags(f, requiredTags)));
+        }
+
+        // B. 在公共商业区找 (网吧/咖啡厅)
+        // 我们可以定义哪些 Plot 是公共办公区
+        const publicWorkPlots = GameStore.worldLayout.filter(p => 
+            p.templateId === 'netcafe' || 
+            p.templateId === 'library' || 
+            p.customName?.includes('网咖')
+        );
+
+        publicWorkPlots.forEach(plot => {
+            const furnitureInPlot = GameStore.furnitureByPlot.get(plot.id) || [];
+            validCandidates = validCandidates.concat(furnitureInPlot.filter(f => hasRequiredTags(f, requiredTags)));
         });
+
+        // 过滤占用
+        const allFree = validCandidates.filter(f => !this.isOccupied(f, sim.id));
 
         if (allFree.length > 0) return this.selectBest(sim, allFree);
 

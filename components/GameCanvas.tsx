@@ -122,6 +122,17 @@ const GameCanvas: React.FC = () => {
 
     const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
     const [editorRefresh, setEditorRefresh] = useState(0);
+    // [新增] 指引显示状态控制
+    const [showInstructions, setShowInstructions] = useState(true);
+    const prevModeRef = useRef(GameStore.editor.mode);
+
+    // [新增] 监听模式切换，重新进入编辑模式时重置指引显示
+    useEffect(() => {
+        if (prevModeRef.current === 'none' && GameStore.editor.mode !== 'none') {
+            setShowInstructions(true);
+        }
+        prevModeRef.current = GameStore.editor.mode;
+    }, [editorRefresh]);
 
     // 限制相机边界
     const clampCamera = (targetX: number, targetY: number, currentZoom: number) => {
@@ -421,8 +432,11 @@ const GameCanvas: React.FC = () => {
         lastMousePos.current = { x: e.clientX, y: e.clientY };
         dragStartMousePos.current = { x: e.clientX, y: e.clientY };
 
+        // [修复] 判断是否处于放置新物品的状态
+        const isPlacingNew = !!(GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture);
+
         // [New] 如果正处于 "PickUp" 状态 (吸附拖拽中)，这次点击意味着"放置"
-        if (isStickyDragging.current) {
+        if (isStickyDragging.current || isPlacingNew) {
             GameStore.editor.isDragging = false;
             const finalPos = GameStore.editor.previewPos || {x:0, y:0};
 
@@ -804,6 +818,14 @@ const GameCanvas: React.FC = () => {
             {/* Editor Instruction Overlay */}
             {GameStore.editor.mode !== 'none' && (
                 <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none bg-black/60 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-lg border border-white/10 shadow-xl flex flex-col items-center gap-1 z-20">
+                    {/* [新增] 关闭按钮 */}
+                    <button 
+                        onClick={() => setShowInstructions(false)}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] pointer-events-auto shadow-md transition-colors border border-white/20 z-30"
+                        title="关闭指引"
+                    >
+                        ✕
+                    </button>
                     <div className="font-bold text-warning border-b border-white/20 pb-1 mb-1 w-full text-center">
                         编辑模式指引
                     </div>

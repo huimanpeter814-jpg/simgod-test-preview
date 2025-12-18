@@ -42,6 +42,7 @@ export class GameStore {
     // Toast Notification State
     static toastMessage: string | null = null;
     static toastTimer: any = null;
+    
 
     static subscribe(cb: () => void) {
         this.listeners.push(cb);
@@ -266,7 +267,15 @@ export class GameStore {
             const absX = f.x + plot.x;
             const absY = f.y + plot.y;
             const ownerUnit = plotUnits.find(u => absX >= u.x && absX < u.maxX && absY >= u.y && absY < u.maxY);
-            this.furniture.push({ ...f, id: `${plot.id}_${f.id}`, x: absX, y: absY, homeId: ownerUnit ? ownerUnit.id : undefined });
+            this.furniture.push({ 
+                ...f, 
+                id: `${plot.id}_${f.id}`, 
+                x: absX, 
+                y: absY, 
+                homeId: ownerUnit ? ownerUnit.id : undefined,
+                // 🆕 建议在 types.ts 的 Furniture 接口里加个可选的 plotId
+                // plotId: plot.id 
+            });
         });
     }
 
@@ -368,18 +377,41 @@ export class GameStore {
     static removeFurniture(id: string) { this.editor.removeFurniture(id); }
     static changePlotTemplate(plotId: string, templateId: string) { this.editor.changePlotTemplate(plotId, templateId); }
     static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) { this.editor.finalizeMove(type, id, startPos); }
+    // 🆕 新增：地皮家具索引 (Plot ID -> Furniture List)
+    static furnitureByPlot: Map<string, Furniture[]> = new Map();
 
     static initIndex() {
         this.furnitureIndex.clear();
         this.worldGrid.clear();
-        this.pathFinder.clear(); 
+        this.pathFinder.clear();
+        this.furnitureByPlot.clear(); // 清空旧索引
 
         const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole', 'grass', 'concrete', 'tile', 'wood', 'run_track', 'water'];
 
         this.furniture.forEach(f => {
+            // 1. 原有逻辑：按功能索引
             if (!this.furnitureIndex.has(f.utility)) { this.furnitureIndex.set(f.utility, []); }
             this.furnitureIndex.get(f.utility)!.push(f);
+            
+            // 2. 原有逻辑：空间哈希
             this.worldGrid.insert({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, type: 'furniture', ref: f });
+
+            // 🆕 3. 新增逻辑：提取 plotId 并存入索引
+            // 假设家具ID格式为 "plotId_furnitureId" (你在 instantiatePlot 里是这么生成的)
+            // 我们通过字符串分割获取 plotId
+            const parts = f.id.split('_');
+            // 注意：因为 plotId 可能包含下划线（如 p_nw_1），我们需要一种更稳健的方式，
+            // 或者在 instantiatePlot 时给 Furniture 对象直接加上 plotId 属性（推荐）。
+            // 这里为了兼容现有数据，我们假设 ID 的前缀匹配：
+            // 更好的做法是：在 instantiatePlot 里给 furniture 加个 plotId 字段。
+            // 暂时用这种简易方式：找到包含这个家具的地皮
+            const ownerPlot = this.worldLayout.find(p => f.id.startsWith(p.id));
+            if (ownerPlot) {
+                if (!this.furnitureByPlot.has(ownerPlot.id)) {
+                    this.furnitureByPlot.set(ownerPlot.id, []);
+                }
+                this.furnitureByPlot.get(ownerPlot.id)!.push(f);
+            }
 
             const padding = 4;
             const isPassable = f.pixelPattern && passableTypes.some(t => f.pixelPattern?.includes(t));
