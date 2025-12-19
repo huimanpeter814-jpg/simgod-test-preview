@@ -189,7 +189,15 @@ export const EconomyLogic = {
     },
 
     earnMoney(sim: Sim, amount: number, source: string) {
+        // 🔒 [安全守卫] 严格禁止未成年人赚钱
+        // 婴儿、幼儿、儿童均不可获得收入
+        if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+            return;
+        }
+
         const earned = Math.floor(amount);
+        if (earned <= 0) return;
+
         sim.money += earned;
         sim.dailyIncome += earned; 
         GameStore.addLog(sim, `通过 ${source} 赚了 $${earned}`, 'money');

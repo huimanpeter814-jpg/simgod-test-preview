@@ -125,6 +125,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'gardening': {
         verb: '照料植物 🌿', duration: 60,
         onStart: (sim) => {
+            // [新增] 婴幼儿不能园艺
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("还不会种菜...", 'bad');
+                return false;
+            }
             if (sim.money < 5) { sim.say("买不起种子...", 'bad'); return false; }
             sim.money -= 5; // 种子成本
             return true;
@@ -143,6 +148,14 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
             // 成功收获
             const yieldAmount = Math.floor(2 + sim.skills.gardening * 0.1); 
+            
+            // [新增] 儿童园艺不卖钱
+            if (sim.ageStage === AgeStage.Child) {
+                sim.say("我种的菜长大了！🥬", 'act');
+                sim.addMemory("体验了种植的乐趣。", 'life');
+                return;
+            }
+
             const shouldSell = sim.money > 500 || sim.hasFreshIngredients;
             
             if (shouldSell) {
@@ -158,6 +171,14 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'fishing': {
         verb: '钓鱼 🎣', duration: 60,
+        onStart: (sim) => {
+            // [新增] 婴幼儿不能钓鱼
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("危险！", 'bad');
+                return false;
+            }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'fishing', 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(120);
@@ -169,6 +190,12 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 return;
             }
             if (Math.random() > (0.6 - sim.skills.fishing * 0.003)) {
+                // [新增] 儿童钓鱼不卖钱
+                if (sim.ageStage === AgeStage.Child) {
+                    sim.say("钓到鱼了！🐟", 'act');
+                    return;
+                }
+
                 const earned = 15 + sim.skills.fishing * 2 + Math.floor(Math.random()*20);
                 sim.earnMoney(earned, 'sell_fish');
                 sim.say("大鱼! 🐟", 'money');
@@ -182,6 +209,12 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '烹饪', duration: 90,
         getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
         onStart: (sim) => { 
+            // [新增] 婴幼儿不能烹饪
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("太高了...", 'bad');
+                return false;
+            }
+
             if (sim.hasFreshIngredients) {
                 sim.say("使用自家蔬菜 🥗", 'act');
                 sim.hasFreshIngredients = false; 
@@ -229,6 +262,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '绘画 🖌️', duration: 120,
         getDuration: (sim) => 120 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
         onStart: (sim) => {
+            // [新增] 婴幼儿不能绘画 (够不着)
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("够不着...", 'bad');
+                return false;
+            }
             if (sim.money < 20) { sim.say("买不起颜料...", 'bad'); return false; }
             sim.money -= 20; 
             return true;
@@ -244,6 +282,14 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 sim.say("画得像涂鸦... 🗑️", 'bad');
                 return; 
             }
+
+            // [新增] 儿童绘画不赚钱
+            if (sim.ageStage === AgeStage.Child) {
+                 sim.say("画好了！妈妈看！🎨", 'act');
+                 sim.addMemory("画了一幅画，感觉很开心。", 'achievement');
+                 return;
+            }
+
             let value = 30 + sim.skills.creativity * 3 + Math.random() * 50;
             if (sim.skills.creativity > 80 && Math.random() > 0.8) {
                 value *= 3; 
@@ -351,6 +397,13 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
 
         onFinish: (sim, obj) => {
             if (sim.isSideHustle && obj.label.includes('电脑')) {
+                // [新增] 严格禁止未成年人接私活赚钱
+                if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+                    sim.say("好玩！", 'act');
+                    sim.needs[NeedType.Fun] = 100;
+                    return;
+                }
+
                 const isWriting = sim.skills.creativity > sim.skills.coding;
                 if (isWriting) {
                     SkillLogic.gainExperience(sim, 'creativity', 0.6);
