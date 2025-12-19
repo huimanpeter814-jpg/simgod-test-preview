@@ -58,13 +58,32 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'buy_book': {
         verb: '买书', duration: 15,
         onStart: (sim, obj) => {
-            if (sim.money >= 60) { sim.buyItem(ITEMS.find((i: any) => i.id === 'book')); return true; }
+            if (sim.money >= 60) { 
+                // 复用 EconomyLogic.buyItem 来获得物品效果
+                // 注意：这里已经到了书架前，所以是合法的交互
+                sim.buyItem(ITEMS.find((i: any) => i.id === 'book')); 
+                return true; 
+            }
             sim.say("买不起...", 'bad'); return false;
         }
     },
     'buy_item': {
         verb: '购物 🛍️', duration: 15,
         onStart: (sim, obj) => {
+            // 🆕 优先检查是否有特定购买意图
+            if (sim.intendedShoppingItemId) {
+                const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
+                if (item) {
+                    if (sim.money < item.cost) { 
+                        sim.say("钱不够...", 'bad'); 
+                        sim.intendedShoppingItemId = undefined; // 清理意图
+                        return false; 
+                    }
+                    return true; // 资金充足，开始交互
+                }
+            }
+
+            // 没有特定意图，按家具标价购买通用物品（旧逻辑）
             const cost = obj.cost || 50; 
             if (sim.money < cost) {
                 sim.say("太贵了...", 'bad');
@@ -73,12 +92,40 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             return true;
         },
         onFinish: (sim, obj) => {
+            // 🆕 结算特定意图
+            if (sim.intendedShoppingItemId) {
+                const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
+                if (item) {
+                    sim.buyItem(item); // 真正扣款并获得效果
+                }
+                sim.intendedShoppingItemId = undefined; // 消费完成，清理
+                return;
+            }
+
+            // 通用结算
+            const cost = obj.cost || 50;
+            sim.money -= cost;
             sim.say("买买买! ✨", 'act');
             sim.needs[NeedType.Fun] += 20;
         }
     },
     'run': {
         verb: '健身', duration: 60,
+        onStart: (sim) => {
+            // 如果是买课意图，先扣钱
+            if (sim.intendedShoppingItemId === 'gym_pass') {
+                const item = ITEMS.find(i => i.id === 'gym_pass');
+                if (item && sim.money >= item.cost) {
+                    sim.buyItem(item); // 扣钱，加属性
+                    sim.intendedShoppingItemId = undefined;
+                    return true;
+                } else if (item) {
+                    sim.say("办不起卡...", 'bad');
+                    return false;
+                }
+            }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'athletics', 0.08 * f);
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');

@@ -58,25 +58,12 @@ export const InteractionSystem = {
      * 执行具体的物体交互逻辑
      */
     performInteractionLogic(sim: Sim, obj: Furniture) {
-        // 1. 扣钱逻辑
-        if (obj.cost) {
-            if (sim.money < obj.cost) {
-                sim.say("太贵了...", 'bad');
-                InteractionSystem.finishAction(sim);
-                return;
-            }
-            sim.money -= obj.cost;
-            sim.dailyExpense += obj.cost;
-            sim.dailyBudget -= obj.cost;
-            GameStore.addLog(sim, `消费: ${obj.label} -$${obj.cost}`, 'money');
-            sim.say(`买! -${obj.cost}`, 'money');
-            
-            // 购买物品的特殊效果
-            const itemDef = ITEMS.find(i => i.label === obj.label);
-            if (itemDef && itemDef.attribute) {
-                sim.buyItem(itemDef);
-            }
-        }
+        // [修改] 移除此处的自动扣款，改由 interactionRegistry 中的 onStart 处理
+        // 原因：购买特定物品（intendedShoppingItemId）和购买通用家具（obj.cost）逻辑不同，统一在 handler 里处理
+        /* if (obj.cost) {
+            ...
+        } 
+        */
 
         // 2. 获取交互处理器
         let handler: InteractionHandler | null = null;
@@ -94,6 +81,8 @@ export const InteractionSystem = {
         if (handler && handler.onStart) {
             const success = handler.onStart(sim, obj);
             if (!success) {
+                // 如果 onStart 失败（例如钱不够），直接清理意图并结束
+                sim.intendedShoppingItemId = undefined;
                 InteractionSystem.finishAction(sim);
                 return;
             }
@@ -168,6 +157,9 @@ export const InteractionSystem = {
         sim.path = [];
         sim.isSideHustle = false;
         sim.commuteTimer = 0;
+        
+        // 🆕 [修复] 清理购买意图，防止意外触发
+        sim.intendedShoppingItemId = undefined;
         
         // 4. 回归空闲
         sim.changeState(new IdleState());

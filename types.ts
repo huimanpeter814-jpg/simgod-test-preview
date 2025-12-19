@@ -326,6 +326,9 @@ export interface SimData {
   // 🆕 新增：版税收入与物品系统字段
   royalty?: { amount: number, daysLeft: number };
   hasFreshIngredients?: boolean;
+  
+  // 🆕 [修复] 购物意图：记录市民想买的物品ID，防止云购物
+  intendedShoppingItemId?: string;
 
   buffs: Buff[];
   mood: number;

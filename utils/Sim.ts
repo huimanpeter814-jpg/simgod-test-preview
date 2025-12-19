@@ -104,6 +104,9 @@ export class Sim {
     // 🆕 自由职业/物品相关
     royalty: { amount: number, daysLeft: number } = { amount: 0, daysLeft: 0 };
     hasFreshIngredients: boolean = false;
+    
+    // 🆕 购买意图缓存 (防止云购物)
+    intendedShoppingItemId?: string;
 
     schoolPerformance: number = 60; 
     hasLeftWorkToday: boolean = false;

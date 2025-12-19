@@ -5,7 +5,28 @@ import { SocialLogic } from './social';
 import { DecisionLogic } from './decision';
 import { CareerLogic } from './career';
 import { AgeStage } from '../../types';
-import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
+import { SkillLogic } from './SkillLogic';
+
+// 🆕 辅助函数：将 Item ID 映射到 Furniture Utility
+// 这让市民知道为了买某个东西，应该去哪种设施
+const getItemUtility = (itemId: string): string => {
+    switch(itemId) {
+        case 'drink': return 'buy_drink'; // 去售货机
+        case 'book': return 'buy_book';   // 去书店书架
+        case 'cinema_2d':
+        case 'cinema_3d': return 'cinema_3d'; // 去电影院
+        case 'gym_pass': return 'run'; // 去健身房 (跑步机)
+        case 'museum_ticket': return 'art'; // 去美术馆
+        case 'game_coin': return 'play'; // 去游戏厅
+        case 'gift_chocolates':
+        case 'cosmetic_set':
+        case 'fashion_mag':
+        case 'protein_powder':
+        case 'puzzle_game': 
+            return 'buy_item'; // 去通用商店货架
+        default: return 'buy_item';
+    }
+};
 
 export const EconomyLogic = {
     calculateDailyBudget(sim: Sim) {
@@ -103,7 +124,16 @@ export const EconomyLogic = {
         });
 
         if (bestItem) {
-            EconomyLogic.buyItem(sim, bestItem);
+            // 🔒 [修复] 不再直接调用 buyItem 进行“云购物”
+            // 1. 设置购买意图
+            sim.intendedShoppingItemId = bestItem.id;
+            
+            // 2. 找到对应的售卖设施
+            const targetUtility = getItemUtility(bestItem.id);
+            
+            // 3. 触发寻路决策
+            sim.say(`想去买${bestItem.label}...`, 'act');
+            DecisionLogic.findObject(sim, targetUtility);
         }
         
         CareerLogic.checkCareerSatisfaction(sim);
@@ -122,7 +152,6 @@ export const EconomyLogic = {
 
         if (item.skill) {
             let val = item.skillVal || 5;
-            // 🆕 使用 SkillLogic 处理购买物品获得的技能经验 (例如读书)
             SkillLogic.gainExperience(sim, item.skill, val);
             sim.say("📚 涨知识", 'act');
         }
@@ -145,7 +174,7 @@ export const EconomyLogic = {
         if (item.id === 'museum_ticket') {
              sim.say("买票去看展 🎨", 'act');
              sim.addBuff(BUFFS.art_inspired);
-             DecisionLogic.findObject(sim, 'art'); 
+             // 买完票直接去看展，如果当前就在美术馆，交互系统会自动处理接下来的动作
         }
 
         let logSuffix = "";
