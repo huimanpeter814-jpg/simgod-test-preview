@@ -92,8 +92,8 @@ const PLOT_FINANCE: PlotTemplate = {
     id: 'finance_center', width: 500, height: 400, type: 'work',
     rooms: [{ id: 'main', x: 5, y: 5, w: 490, h: 390, label: '金融中心', color: '#ced6e0', pixelPattern: 'tile', hasWall: true }],
     furniture: [
-        ...createGrid('desk_biz', 30, 30, 4, 3, 100, 80, { w: 80, h: 50, color: '#b2bec3', label: '办公桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk'] }),
-        { id: 'boss', x: 350, y: 300, w: 120, h: 60, color: '#2d3436', label: '总裁桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'boss_desk'] },
+        ...createGrid('desk_biz', 30, 30, 4, 3, 100, 80, { w: 80, h: 50, color: '#b2bec3', label: '办公桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'computer'] }),
+        { id: 'boss', x: 350, y: 300, w: 120, h: 60, color: '#2d3436', label: '总裁桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'boss_desk', 'computer'] },
         { id: 'sofa_rec', x: 30, y: 320, w: 100, h: 40, color: '#a29bfe', label: '接待区', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa'] },
     ]
 };
@@ -109,7 +109,7 @@ const PLOT_CREATIVE: PlotTemplate = {
 };
 
 // ==========================================
-// 3. 公共服务 (Public) - 补全学校等
+// 3. 公共服务 (Public)
 // ==========================================
 
 const PLOT_KINDERGARTEN: PlotTemplate = {
@@ -121,8 +121,9 @@ const PLOT_KINDERGARTEN: PlotTemplate = {
     furniture: [
         ...createGrid('crib', 310, 20, 1, 4, 0, 70, { w: 40, h: 40, color: '#fab1a0', label: '婴儿床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] }),
         { id: 'toys', x: 50, y: 50, w: 60, h: 60, color: '#fdcb6e', label: '积木区', utility: 'play_blocks', pixelPattern: 'rug_art', tags: ['play'] },
-        { id: 'slide', x: 150, y: 50, w: 60, h: 80, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'treadmill', tags: ['play'] }, // 暂用treadmill模拟长条物体
-        { id: 'teacher', x: 20, y: 250, w: 60, h: 30, color: '#a29bfe', label: '讲台', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] }
+        { id: 'slide', x: 150, y: 50, w: 60, h: 80, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'treadmill', tags: ['play'] }, 
+        // [修复] 幼师需要黑板，这里将讲台加上 blackboard 标签，或者假设是教学一体
+        { id: 'teacher', x: 20, y: 250, w: 60, h: 30, color: '#a29bfe', label: '讲台', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk', 'blackboard'] }
     ]
 };
 
@@ -167,7 +168,7 @@ const PLOT_HOSPITAL: PlotTemplate = {
         ...createGrid('doc', 20, 150, 1, 3, 0, 100, { w: 60, h: 40, color: '#fff', label: '诊室', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] }),
         ...createGrid('bed_h', 220, 20, 3, 2, 100, 120, { w: 60, h: 80, color: '#fff', label: '病床', utility: 'healing', pixelPattern: 'medical_bed', tags: ['medical_bed', 'bed'] }),
         { id: 'ct', x: 250, y: 350, w: 80, h: 100, color: '#b2bec3', label: 'CT机', utility: 'none', pixelPattern: 'scanner', tags: ['medical_device'] },
-        { id: 'desk_tech', x: 400, y: 350, w: 60, h: 40, color: '#fff', label: '操作台', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk'] }
+        { id: 'desk_tech', x: 400, y: 350, w: 60, h: 40, color: '#fff', label: '操作台', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk', 'computer'] }
     ]
 };
 
@@ -183,7 +184,7 @@ const PLOT_LIBRARY: PlotTemplate = {
 };
 
 // ==========================================
-// 4. 商业类 (Commercial) - 补全餐厅/电影院等
+// 4. 商业类 (Commercial)
 // ==========================================
 
 const PLOT_RESTAURANT: PlotTemplate = {
@@ -196,7 +197,9 @@ const PLOT_RESTAURANT: PlotTemplate = {
         ...createGrid('table', 20, 20, 3, 3, 80, 80, { w: 60, h: 60, color: '#fab1a0', label: '餐桌', utility: 'eat_out', pixelPattern: 'table_dining', tags: ['table'] }),
         { id: 'stove1', x: 300, y: 20, w: 80, h: 40, color: '#636e72', label: '大灶台', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
         { id: 'stove2', x: 300, y: 80, w: 80, h: 40, color: '#636e72', label: '大灶台', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
-        { id: 'fridge', x: 320, y: 200, w: 40, h: 40, color: '#fff', label: '冰柜', utility: 'none', pixelPattern: 'fridge', tags: ['kitchen'] }
+        { id: 'fridge', x: 320, y: 200, w: 40, h: 40, color: '#fff', label: '冰柜', utility: 'none', pixelPattern: 'fridge', tags: ['kitchen'] },
+        // [修复] 增加收银功能，让收银员有地可去
+        { id: 'cashier', x: 200, y: 20, w: 60, h: 30, color: '#2c3e50', label: '收银台', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] }
     ]
 };
 
@@ -204,7 +207,8 @@ const PLOT_CAFE: PlotTemplate = {
     id: 'cafe', width: 300, height: 300, type: 'commercial',
     rooms: [{ id: 'main', x: 5, y: 5, w: 290, h: 290, label: '咖啡厅', color: '#d4a373', pixelPattern: 'wood', hasWall: true }],
     furniture: [
-        { id: 'counter', x: 20, y: 20, w: 150, h: 40, color: '#8b4513', label: '吧台', utility: 'work', pixelPattern: 'reception', tags: ['bar', 'cashier'] },
+        // [修复] 增加 stove 标签，允许 kitchen_helper 在此工作 (冲咖啡也是烹饪)
+        { id: 'counter', x: 20, y: 20, w: 150, h: 40, color: '#8b4513', label: '吧台', utility: 'work', pixelPattern: 'reception', tags: ['bar', 'cashier', 'stove'] },
         ...createGrid('table', 20, 100, 3, 2, 80, 80, { w: 40, h: 40, color: '#fff', label: '圆桌', utility: 'eat_out', pixelPattern: 'table_dining', tags: ['table'] }),
     ]
 };
@@ -215,7 +219,8 @@ const PLOT_CINEMA: PlotTemplate = {
     furniture: [
         { id: 'screen', x: 50, y: 20, w: 300, h: 10, color: '#fff', label: '大银幕', utility: 'none', tags: ['screen'] },
         ...createGrid('seat', 50, 80, 5, 4, 60, 60, { w: 40, h: 40, color: '#d63031', label: '影院座', utility: 'cinema_3d', pixelPattern: 'sofa_vip', tags: ['seat'] }),
-        { id: 'ticket', x: 300, y: 350, w: 80, h: 40, color: '#e17055', label: '售票处', utility: 'work', pixelPattern: 'reception', tags: ['desk'] }
+        // [修复] 增加 cashier 标签，允许收银员/售票员工作
+        { id: 'ticket', x: 300, y: 350, w: 80, h: 40, color: '#e17055', label: '售票处', utility: 'work', pixelPattern: 'reception', tags: ['desk', 'cashier'] }
     ]
 };
 
@@ -224,7 +229,8 @@ const PLOT_NETCAFE: PlotTemplate = {
     rooms: [{ id: 'main', x: 5, y: 5, w: 290, h: 290, label: '网咖', color: '#2f3542', pixelPattern: 'grid', hasWall: true }],
     furniture: [
         ...createGrid('pc', 20, 20, 3, 3, 80, 80, { w: 60, h: 50, color: '#3742fa', label: '电竞椅', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'game'] }),
-        { id: 'admin', x: 20, y: 260, w: 60, h: 30, color: '#a29bfe', label: '网管', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] }
+        // [修复] 增加 cashier 标签
+        { id: 'admin', x: 20, y: 260, w: 60, h: 30, color: '#a29bfe', label: '网管', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk', 'cashier'] }
     ]
 };
 

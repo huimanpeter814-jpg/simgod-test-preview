@@ -5,6 +5,7 @@ import { Furniture, JobType, SimAction, AgeStage, Job } from '../../types';
 import { CommutingState, IdleState, WorkingState } from './SimStates';
 import { SocialLogic } from './social';
 import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
+import { hasRequiredTags } from '../simulationHelpers'; // [修复] 引入标签检查工具
 
 // Job Preferences logic remains the same...
 const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
@@ -175,19 +176,34 @@ export const CareerLogic = {
         }
 
         const potentialWorkplaces = GameStore.worldLayout.filter(p => {
+            let isMatch = false;
+            
             if (targetPlotTemplateId !== 'any' && targetPlotTemplateId !== 'work') {
-                return p.templateId === targetPlotTemplateId;
+                isMatch = p.templateId === targetPlotTemplateId;
             }
-            if (customNameKeyword && p.customName && p.customName.includes(customNameKeyword)) {
-                return true;
+            else if (customNameKeyword && p.customName && p.customName.includes(customNameKeyword)) {
+                isMatch = true;
             }
-            if (targetPlotTemplateId === 'work' || (sim.job.companyType === JobType.Store)) {
+            else if (targetPlotTemplateId === 'work' || (sim.job.companyType === JobType.Store)) {
                 if (sim.job.companyType === JobType.Internet || sim.job.companyType === JobType.Design || sim.job.companyType === JobType.Business) {
-                    return p.customType === 'work';
+                    isMatch = p.customType === 'work';
+                } else {
+                    isMatch = p.customType === 'commercial';
                 }
-                return p.customType === 'commercial';
             }
-            return false;
+
+            if (!isMatch) return false;
+
+            // [修复] 关键：检查该地皮是否真的有符合岗位需求的家具！
+            // 防止互联网公司分配到没有电脑的办公楼
+            const requiredTags = sim.job.requiredTags;
+            if (requiredTags && requiredTags.length > 0) {
+                const furnitureInPlot = GameStore.furnitureByPlot.get(p.id) || [];
+                const hasValidFurniture = furnitureInPlot.some(f => hasRequiredTags(f, requiredTags));
+                if (!hasValidFurniture) return false; // 地皮没有对应设备，不能作为工作地点
+            }
+
+            return true;
         });
 
         if (potentialWorkplaces.length > 0) {
@@ -196,6 +212,7 @@ export const CareerLogic = {
             this.updateColleagues(sim, workplace.id);
         } else {
             sim.workplaceId = undefined;
+            // sim.say("公司好像还没建好...", 'bad'); 
         }
     },
 
