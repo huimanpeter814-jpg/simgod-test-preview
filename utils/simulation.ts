@@ -1,7 +1,7 @@
 import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT,STREET_PROPS  } from '../data/world'; 
-import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState, AgeStage } from '../types';
+import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState, AgeStage, SimAction } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
 import { PathFinder } from './pathfinding'; 
@@ -9,11 +9,12 @@ import { FamilyGenerator } from './logic/genetics';
 import { NarrativeSystem } from './logic/narrative';
 import { EditorManager } from '../managers/EditorManager';
 import { SaveManager, GameSaveData } from '../managers/SaveManager'; 
+import { NannyState, PickingUpState } from './logic/SimStates'; // Import PickingUpState
 
 // Re-exports
 export { Sim } from './Sim';
 export { minutes, getJobCapacity } from './simulationHelpers';
-export { drawAvatarHead } from './render/pixelArt'; 
+export { drawAvatarHead } from './render/pixelArt';
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -26,7 +27,6 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // [Refactor] 静态 EditorManager 实例
     static editor = new EditorManager();
 
     static rooms: RoomDef[] = [];
@@ -39,11 +39,9 @@ export class GameStore {
     static worldGrid: SpatialHashGrid = new SpatialHashGrid(100);
     static pathFinder: PathFinder = new PathFinder(CONFIG.CANVAS_W, CONFIG.CANVAS_H, 20);
 
-    // Toast Notification State
     static toastMessage: string | null = null;
     static toastTimer: any = null;
     
-
     static subscribe(cb: () => void) {
         this.listeners.push(cb);
         return () => { this.listeners = this.listeners.filter(l => l !== cb); };
@@ -69,7 +67,61 @@ export class GameStore {
         this.notify();
     }
 
-    // 🆕 核心逻辑更新：房屋分配
+    static spawnNanny(homeId: string, task: 'home_care' | 'drop_off' | 'pick_up' = 'home_care', targetChildId?: string) {
+        // 1. 检查该家庭是否已经有保姆
+        let nanny = this.sims.find(s => s.homeId === homeId && s.isTemporary);
+
+        const home = this.housingUnits.find(u => u.id === homeId);
+        if (!home) return;
+
+        // 如果没有保姆，生成一个
+        if (!nanny) {
+            nanny = new Sim({
+                x: home.x + home.area.w / 2,
+                y: home.y + home.area.h / 2,
+                surname: "Nanny",
+                ageStage: AgeStage.Adult,
+                gender: 'F', 
+                homeId: homeId,
+                money: 0
+            });
+
+            nanny.name = "家庭保姆";
+            nanny.isTemporary = true; 
+            nanny.clothesColor = '#575fcf';
+            nanny.job = { id: 'nanny', title: '全职保姆', level: 1, salary: 0, startHour: 0, endHour: 0 };
+            
+            this.sims.push(nanny);
+            this.addLog(null, `[系统] 已指派保姆前往 ${home.name}`, 'sys');
+        }
+
+        // 2. 根据任务类型指派行为
+        if (task === 'drop_off' && targetChildId) {
+            // 任务：送孩子上学
+            nanny.changeState(new PickingUpState());
+            nanny.carryingSimId = targetChildId; 
+            nanny.target = null; // PickingUpState 会自动寻找孩子位置
+            nanny.say("我来送宝宝上学", "sys");
+        } 
+        else if (task === 'pick_up' && targetChildId) {
+            // 任务：接孩子回家
+            nanny.changeState(new PickingUpState());
+            nanny.carryingSimId = targetChildId;
+            nanny.say("出发去接宝宝放学", "sys");
+        }
+        else {
+            // 任务：居家看护
+            // 如果已经在干活就不打断，否则进入看护状态
+            if (nanny.action !== SimAction.PickingUp && nanny.action !== SimAction.Escorting) {
+                nanny.changeState(new NannyState());
+                nanny.say("宝宝乖，我在家陪你", "sys");
+            }
+        }
+        
+        this.notify();
+    }
+    
+    // ... (Rest of the class: assignRandomHome, rebuildWorld, instantiatePlot, etc.) ...
     static assignRandomHome(sim: Sim) {
         let targetTypes: string[] = [];
 
@@ -161,7 +213,6 @@ export class GameStore {
         this.notify();
     }
 
-    // 重建世界逻辑
     static rebuildWorld(initial = false) {
         if (this.worldLayout.length === 0) {
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
@@ -273,7 +324,6 @@ export class GameStore {
                 x: absX, 
                 y: absY, 
                 homeId: ownerUnit ? ownerUnit.id : undefined,
-                // 🆕 建议在 types.ts 的 Furniture 接口里加个可选的 plotId
                 // plotId: plot.id 
             });
         });
@@ -289,7 +339,6 @@ export class GameStore {
         if (attrs.type !== undefined && plot.customType !== attrs.type) { plot.customType = attrs.type; hasChange = true; }
 
         if (hasChange) {
-            // 简单的局部刷新：移除旧的，重新实例化
             this.rooms = this.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
             this.furniture = this.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
             this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
@@ -315,8 +364,6 @@ export class GameStore {
         });
     }
 
-    // === 🗺️ 地图数据管理 (Delegated to SaveManager) ===
-
     static getMapData() {
         return {
             version: "1.0",
@@ -329,19 +376,15 @@ export class GameStore {
 
     static importMapData(rawJson: any) {
         const validData = SaveManager.parseMapData(rawJson);
-        
         if (!validData) {
             this.showToast("❌ 导入失败：文件格式无效");
             return;
         }
-
         try {
             this.worldLayout = validData.worldLayout;
             this.rebuildWorld(true);
-            
             if (validData.rooms) this.rooms = [...this.rooms, ...validData.rooms];
             if (validData.customFurniture) this.furniture = [...this.furniture, ...validData.customFurniture];
-            
             this.initIndex();
             this.refreshFurnitureOwnership();
             this.showToast("✅ 地图导入成功！");
@@ -377,34 +420,23 @@ export class GameStore {
     static removeFurniture(id: string) { this.editor.removeFurniture(id); }
     static changePlotTemplate(plotId: string, templateId: string) { this.editor.changePlotTemplate(plotId, templateId); }
     static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) { this.editor.finalizeMove(type, id, startPos); }
-    // 🆕 新增：地皮家具索引 (Plot ID -> Furniture List)
+    
     static furnitureByPlot: Map<string, Furniture[]> = new Map();
 
     static initIndex() {
         this.furnitureIndex.clear();
         this.worldGrid.clear();
         this.pathFinder.clear();
-        this.furnitureByPlot.clear(); // 清空旧索引
+        this.furnitureByPlot.clear(); 
 
         const passableTypes = ['rug_fancy', 'rug_persian', 'rug_art', 'pave_fancy', 'stripes', 'zebra', 'manhole', 'grass', 'concrete', 'tile', 'wood', 'run_track', 'water'];
 
         this.furniture.forEach(f => {
-            // 1. 原有逻辑：按功能索引
             if (!this.furnitureIndex.has(f.utility)) { this.furnitureIndex.set(f.utility, []); }
             this.furnitureIndex.get(f.utility)!.push(f);
             
-            // 2. 原有逻辑：空间哈希
             this.worldGrid.insert({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, type: 'furniture', ref: f });
 
-            // 🆕 3. 新增逻辑：提取 plotId 并存入索引
-            // 假设家具ID格式为 "plotId_furnitureId" (你在 instantiatePlot 里是这么生成的)
-            // 我们通过字符串分割获取 plotId
-            const parts = f.id.split('_');
-            // 注意：因为 plotId 可能包含下划线（如 p_nw_1），我们需要一种更稳健的方式，
-            // 或者在 instantiatePlot 时给 Furniture 对象直接加上 plotId 属性（推荐）。
-            // 这里为了兼容现有数据，我们假设 ID 的前缀匹配：
-            // 更好的做法是：在 instantiatePlot 里给 furniture 加个 plotId 字段。
-            // 暂时用这种简易方式：找到包含这个家具的地皮
             const ownerPlot = this.worldLayout.find(p => f.id.startsWith(p.id));
             if (ownerPlot) {
                 if (!this.furnitureByPlot.has(ownerPlot.id)) {
@@ -452,8 +484,6 @@ export class GameStore {
         if (this.logs.length > 200) this.logs.pop();
         this.notify();
     }
-
-    // === 💾 存档系统 (Delegated to SaveManager) ===
 
     static getSaveSlots() {
         return SaveManager.getSaveSlots();
@@ -578,8 +608,7 @@ export class GameStore {
     }
 }
 
-// ---------------- Game Loop Functions ----------------
-
+// ... (Rest of game loop functions: initGame, updateTime, getActivePalette, gameLoopStep) ...
 export function initGame() {
     GameStore.sims = [];
     GameStore.particles = [];

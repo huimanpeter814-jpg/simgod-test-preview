@@ -1,3 +1,4 @@
+
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
@@ -212,6 +213,9 @@ export const CareerLogic = {
     },
 
     checkSchedule(sim: Sim) {
+        // 🆕 [修复] 临时角色(保姆)不参与常规工作调度
+        if (sim.isTemporary) return;
+
         if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Elder].includes(sim.ageStage) || sim.job.id === 'unemployed') return;
 
         const currentMonth = GameStore.time.month;

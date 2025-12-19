@@ -1,3 +1,4 @@
+
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { SimAction, JobType, NeedType, AgeStage, Furniture } from '../../types';
@@ -6,7 +7,7 @@ import { DecisionLogic } from './decision';
 import { SocialLogic } from './social';
 import { SchoolLogic } from './school';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
-import { hasRequiredTags } from '../simulationHelpers'; // 需确保 simulationHelpers.ts 中已导出此函数
+import { hasRequiredTags } from '../simulationHelpers'; 
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -120,7 +121,7 @@ export class MovingState extends BaseState {
     }
 }
 
-// --- 🆕 重构版通勤状态：全自动查找工位 + 修复站位 ---
+// --- 通勤状态 ---
 export class CommutingState extends BaseState {
     actionName = SimAction.Commuting;
     phase: 'to_plot' | 'to_station' = 'to_station';
@@ -128,14 +129,10 @@ export class CommutingState extends BaseState {
     enter(sim: Sim) {
         sim.path = [];
         
-        // 尝试基于 Tags 查找工位
         const station = this.findWorkstation(sim);
         
         if (station) {
             this.phase = 'to_station';
-            // [修复] 关键修改：站位偏移
-            // 让小人站在家具的"前方"（Y轴下方），而不是中心
-            // 这避免了小人和家具在同一 Y 坐标导致的图层排序闪烁（抖动）
             sim.target = { 
                 x: station.x + station.w/2, 
                 y: station.y + station.h + 5 
@@ -144,7 +141,6 @@ export class CommutingState extends BaseState {
             sim.say("去工位...", 'act');
         } 
         else if (sim.workplaceId) {
-            // 没找到具体工位，先去地皮
             this.phase = 'to_plot';
             const plot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
             if (plot) {
@@ -159,7 +155,6 @@ export class CommutingState extends BaseState {
             }
         } 
         else {
-            // 自由职业者无固定地点，直接开始工作（原地或回家）
             sim.say("开始搬砖", 'act');
             sim.changeState(new WorkingState());
         }
@@ -171,7 +166,6 @@ export class CommutingState extends BaseState {
 
         if (arrived) {
             if (this.phase === 'to_plot') {
-                // 到达单位门口 -> 打卡
                 sim.lastPunchInTime = GameStore.time.hour + GameStore.time.minute / 60;
                 
                 if (sim.lastPunchInTime > sim.job.startHour + 0.1) {
@@ -181,22 +175,19 @@ export class CommutingState extends BaseState {
                     sim.say("打卡成功", 'sys');
                 }
 
-                // 再次尝试寻找工位
                 const station = this.findWorkstation(sim);
                 if (station) {
                     this.phase = 'to_station';
                     sim.target = { 
                         x: station.x + station.w/2, 
-                        y: station.y + station.h + 5 // [修复] 偏移
+                        y: station.y + station.h + 5
                     };
                     sim.interactionTarget = { ...station, utility: 'work' };
                 } else {
                     sim.say("没位置了...", 'bad');
-                    // 没工位也进入工作状态（站立摸鱼）
                     sim.changeState(new WorkingState());
                 }
             } else {
-                // 到达工位 -> 开始工作
                 sim.changeState(new WorkingState());
             }
         }
@@ -205,41 +196,23 @@ export class CommutingState extends BaseState {
     private findWorkstation(sim: Sim): Furniture | null {
         const requiredTags = sim.job.requiredTags || ['work'];
 
-        // 1. 【公司员工】如果有固定工作地点，严禁去别处！
         if (sim.workplaceId) {
-            // 直接从索引里取，不需要遍历全图！
             const plotFurniture = GameStore.furnitureByPlot.get(sim.workplaceId) || [];
-            
-            // 筛选符合职业需求的家具
             const candidates = plotFurniture.filter(f => hasRequiredTags(f, requiredTags));
-            
-            // 筛选未被占用的
             const free = candidates.filter(f => !this.isOccupied(f, sim.id));
 
             if (free.length > 0) return this.selectBest(sim, free);
-
-            // ❌ 如果公司里没位置，直接返回 null。
-            // 绝对不要回退到全图搜索，否则他就会去隔壁老王家上班。
-            // 可以在这里加个气泡提示
             if (Math.random() < 0.1) sim.say("公司没位置了...", 'bad');
             return null; 
         }
 
-        // 2. 【自由职业/无固定地点】
-        // 这种情况下，我们只允许在“自己家”或者“公共办公场所（如图书馆/网吧）”寻找
-        
         let validCandidates: Furniture[] = [];
 
-        // A. 在自己家找 (SOHO)
         if (sim.homeId) {
-            // 需要你在 GameStore.housingUnits 里反查属于该 housingUnit 的家具
-            // 或者简单点，利用 GameStore.furniture 的 homeId 属性 (如果有的话)
             const homeFurniture = GameStore.furniture.filter(f => f.homeId === sim.homeId);
             validCandidates = validCandidates.concat(homeFurniture.filter(f => hasRequiredTags(f, requiredTags)));
         }
 
-        // B. 在公共商业区找 (网吧/咖啡厅)
-        // 我们可以定义哪些 Plot 是公共办公区
         const publicWorkPlots = GameStore.worldLayout.filter(p => 
             p.templateId === 'netcafe' || 
             p.templateId === 'library' || 
@@ -251,9 +224,7 @@ export class CommutingState extends BaseState {
             validCandidates = validCandidates.concat(furnitureInPlot.filter(f => hasRequiredTags(f, requiredTags)));
         });
 
-        // 过滤占用
         const allFree = validCandidates.filter(f => !this.isOccupied(f, sim.id));
-
         if (allFree.length > 0) return this.selectBest(sim, allFree);
 
         return null;
@@ -261,7 +232,6 @@ export class CommutingState extends BaseState {
 
     private isOccupied(f: Furniture, selfId: string): boolean {
         if (f.multiUser) return false;
-        // 检查是否有人正在使用，或者正走在去使用的路上
         return GameStore.sims.some(s => 
             s.id !== selfId && 
             (s.interactionTarget?.id === f.id || (s.target && s.target.x === f.x + f.w/2 && Math.abs(s.target.y - (f.y + f.h)) < 10))
@@ -269,13 +239,9 @@ export class CommutingState extends BaseState {
     }
 
     private selectBest(sim: Sim, candidates: Furniture[]): Furniture {
-        // 如果候选很少，随机选一个防止拥挤
         if (candidates.length < 5) return candidates[Math.floor(Math.random() * candidates.length)];
-        
-        // 否则选最近的
         let best = candidates[0];
         let minDist = Number.MAX_VALUE;
-        
         candidates.forEach(f => {
             const dist = Math.pow(f.x - sim.pos.x, 2) + Math.pow(f.y - sim.pos.y, 2);
             if (dist < minDist) {
@@ -287,7 +253,7 @@ export class CommutingState extends BaseState {
     }
 }
 
-// --- 增强版工作状态 ---
+// --- 工作状态 ---
 export class WorkingState extends BaseState {
     actionName = SimAction.Working;
     subStateTimer = 0;
@@ -341,10 +307,8 @@ export class WorkingState extends BaseState {
 
         const jobType = sim.job.companyType;
         const jobTitle = sim.job.title;
-        // 允许自由职业
         const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
 
-        // 巡逻模式 (服务员/护士/店员/护工)
         if (plot && (
             (jobType === JobType.Restaurant && jobTitle.includes('服务')) ||
             (jobType === JobType.Store && !jobTitle.includes('收银')) ||
@@ -355,20 +319,14 @@ export class WorkingState extends BaseState {
             const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
             sim.target = { x: tx, y: ty };
             sim.moveTowardsTarget(dt);
-            
-            // ⚠️ [修复] 不要修改 action 字符串，否则 checkSchedule 会误判为没在工作，导致无限循环
-            // if (sim.target) sim.action = "working_patrol"; 
         }
-        // 教师
         else if (jobType === JobType.School && (jobTitle.includes('师') || jobTitle.includes('教'))) {
             if (Math.random() > 0.7) sim.say("同学们看黑板...", 'act');
         }
-        // 医生巡房
         else if (jobType === JobType.Hospital && jobTitle.includes('医')) {
              if (Math.random() > 0.8 && sim.workplaceId) {
                  const bed = GameStore.furniture.find(f => f.id.startsWith(sim.workplaceId!) && f.label.includes('病床'));
                  if (bed) {
-                     // [修复] 医生巡房站在床边，不进去
                      sim.target = { x: bed.x + 20, y: bed.y + bed.h + 5 };
                  }
              }
@@ -376,7 +334,7 @@ export class WorkingState extends BaseState {
     }
 }
 
-// --- 上学通勤 (保留给小学/中学) ---
+// --- 上学通勤 ---
 export class CommutingSchoolState extends BaseState {
     actionName = SimAction.CommutingSchool;
 
@@ -502,36 +460,102 @@ export class PlayingHomeState extends BaseState {
     }
 }
 
-// 跟随状态
+// 🆕 修正：跟随状态仅允许在家里跟随
 export class FollowingState extends BaseState {
     actionName = SimAction.Following;
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
         
-        const parent = GameStore.sims.find(s => s.id === sim.motherId) || GameStore.sims.find(s => s.id === sim.fatherId);
-        
         if (sim.carriedBySimId) return; 
 
-        const isParentBusy = !parent || 
-            parent.action === SimAction.Working || 
-            parent.action === SimAction.Commuting || 
-            parent.action === SimAction.Sleeping ||
-            (parent.interactionTarget && parent.interactionTarget.type === 'human');
+        // 优先跟随保姆
+        let target = GameStore.sims.find(s => s.homeId === sim.homeId && s.isTemporary);
+        
+        // 如果没有保姆，尝试跟随在家的父母
+        if (!target) {
+            target = GameStore.sims.find(s => (s.id === sim.motherId || s.id === sim.fatherId) && s.homeId === sim.homeId && s.isAtHome());
+        }
 
-        const isNeedy = sim.mood < 40 || sim.needs[NeedType.Hunger] < 50 || Math.random() < 0.001;
-
-        if (isParentBusy || !isNeedy) {
-            sim.say("自己玩...", 'sys');
+        if (!target) {
+            // 无跟随目标，转为自己在家里玩
             sim.changeState(new PlayingHomeState());
-            sim.actionTimer = 300; 
+            sim.actionTimer = 200;
             return;
         }
 
-        const dist = Math.sqrt(Math.pow(sim.pos.x - parent.pos.x, 2) + Math.pow(sim.pos.y - parent.pos.y, 2));
-        if (dist > 60) {
-            sim.target = { x: parent.pos.x, y: parent.pos.y };
+        // 🆕 关键修复：如果被跟随者离开了家（不在家范围内），停止跟随
+        if (!target.isAtHome()) {
+             sim.say("不出去了...", 'sys');
+             sim.changeState(new PlayingHomeState());
+             sim.actionTimer = 200;
+             return;
+        }
+
+        const dist = Math.sqrt(Math.pow(sim.pos.x - target.pos.x, 2) + Math.pow(sim.pos.y - target.pos.y, 2));
+        if (dist > 40) {
+            sim.target = { x: target.pos.x + 20, y: target.pos.y };
             sim.moveTowardsTarget(dt);
         }
+    }
+}
+
+// 🆕 保姆工作状态
+export class NannyState extends BaseState {
+    actionName = SimAction.NannyWork;
+    wanderTimer = 0;
+
+    update(sim: Sim, dt: number) {
+        // 保姆不掉需求
+        
+        // 1. 检查雇主父母是否回家
+        const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
+        if (parentsHome) {
+            GameStore.addLog(sim, "主人回来啦，我下班了。", "sys");
+            GameStore.removeSim(sim.id);
+            return;
+        }
+
+        // 2. 照顾孩子
+        const babies = GameStore.sims.filter(s => s.homeId === sim.homeId && (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler));
+        
+        if (babies.length > 0) {
+            // 找需求最低的宝宝
+            const needyBaby = babies.sort((a, b) => a.mood - b.mood)[0];
+            
+            if (needyBaby.mood < 60) {
+                const dist = Math.sqrt(Math.pow(sim.pos.x - needyBaby.pos.x, 2) + Math.pow(sim.pos.y - needyBaby.pos.y, 2));
+                if (dist > 40) {
+                    sim.target = { x: needyBaby.pos.x + 10, y: needyBaby.pos.y };
+                    sim.moveTowardsTarget(dt);
+                } else {
+                    if (Math.random() < 0.01) {
+                        sim.say("乖宝宝不哭~", "family");
+                        needyBaby.needs[NeedType.Fun] += 10;
+                        needyBaby.needs[NeedType.Social] += 10;
+                        needyBaby.needs[NeedType.Hunger] += 10; // 喂食
+                    }
+                }
+                return;
+            }
+        }
+
+        // 3. 在家里闲逛
+        this.wanderTimer -= dt;
+        if (this.wanderTimer <= 0) {
+            this.wanderTimer = 200 + Math.random() * 200;
+            const home = sim.getHomeLocation();
+            if (home) {
+                // 简单的在家里随机移动
+                const homeUnit = GameStore.housingUnits.find(u => u.id === sim.homeId);
+                if (homeUnit) {
+                    const tx = homeUnit.x + Math.random() * homeUnit.area.w;
+                    const ty = homeUnit.y + Math.random() * homeUnit.area.h;
+                    sim.target = { x: tx, y: ty };
+                }
+            }
+        }
+        
+        if (sim.target) sim.moveTowardsTarget(dt);
     }
 }
 
@@ -562,10 +586,26 @@ export class PickingUpState extends BaseState {
                 const dist = Math.sqrt(Math.pow(sim.pos.x - child.pos.x, 2) + Math.pow(sim.pos.y - child.pos.y, 2));
                 
                 if (dist < 20) { 
-                    const schoolPlot = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
-                    if (schoolPlot) {
-                        const tx = schoolPlot.x + (schoolPlot.width || 300)/2;
-                        const ty = schoolPlot.y + (schoolPlot.height || 300)/2;
+                    // 判断是送去幼儿园还是接回家
+                    const kindergarten = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
+                    const isAtSchool = kindergarten && child.pos.x >= kindergarten.x && child.pos.x <= kindergarten.x + (kindergarten.width||300) && child.pos.y >= kindergarten.y && child.pos.y <= kindergarten.y + (kindergarten.height||300);
+
+                    // 如果孩子在幼儿园 -> 接回家
+                    if (isAtSchool) {
+                        const home = sim.getHomeLocation(); // 假设家长的家就是孩子的家
+                        if (home) {
+                            sim.target = { x: home.x, y: home.y };
+                            sim.path = [];
+                            child.carriedBySimId = sim.id;
+                            child.changeState(new BeingEscortedState());
+                            sim.changeState(new EscortingState());
+                            sim.say("走，回家咯！", 'family');
+                        }
+                    } 
+                    // 如果孩子不在幼儿园 -> 送去幼儿园
+                    else if (kindergarten) {
+                        const tx = kindergarten.x + (kindergarten.width || 300)/2;
+                        const ty = kindergarten.y + (kindergarten.height || 300)/2;
                         
                         sim.target = { x: tx, y: ty };
                         sim.path = []; 
@@ -582,7 +622,8 @@ export class PickingUpState extends BaseState {
                 }
             }
         } else if (arrived) {
-            sim.changeState(new IdleState());
+            // 到达孩子身边前
+            // ...
         }
     }
 }
@@ -610,17 +651,35 @@ export class EscortingState extends BaseState {
         }
 
         if (arrived) {
+            // 到达目的地（幼儿园或家）
             if (sim.carryingSimId) {
                 const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
                 if (child) {
                     child.carriedBySimId = null;
-                    child.changeState(new SchoolingState()); 
-                    child.say("拜拜~ 👋", 'family');
+                    
+                    // 判断地点，设置孩子状态
+                    const kindergarten = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
+                    const isAtSchool = kindergarten && sim.pos.x >= kindergarten.x && sim.pos.x <= kindergarten.x + (kindergarten.width||300) && sim.pos.y >= kindergarten.y && sim.pos.y <= kindergarten.y + (kindergarten.height||300);
+
+                    if (isAtSchool) {
+                        child.changeState(new SchoolingState());
+                        child.say("拜拜~ 👋", 'family');
+                    } else {
+                        child.changeState(new IdleState()); // 回家了
+                        child.say("到家啦！", 'family');
+                    }
                 }
                 sim.carryingSimId = null;
             }
-            sim.say("乖乖听话哦", 'family');
-            sim.changeState(new IdleState());
+            
+            sim.say("任务完成", 'family');
+            
+            // 🆕 如果是临时保姆，任务完成后直接消失
+            if (sim.isTemporary) {
+                GameStore.removeSim(sim.id);
+            } else {
+                sim.changeState(new IdleState());
+            }
         }
     }
 }
@@ -635,7 +694,7 @@ export class BeingEscortedState extends BaseState {
         
         if (sim.carriedBySimId) {
             const carrier = GameStore.sims.find(s => s.id === sim.carriedBySimId);
-            if (!carrier || carrier.action !== SimAction.Escorting) {
+            if (!carrier || (carrier.action !== SimAction.Escorting && carrier.action !== SimAction.PickingUp)) {
                 sim.carriedBySimId = null;
                 sim.changeState(new IdleState());
             }

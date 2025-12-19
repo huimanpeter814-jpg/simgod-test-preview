@@ -1,4 +1,5 @@
-﻿import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, AGE_CONFIG } from '../constants';
+﻿
+import { CONFIG, BASE_DECAY, LIFE_GOALS, MBTI_TYPES, SURNAMES, GIVEN_NAMES, ZODIACS, JOBS, ITEMS, BUFFS, ASSET_CONFIG, AGE_CONFIG } from '../constants';
 import { Vector2, Job, Buff, SimAppearance, Furniture, Memory, Relationship, AgeStage, SimAction, JobType, NeedType } from '../types';
 import { GameStore } from './simulation'; 
 import { minutes } from './simulationHelpers';
@@ -22,7 +23,8 @@ import {
     PlayingHomeState,
     PickingUpState,
     EscortingState,
-    BeingEscortedState
+    BeingEscortedState,
+    NannyState // 🆕 Import NannyState
 } from './logic/SimStates';
 
 interface SimInitConfig {
@@ -40,16 +42,16 @@ interface SimInitConfig {
     money?: number; 
     traits?: string[]; 
     familyLore?: string; 
-    workplaceId?: string; // 🆕
+    workplaceId?: string; 
 }
 
 export class Sim {
     id: string;
     familyId: string;
     homeId: string | null = null;
-    workplaceId?: string; // 🆕 固定工作地点
-    commutePreTime: number = 30; // 默认提前30分钟通勤
-    lastPunchInTime?: number;    // 记录当天打卡时间
+    workplaceId?: string; 
+    commutePreTime: number = 30; 
+    lastPunchInTime?: number;    
     
     pos: Vector2;
     prevPos: Vector2; 
@@ -113,7 +115,7 @@ export class Sim {
     money: number;
     dailyBudget: number;
     workPerformance: number;
-    consecutiveAbsences: number = 0; // 🆕 连续旷工计数
+    consecutiveAbsences: number = 0; 
 
     job: Job; 
     dailyExpense: number;
@@ -140,9 +142,10 @@ export class Sim {
     commuteTimer: number = 0;
     decisionTimer: number = 0; 
 
-    // 🆕 临时引用，用于护送逻辑
-    carryingSimId: string | null = null; // 我正在抱谁
-    carriedBySimId: string | null = null; // 谁正在抱我
+    carryingSimId: string | null = null; 
+    carriedBySimId: string | null = null; 
+
+    isTemporary: boolean = false; // 🆕 标记是否为临时NPC
 
     constructor(config: SimInitConfig = {}) {
         this.job = JOBS.find(j => j.id === 'unemployed')!;
@@ -150,7 +153,7 @@ export class Sim {
         this.id = Math.random().toString(36).substring(2, 11);
         this.familyId = config.familyId || this.id;
         this.homeId = config.homeId || null;
-        this.workplaceId = config.workplaceId; // 🆕
+        this.workplaceId = config.workplaceId; 
 
         this.pos = {
             x: config.x ?? (50 + Math.random() * (CONFIG.CANVAS_W - 100)),
@@ -242,7 +245,6 @@ export class Sim {
         if (config.money !== undefined) { this.money = config.money; } 
         else { this.money = 500 + Math.floor(Math.random() * 1000); }
         
-        // 🆕 修复：婴幼儿初始资金为 0
         if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) { 
             this.money = 0; 
         } else if ([AgeStage.Child, AgeStage.Teen].includes(this.ageStage)) {
@@ -312,10 +314,10 @@ export class Sim {
             case SimAction.Schooling: this.state = new SchoolingState(); break;
             case SimAction.Following: this.state = new FollowingState(); break;
             case SimAction.PlayingHome: this.state = new PlayingHomeState(); break;
-            // 🆕 恢复新状态
             case SimAction.PickingUp: this.state = new PickingUpState(); break;
             case SimAction.Escorting: this.state = new EscortingState(); break;
             case SimAction.BeingEscorted: this.state = new BeingEscortedState(); break;
+            case SimAction.NannyWork: this.state = new NannyState(); break; // 🆕 Restore NannyState
             
             case SimAction.Moving:
             case SimAction.Wandering:
@@ -449,16 +451,7 @@ export class Sim {
         this.isSideHustle = false;
         this.commuteTimer = 0;
         
-        // 🆕 如果是婴儿在家玩耍结束，继续保持在家
-        if (this.ageStage === AgeStage.Infant || this.ageStage === AgeStage.Toddler) {
-             // 继续判断是否要跟随
-             const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
-             if (parent && parent.action === SimAction.Idle) {
-                 this.changeState(new FollowingState());
-                 return;
-             }
-        }
-
+        // 🆕 移除强制跟随逻辑，由 Update 中的 checkNannyNeeded 和状态机自动处理
         this.changeState(new IdleState());
     }
 
@@ -496,7 +489,6 @@ export class Sim {
             if (this.ageStage === AgeStage.Elder) speedMod = 0.7;
             if (this.isPregnant) speedMod = 0.6; 
 
-            // 🆕 抱着孩子的时候速度变慢
             if (this.action === SimAction.Escorting) speedMod *= 0.8;
 
             const moveStep = this.speed * speedMod * (dt * 0.1);
@@ -539,14 +531,12 @@ export class Sim {
         const f = 0.0008 * dt;
 
         if (minuteChanged) {
-            // 🆕 传入分钟变化
             SchoolLogic.checkKindergarten(this);
             this.updateBuffs(1);
             this.updateMood();
             this.checkDeath(dt); 
             this.checkSchedule();
 
-            // 🆕 每日一次：检查是否会被解雇 (放在每天 0 点)
             if (GameStore.time.hour === 0 && GameStore.time.minute === 0) {
                 CareerLogic.checkFire(this);
             }
@@ -575,6 +565,24 @@ export class Sim {
                 this.addBuff(BUFFS.smelly);
                 this.say("身上有味了...", 'bad');
             }
+
+            // 🆕 每分钟检查一次是否需要保姆 (居家看护逻辑)
+            // 条件：我是婴幼儿 + 有家 + 在家里 + 没被接送 + 没在等待
+            if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
+                const parentsHome = GameStore.sims.some(s => 
+                    (s.id === this.motherId || s.id === this.fatherId) && 
+                    s.homeId === this.homeId && 
+                    s.isAtHome()
+                );
+                
+                if (!parentsHome) {
+                    // Check if Nanny exists
+                    const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && s.isTemporary);
+                    if (!hasNanny) {
+                        GameStore.spawnNanny(this.homeId, 'home_care');
+                    }
+                }
+            }
         }
 
         if (this.needs[NeedType.Energy] <= 0 || this.needs[NeedType.Hunger] <= 0) {
@@ -584,17 +592,11 @@ export class Sim {
             this.health += 0.01 * f;
         }
 
-        // 🆕 跟随逻辑：只有在空闲且没有特殊任务时才尝试跟随
-        // 移至 FollowingState 处理，这里只作为触发入口
+        // 🆕 触发跟随逻辑（仅在家时）
         if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) {
              if (this.action === SimAction.Idle && !this.target && !this.interactionTarget) {
-                 const parent = GameStore.sims.find(s => s.id === this.motherId) || GameStore.sims.find(s => s.id === this.fatherId);
-                 if (parent) {
-                     // 简单判断距离，详细的状态判断在 State 里做
-                     const dist = Math.sqrt(Math.pow(this.pos.x - parent.pos.x, 2) + Math.pow(this.pos.y - parent.pos.y, 2));
-                     if (dist > 50) {
-                         this.changeState(new FollowingState());
-                     }
+                 if (this.isAtHome()) {
+                     this.changeState(new FollowingState());
                  }
              }
         }

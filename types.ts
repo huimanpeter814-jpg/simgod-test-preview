@@ -1,3 +1,4 @@
+
 export interface Vector2 {
   x: number;
   y: number;
@@ -25,7 +26,8 @@ export enum SimAction {
     PickingUp = 'picking_up',   // 父母去接孩子
     Escorting = 'escorting',    // 父母护送/抱着孩子
     BeingEscorted = 'being_escorted', // 孩子被护送/抱着
-    Waiting = 'waiting' // 原地等待状态
+    Waiting = 'waiting', // 原地等待状态
+    NannyWork = 'nanny_work' // 🆕 保姆工作状态
 }
 
 export enum JobType {
@@ -71,7 +73,7 @@ export interface Furniture {
   color: string;
   label: string;
   utility: string;
-  tags?: string[]; // 🆕 功能标签系统 (e.g., ['computer', 'gaming'])
+  tags?: string[]; 
   dir?: string;
   multiUser?: boolean;
   gender?: string;
@@ -137,13 +139,12 @@ export interface EditorState {
   selectedFurnitureId: string | null;
   selectedRoomId: string | null;
   
-  isDragging: boolean; // 用于指示是否正在预览移动（渲染Ghost）
+  isDragging: boolean;
   dragOffset: { x: number, y: number };
   
   placingTemplateId: string | null;
   placingFurniture: Partial<Furniture> | null;
 
-  // [新增] 记录当前正在进行的操作状态，用于UI交互（如 Click-Move-Click）
   interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing';
   resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null;
 
@@ -192,7 +193,6 @@ export interface RoomDef {
   hasWall?: boolean; 
 }
 
-// Update Needs to use dynamic keys but generally match NeedType
 export type Needs = {
   [key in NeedType]: number;
 } & { [key: string]: number | undefined };
@@ -233,8 +233,8 @@ export interface Job {
   startHour: number;
   endHour: number;
   vacationMonths?: number[]; 
-  companyType?: JobType | string; // Use Enum
-  requiredTags?: string[]; // 🆕 职业所需的家具标签 (e.g., ['computer'], ['stove'])
+  companyType?: JobType | string; 
+  requiredTags?: string[]; 
 }
 
 export interface Buff {
@@ -264,7 +264,7 @@ export interface SimData {
   id: string;
   familyId: string; 
   homeId: string | null;
-  workplaceId?: string; // 工作地点 ID (Plot ID)
+  workplaceId?: string; 
   
   name: string;
   surname: string; 
@@ -292,7 +292,7 @@ export interface SimData {
   familyLore?: string;
 
   age: number;
-  ageStage: AgeStage; // Use Enum
+  ageStage: AgeStage; 
   health: number; 
   
   partnerId: string | null;
@@ -315,8 +315,8 @@ export interface SimData {
   dailyBudget: number;
   workPerformance: number;
   consecutiveAbsences?: number; 
-  commutePreTime?: number; // 每日上班提前多少分钟出发 (0-60)
-  lastPunchInTime?: number; // 今日打卡时间，用于计算迟到
+  commutePreTime?: number; 
+  lastPunchInTime?: number; 
   
   job: Job;
   dailyExpense: number;
@@ -328,16 +328,17 @@ export interface SimData {
 
   memories: Memory[];
 
-  action: SimAction | string; // Use Enum
+  action: SimAction | string; 
   bubble?: { text: string | null; type: string; timer: number };
   target?: Vector2 | null;
   interactionTarget?: any;
 
   schoolPerformance?: number; 
   
-  // 🆕 添加用于渲染的临时引用
   carryingSimId?: string | null;
   carriedBySimId?: string | null;
+
+  isTemporary?: boolean; // 🆕 标记是否为临时生成的NPC (如保姆)
 }
 
 export interface LogEntry {
@@ -365,4 +366,5 @@ export interface SaveMetadata {
     timeLabel: string;
     pop: number;
     realTime: string;
+
 }
