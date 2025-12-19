@@ -52,7 +52,7 @@ export const ITEMS = [
 export const SKILLS = [
     { id: 'cooking', label: '烹饪' }, { id: 'athletics', label: '健身' }, { id: 'music', label: '乐理' },
     { id: 'dancing', label: '舞感' }, { id: 'logic', label: '编程' }, { id: 'creativity', label: '审美' },
-    { id: 'gardening', label: '种植' }, { id: 'fishing', label: '钓鱼' }
+    { id: 'gardening', label: '种植' }, { id: 'fishing', label: '钓鱼' },{ id: 'charisma', label: '口才' }
 ];
 
 export const JOBS: Job[] = [

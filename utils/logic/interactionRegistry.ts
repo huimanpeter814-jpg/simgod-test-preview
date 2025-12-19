@@ -26,6 +26,7 @@ export const RESTORE_TIMES: Record<string, number> = {
     [NeedType.Social]: 60, 
     art: 120, 
     play: 60, 
+    practice_speech: 45, // 🆕 口才练习时长
     default: 60
 };
 
@@ -172,6 +173,20 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.constitution = Math.min(100, sim.constitution + 0.02 * f);
             sim.needs[NeedType.Fun] += getRate(60);
             sim.needs[NeedType.Energy] -= getRate(200); 
+        }
+    },
+    // 🆕 口才练习
+    'practice_speech': {
+        verb: '练习演讲 🗣️', duration: 45,
+        getVerb: () => '对着镜子练习',
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.skills.charisma += 0.08 * f;
+            sim.eq = Math.min(100, sim.eq + 0.02 * f); // 练习同时微量提升EQ
+            sim.needs[NeedType.Fun] -= getRate(150); // 练习是枯燥的
+            sim.needs[NeedType.Energy] -= getRate(100);
+        },
+        onFinish: (sim) => {
+            sim.say("感觉更有自信了！", 'act');
         }
     },
    'work': {

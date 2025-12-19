@@ -117,7 +117,8 @@ export const SimInitializer = {
             [NeedType.Hygiene]: randNeed(),
             [NeedType.Comfort]: 100
         };
-        sim.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0 };
+        // 🆕 初始化技能，增加 charisma
+        sim.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0, charisma: 0 };
         sim.relationships = {};
 
         // 经济
@@ -144,10 +145,6 @@ export const SimInitializer = {
 
         // 职业分配
         sim.job = JOBS.find(j => j.id === 'unemployed')!;
-        if ([AgeStage.Adult, AgeStage.MiddleAged].includes(sim.ageStage)) { 
-            // 在 Sim 类的方法中调用 CareerLogic，这里初始化先不做复杂逻辑，或者手动调用一次
-            // 由于 CareerLogic 在 Sim.ts 中被引入，这里为了避免循环依赖，建议 Sim 构造后再调用 assignJob
-        }
         
         sim.dailyExpense = 0; sim.dailyIncome = 0; sim.dailyBudget = 0; sim.workPerformance = 0;
         sim.actionTimer = 0;

@@ -79,6 +79,7 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '整体橱柜', w: 100, h: 40, color: '#b2bec3', utility: 'cook', pixelPattern: 'kitchen', tags: ['kitchen', 'stove'] },
             { label: '冰箱', w: 40, h: 40, color: '#fff', utility: 'hunger', pixelPattern: 'fridge', tags: ['kitchen'] },
             { label: '钢琴', w: 60, h: 80, color: '#2d3436', utility: 'play', pixelPattern: 'piano', tags: ['piano', 'instrument'] },
+            { label: '全身镜', w: 30, h: 80, color: '#74b9ff', utility: 'practice_speech', pixelPattern: 'closet', tags: ['mirror'] }, // 🆕 新增镜子
         ]
     },
     'bathroom': {

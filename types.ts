@@ -205,6 +205,7 @@ export interface Skills {
   creativity: number;
   gardening: number;
   fishing: number;
+  charisma: number; // 🆕 新增：魅力/口才技能
   [key: string]: number;
 }
 

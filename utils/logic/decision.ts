@@ -1,4 +1,3 @@
-
 import type { Sim } from '../Sim'; 
 import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
@@ -81,6 +80,10 @@ export const DecisionLogic = {
         for (let skillKey in sim.skills) {
             let talent = sim.skillModifiers[skillKey] || 1;
             let skillScore = (100 - sim.needs[NeedType.Fun]) * 0.5 * talent;
+            // 🆕 如果工作需要口才，大幅增加练习口才的意愿
+            if (skillKey === 'charisma' && (sim.job.companyType === 'business' || sim.job.companyType === 'store')) {
+                skillScore += 40;
+            }
             scores.push({ id: `skill_${skillKey}`, score: skillScore, type: 'obj' });
         }
 
@@ -107,6 +110,13 @@ export const DecisionLogic = {
         if (choice.score > 20) {
             if (choice.id === NeedType.Social) DecisionLogic.findHuman(sim);
             else if (choice.id === 'side_hustle') DecisionLogic.findSideHustle(sim);
+            // 🆕 处理技能练习 (通用化处理 skill_charisma -> practice_speech)
+            else if (choice.id.startsWith('skill_')) {
+                const skillName = choice.id.replace('skill_', '');
+                let actionType = skillName;
+                if (skillName === 'charisma') actionType = 'practice_speech';
+                DecisionLogic.findObject(sim, actionType);
+            }
             else DecisionLogic.findObject(sim, choice.id);
         } else {
             sim.startWandering();
@@ -168,7 +178,8 @@ export const DecisionLogic = {
              [NeedType.Hygiene]: 'hygiene',
              [NeedType.Energy]: 'energy',
              'healing': 'healing', 
-             cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play'
+             cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play',
+             practice_speech: 'practice_speech' // 🆕 显式映射
         };
         if (simpleMap[type]) utility = simpleMap[type];
 

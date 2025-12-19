@@ -1,4 +1,3 @@
-
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
@@ -25,13 +24,15 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
         return s;
     },
     [JobType.Business]: (sim) => {
-        let s = sim.eq * 0.5 + sim.appearanceScore * 0.4;
+        // 🆕 更新：商业职业现在同时看重 EQ 和 Charisma 技能
+        let s = sim.eq * 0.4 + (sim.skills.charisma || 0) * 3 + sim.appearanceScore * 0.3;
         if (sim.mbti.includes('E') && sim.mbti.includes('J')) s += 30;
         if (sim.lifeGoal.includes('富翁') || sim.lifeGoal.includes('大亨') || sim.lifeGoal.includes('领袖')) s += 50;
         return s;
     },
     [JobType.Store]: (sim) => {
-        let s = sim.eq * 0.3 + sim.constitution * 0.3 + 30; 
+        // 🆕 更新：零售服务业也看重 Charisma
+        let s = sim.eq * 0.3 + (sim.skills.charisma || 0) * 1.5 + sim.constitution * 0.3 + 30; 
         if (sim.ageStage === AgeStage.Teen) s += 20;
         return s;
     },
@@ -47,13 +48,13 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
         return s;
     },
     [JobType.School]: (sim) => {
-        let s = sim.iq * 0.3 + sim.eq * 0.3;
+        let s = sim.iq * 0.3 + sim.eq * 0.3 + (sim.skills.charisma || 0) * 1;
         if (sim.mbti.includes('S') && sim.mbti.includes('J')) s += 25;
         if (sim.lifeGoal.includes('家庭') || sim.lifeGoal.includes('桃李') || sim.lifeGoal.includes('岁月静好')) s += 50;
         return s;
     },
     [JobType.Nightlife]: (sim) => {
-        let s = (sim.skills.music || 0) * 2 + (sim.skills.dancing || 0) * 2 + sim.appearanceScore * 0.5;
+        let s = (sim.skills.music || 0) * 2 + (sim.skills.dancing || 0) * 2 + (sim.skills.charisma || 0) * 1.5 + sim.appearanceScore * 0.5;
         if (sim.mbti.includes('E') && sim.mbti.includes('P')) s += 40;
         if (sim.lifeGoal.includes('派对') || sim.lifeGoal.includes('万人迷')) s += 60;
         return s;
@@ -278,7 +279,8 @@ export const CareerLogic = {
         let dailyPerf = 0;
         
         if (sim.job.companyType === JobType.Internet && sim.iq > 70) dailyPerf += 3;
-        if (sim.job.companyType === JobType.Business && sim.eq > 70) dailyPerf += 3;
+        // 🆕 商务职业晋升看口才
+        if (sim.job.companyType === JobType.Business && (sim.eq > 70 || (sim.skills.charisma || 0) > 20)) dailyPerf += 3;
         if (sim.job.companyType === JobType.Hospital && sim.constitution > 70) dailyPerf += 3;
         
         if (sim.mood > 80) dailyPerf += 5;
