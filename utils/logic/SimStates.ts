@@ -161,7 +161,7 @@ export class MovingState extends BaseState {
     private handleArrival(sim: Sim) {
         if (this.actionName === SimAction.MovingHome) {
             sim.changeState(new IdleState());
-        } else if (sim.interactionTarget) {
+        } else if (sim.interactionTarget) { // [修复] 这里之前错误地使用了 this.interactionTarget
             sim.startInteraction(); 
         } else {
             sim.changeState(new IdleState());
@@ -500,5 +500,61 @@ export class BeingEscortedState extends BaseState {
                 sim.changeState(new IdleState());
             }
         } else { sim.changeState(new IdleState()); }
+    }
+}
+
+// 🆕 喂食婴儿状态
+export class FeedBabyState extends BaseState {
+    actionName = SimAction.FeedBaby;
+    targetBabyId: string;
+    
+    constructor(targetBabyId: string) {
+        super();
+        this.targetBabyId = targetBabyId;
+    }
+
+    enter(sim: Sim) {
+        const baby = GameStore.sims.find(s => s.id === this.targetBabyId);
+        if (baby) {
+            sim.target = { x: baby.pos.x + 15, y: baby.pos.y };
+            sim.say("来喂宝宝了~", 'family');
+        } else {
+            sim.changeState(new IdleState());
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        const baby = GameStore.sims.find(s => s.id === this.targetBabyId);
+        if (!baby) {
+            sim.changeState(new IdleState());
+            return;
+        }
+
+        // 如果还没到，继续移动
+        if (sim.target) {
+            const arrived = sim.moveTowardsTarget(dt);
+            if (!arrived) return;
+        }
+
+        // 到达后喂食
+        if (baby.needs[NeedType.Hunger] < 100) {
+            // 恢复系数
+            const restoreAmount = 0.5 * dt; 
+            baby.needs[NeedType.Hunger] += restoreAmount;
+            
+            // 家长消耗
+            sim.needs[NeedType.Energy] -= 0.05 * dt;
+
+            if (Math.random() < 0.05) {
+                sim.say("乖乖吃饭...", 'family');
+                baby.say("🍼...", 'normal');
+            }
+        } else {
+            // 喂饱了
+            sim.say("吃饱饱啦！", 'family');
+            baby.say("😊", 'love');
+            sim.changeState(new IdleState());
+            baby.changeState(new IdleState());
+        }
     }
 }

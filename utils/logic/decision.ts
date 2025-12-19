@@ -3,15 +3,92 @@ import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
 import { Furniture, SimAction, NeedType, AgeStage, JobType } from '../../types';
 import { getInteractionPos } from '../simulationHelpers';
+import { FeedBabyState, WaitingState, IdleState } from './SimStates';
 
 export const DecisionLogic = {
+    /**
+     * 核心权限检查：判断市民是否被禁止进入某目标区域/使用某物品
+     * @param sim 市民对象
+     * @param target 目标位置或家具对象
+     * @returns true = 禁止进入 (Restricted), false = 允许 (Allowed)
+     */
     isRestricted(sim: Sim, target: { x: number, y: number } | Furniture): boolean {
+        // --- 1. 寻找目标所在的具体地块 (Plot) ---
+        const plot = GameStore.worldLayout.find(p => 
+            target.x >= p.x && target.x <= p.x + (p.width || 300) &&
+            target.y >= p.y && target.y <= p.y + (p.height || 300)
+        );
+
+        // --- 2. 基于地皮类型的规则 ---
+        if (plot) {
+            // [规则 A] 学校区域警戒 (Security)
+            const isSchool = ['kindergarten', 'elementary', 'high_school', 'school_elem', 'school_high'].includes(plot.templateId);
+            
+            // 幼儿园安保更严格，全天限制；中小学限制教学时间
+            const isKindergarten = plot.templateId === 'kindergarten';
+            const currentHour = GameStore.time.hour;
+            const isSchoolTime = currentHour >= 8 && currentHour < 16;
+            
+            if (isSchool && (isSchoolTime || isKindergarten)) {
+                // 1. 允许教职工 (在此工作的人)
+                if (sim.workplaceId === plot.id) return false;
+
+                // 2. 允许家长任务 (接送/喂奶/等待)
+                // [新增] 允许 FeedBaby 状态的家长进入幼儿园
+                const validParentActions = [
+                    SimAction.PickingUp, 
+                    SimAction.Escorting, 
+                    SimAction.Waiting, 
+                    SimAction.FeedBaby
+                ];
+                if (validParentActions.includes(sim.action as SimAction)) return false;
+
+                // 3. 允许对应学龄的学生
+                let isStudent = false;
+                if (isKindergarten && [AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) isStudent = true;
+                if (plot.templateId.includes('elem') && sim.ageStage === AgeStage.Child) isStudent = true;
+                if (plot.templateId.includes('high') && sim.ageStage === AgeStage.Teen) isStudent = true;
+                
+                if (isStudent) return false;
+
+                // 🚫 其他人禁止入内 (闲杂人等退散)
+                return true;
+            }
+
+            // [规则 B] 成人娱乐场所 (Adult Only)
+            // 夜店、酒吧
+            const isNightlife = ['nightclub', 'bar'].includes(plot.templateId) || plot.customType === 'nightlife';
+            if (isNightlife) {
+                // 未成年人禁止入内 (Teen 也不行，防止早恋/学坏)
+                if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) {
+                    return true;
+                }
+            }
+
+            // [规则 C] 办公区域 (Workplace Security)
+            // 限制非员工进入纯办公场所 (Tech, Finance, Creative)
+            const privateWorkplaces = ['tech_hq', 'finance_center', 'creative_park'];
+            const isPrivateOffice = privateWorkplaces.includes(plot.templateId) || (plot.customType === 'work');
+
+            if (isPrivateOffice) {
+                // 1. 允许该地块的员工
+                if (sim.workplaceId === plot.id) return false;
+                
+                // 🚫 禁止非员工使用办公设施
+                return true;
+            }
+        }
+
+        // --- 3. 私宅归属权检查 (Private Property) ---
         let homeId: string | undefined;
 
         if ('homeId' in target && (target as Furniture).homeId) {
             homeId = (target as Furniture).homeId;
-        } else {
+        } else if (plot) {
+            // [修复] 只要确定了 plot，就尝试在 GameStore.housingUnits 中查找归属
+            // 不再检查 plot.housingUnits，因为该属性不存在于 WorldPlot 类型上
             const unit = GameStore.housingUnits.find(u => 
+                u.id.startsWith(plot.id) && // 属于该地皮
                 target.x >= u.x && target.x <= u.x + u.area.w &&
                 target.y >= u.y && target.y <= u.y + u.area.h
             );
@@ -19,10 +96,20 @@ export const DecisionLogic = {
         }
 
         if (homeId) {
+            // 是自己家 -> 允许
             if (sim.homeId === homeId) return false;
+            
+            // 是拜访对象家 -> 允许 (暂未实现正式拜访系统，这里简单判断：如果是亲友家且关系好)
+            // 或者是保姆
+            if (sim.isTemporary && sim.job.id === 'nanny' && sim.homeId === homeId) return false;
+
+            // 检查该房子是否有人住 (有主之地)
             const isOccupied = GameStore.sims.some(s => s.homeId === homeId);
+            
+            // 如果是陌生人的有主私宅 -> 禁止闯入
             if (isOccupied) return true;
         }
+
         return false;
     },
 
@@ -60,9 +147,93 @@ export const DecisionLogic = {
         return false;
     },
 
+    // 🆕 婴儿饥饿广播系统
+    triggerHungerBroadcast(sim: Sim) {
+        if (!sim.homeId) return;
+
+        // 寻找潜在看护人：在同一房子里，且处于清醒/空闲/居家状态的成年人/老人
+        const potentialCaregivers = GameStore.sims.filter(s => 
+            s.id !== sim.id &&
+            s.homeId === sim.homeId &&
+            s.isAtHome() && // 必须在家
+            (s.ageStage === AgeStage.Adult || s.ageStage === AgeStage.MiddleAged || s.ageStage === AgeStage.Elder) &&
+            // 排除正在应对紧急情况的人 (例如也在被喂食，或者生病严重)
+            s.action !== SimAction.FeedBaby && 
+            s.health > 20
+        );
+
+        // 评分筛选：保姆优先，其次是父母/祖父母，再次是其他
+        const candidates = potentialCaregivers.map(candidate => {
+            let score = 0;
+            
+            // 保姆最高优先级
+            if (candidate.isTemporary && candidate.job.id === 'nanny') score += 100;
+            
+            // 父母次之
+            if (candidate.id === sim.fatherId || candidate.id === sim.motherId) score += 50;
+            
+            // 🆕 祖父母：如果是老人且是家庭成员
+            if (candidate.ageStage === AgeStage.Elder && candidate.familyId === sim.familyId) {
+                // 检查是否是直系祖父母 (如果是父母的父母)
+                const father = GameStore.sims.find(p => p.id === sim.fatherId);
+                const mother = GameStore.sims.find(p => p.id === sim.motherId);
+                if ((father && (father.fatherId === candidate.id || father.motherId === candidate.id)) ||
+                    (mother && (mother.fatherId === candidate.id || mother.motherId === candidate.id))) {
+                    score += 60; // 隔代亲，权重甚至高于父母(忙碌时)
+                } else {
+                    score += 40; // 普通同住老人
+                }
+            }
+
+            // 距离权重
+            const dist = Math.sqrt(Math.pow(candidate.pos.x - sim.pos.x, 2) + Math.pow(candidate.pos.y - sim.pos.y, 2));
+            score -= dist * 0.01;
+
+            // 状态权重：闲着的人优先
+            if (candidate.action === SimAction.Idle || candidate.action === SimAction.Wandering) score += 30;
+            if (candidate.action === SimAction.Working) score -= 50; // 在家办公也不容易
+            if (candidate.action === SimAction.Sleeping) score -= 20; // 睡觉会被吵醒，但权重较低，毕竟要喂奶
+
+            return { sim: candidate, score };
+        });
+
+        // 排序
+        candidates.sort((a, b) => b.score - a.score);
+
+        const best = candidates[0];
+        if (best && best.score > 0) {
+            const caregiver = best.sim;
+            
+            // 强制打断当前行为
+            caregiver.interactionTarget = null;
+            caregiver.target = null;
+            // 切换到喂食状态
+            caregiver.changeState(new FeedBabyState(sim.id));
+            
+            sim.say("哇！🍼 (饿了)", 'family');
+            sim.changeState(new WaitingState()); // 婴儿等待喂食
+            
+            if (caregiver.action === SimAction.Sleeping) caregiver.say("哈欠...来了来了", 'normal');
+            else caregiver.say("宝宝饿了吗？", 'family');
+            
+            return true;
+        } else {
+            sim.say("Waaaaaah!!! (没人理)", 'bad');
+            return false;
+        }
+    },
+
     decideAction(sim: Sim) {
         // 1. 生存危机检查 (优先级最高)
         if (sim.health < 60 || sim.hasBuff('sick')) { DecisionLogic.findObject(sim, 'healing'); return; }
+
+        // 🆕 [修复] 婴儿饥饿处理：不再自己找物体，而是广播
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage) && sim.needs[NeedType.Hunger] < 50) {
+            const success = DecisionLogic.triggerHungerBroadcast(sim);
+            if (success) return; 
+            // 如果没人理，尝试自己吃（如果家里有现成食物），或者继续哭
+            // 这里为了防止死循环，如果没人理，允许 fallback 到原来的逻辑 (findObject 只能找到地上的奶瓶)
+        }
 
         let critical = [
             { id: NeedType.Energy, val: sim.needs[NeedType.Energy] },
@@ -104,7 +275,8 @@ export const DecisionLogic = {
 
         // 4. 购物欲望
         // 快乐或有钱时想花钱
-        if (sim.money > 500 && (sim.mood > 80 || sim.hasBuff('shopping_spree'))) { 
+        // 🆕 [修复] 婴儿禁止购物
+        if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage) && sim.money > 500 && (sim.mood > 80 || sim.hasBuff('shopping_spree'))) { 
             scores.push({ id: 'buy_item', score: 40 + (sim.money / 200), type: 'obj' }); 
         }
 
@@ -124,70 +296,74 @@ export const DecisionLogic = {
         }
 
         // === 🆕 6. 技能提升决策树 (Skill Improvement Logic) ===
-        for (let skillKey in sim.skills) {
-            let skillDesire = 0;
-            const currentLevel = sim.skills[skillKey];
-            const talent = sim.skillModifiers[skillKey] || 1;
+        // [修复] 只有儿童及以上年龄段才会产生练习技能的欲望
+        if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+            for (let skillKey in sim.skills) {
+                let skillDesire = 0;
+                const currentLevel = sim.skills[skillKey];
+                const talent = sim.skillModifiers[skillKey] || 1;
 
-            // A. 性格驱动 (Personality Drive)
-            // J型 (Judging): 规划性强，即使快乐也会提升自我
-            if (sim.mbti.includes('J')) {
-                skillDesire += 25; 
-                // 心情好时，J型人更有动力自我提升 ("Maslow's Bonus")
-                if (sim.mood > 75) skillDesire += 20; 
-            } else {
-                // P型: 随性，主要靠兴趣(Fun缺口)或突发灵感
-                if (sim.needs[NeedType.Fun] < 60) skillDesire += 15;
+                // A. 性格驱动 (Personality Drive)
+                // J型 (Judging): 规划性强，即使快乐也会提升自我
+                if (sim.mbti.includes('J')) {
+                    skillDesire += 25; 
+                    // 心情好时，J型人更有动力自我提升 ("Maslow's Bonus")
+                    if (sim.mood > 75) skillDesire += 20; 
+                } else {
+                    // P型: 随性，主要靠兴趣(Fun缺口)或突发灵感
+                    if (sim.needs[NeedType.Fun] < 60) skillDesire += 15;
+                }
+
+                // MBTI 维度偏好
+                if (sim.mbti.includes('N') && ['logic', 'creativity', 'charisma'].includes(skillKey)) skillDesire += 15;
+                if (sim.mbti.includes('S') && ['athletics', 'cooking', 'gardening', 'fishing'].includes(skillKey)) skillDesire += 15;
+
+                // B. 职业驱动 (Career Drive)
+                if (DecisionLogic.isCareerSkill(sim, skillKey)) {
+                    skillDesire += 30;
+                    // 绩效压力：如果有工作且绩效不满，极其渴望提升
+                    if (sim.workPerformance < 50 && sim.job.id !== 'unemployed') skillDesire += 40;
+                    else if (sim.workPerformance < 100) skillDesire += 20;
+                }
+
+                // C. 目标驱动 (Goal Drive)
+                if (DecisionLogic.isGoalSkill(sim, skillKey)) {
+                    skillDesire += 30; // 梦想的力量
+                }
+
+                // D. 特质修正 (Trait Modifiers)
+                if (sim.traits.includes('懒惰')) skillDesire -= 30; // 懒人即使有规划也不想动
+                if (sim.traits.includes('活力') && skillKey === 'athletics') skillDesire += 40;
+                if (sim.traits.includes('天才') && skillKey === 'logic') skillDesire += 30;
+                if (sim.traits.includes('有创意') && skillKey === 'creativity') skillDesire += 30;
+                if (sim.traits.includes('社恐') && skillKey === 'charisma') skillDesire -= 20;
+
+                // E. 状态修正 (Condition)
+                // 太累或太饿时，不想学习 (除非是工作狂 J + Career)
+                if (sim.needs[NeedType.Energy] < 30 || sim.needs[NeedType.Hunger] < 30) {
+                    skillDesire -= 50;
+                }
+                
+                // F. 娱乐补偿 (Fun Factor)
+                // 练习技能本身也能回复一定娱乐，所以缺娱乐时也会作为备选项
+                // 但对于 J 型人，这部分权重降低，更看重上面的规划权重
+                const funDeficit = 100 - sim.needs[NeedType.Fun];
+                skillDesire += funDeficit * 0.3; 
+
+                // 天赋倍率
+                skillDesire *= talent;
+
+                // 防止过度沉迷：如果技能已经很高，除非是完美主义者(J)，否则欲望稍降
+                if (currentLevel > 90 && !sim.mbti.includes('J')) skillDesire *= 0.5;
+
+                scores.push({ id: `skill_${skillKey}`, score: skillDesire, type: 'obj' });
             }
-
-            // MBTI 维度偏好
-            if (sim.mbti.includes('N') && ['logic', 'creativity', 'charisma'].includes(skillKey)) skillDesire += 15;
-            if (sim.mbti.includes('S') && ['athletics', 'cooking', 'gardening', 'fishing'].includes(skillKey)) skillDesire += 15;
-
-            // B. 职业驱动 (Career Drive)
-            if (DecisionLogic.isCareerSkill(sim, skillKey)) {
-                skillDesire += 30;
-                // 绩效压力：如果有工作且绩效不满，极其渴望提升
-                if (sim.workPerformance < 50 && sim.job.id !== 'unemployed') skillDesire += 40;
-                else if (sim.workPerformance < 100) skillDesire += 20;
-            }
-
-            // C. 目标驱动 (Goal Drive)
-            if (DecisionLogic.isGoalSkill(sim, skillKey)) {
-                skillDesire += 30; // 梦想的力量
-            }
-
-            // D. 特质修正 (Trait Modifiers)
-            if (sim.traits.includes('懒惰')) skillDesire -= 30; // 懒人即使有规划也不想动
-            if (sim.traits.includes('活力') && skillKey === 'athletics') skillDesire += 40;
-            if (sim.traits.includes('天才') && skillKey === 'logic') skillDesire += 30;
-            if (sim.traits.includes('有创意') && skillKey === 'creativity') skillDesire += 30;
-            if (sim.traits.includes('社恐') && skillKey === 'charisma') skillDesire -= 20;
-
-            // E. 状态修正 (Condition)
-            // 太累或太饿时，不想学习 (除非是工作狂 J + Career)
-            if (sim.needs[NeedType.Energy] < 30 || sim.needs[NeedType.Hunger] < 30) {
-                skillDesire -= 50;
-            }
-            
-            // F. 娱乐补偿 (Fun Factor)
-            // 练习技能本身也能回复一定娱乐，所以缺娱乐时也会作为备选项
-            // 但对于 J 型人，这部分权重降低，更看重上面的规划权重
-            const funDeficit = 100 - sim.needs[NeedType.Fun];
-            skillDesire += funDeficit * 0.3; 
-
-            // 天赋倍率
-            skillDesire *= talent;
-
-            // 防止过度沉迷：如果技能已经很高，除非是完美主义者(J)，否则欲望稍降
-            if (currentLevel > 90 && !sim.mbti.includes('J')) skillDesire *= 0.5;
-
-            scores.push({ id: `skill_${skillKey}`, score: skillDesire, type: 'obj' });
         }
 
         // 7. 特殊娱乐活动 (Cinema, Art, etc.)
         // 主要是为了快速回血 Fun
-        if (sim.needs[NeedType.Fun] < 60) {
+        // [修复] 只有儿童及以上才能看电影/看展
+        if (sim.needs[NeedType.Fun] < 60 && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
             if (sim.money > 100) {
                 let cinemaScore = (100 - sim.needs[NeedType.Fun]) * 1.2;
                 scores.push({ id: 'cinema_3d', score: cinemaScore, type: 'obj' });
@@ -342,10 +518,17 @@ export const DecisionLogic = {
              }
         } 
         else if (type === NeedType.Hunger) {
-            candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []); // 冰箱
-            candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []); // 餐厅
-            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_drink') || []);
-            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []); 
+            // [修复] 婴幼儿饥饿时不应该去找餐厅或自己做饭，只能用奶瓶或等人喂
+            // 目前简化为：如果家里有奶粉/食物 (hunger type objects like fridge/table)，或者等待保姆
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                // 只查找家里的食物源
+                candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
+            } else {
+                candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []); // 冰箱
+                candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []); // 餐厅
+                candidates = candidates.concat(GameStore.furnitureIndex.get('buy_drink') || []);
+                candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []); 
+            }
         } 
         else if (type === NeedType.Hygiene) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('hygiene') || []);
@@ -366,7 +549,7 @@ export const DecisionLogic = {
         // 过滤不可用对象
         if (candidates.length) {
             candidates = candidates.filter((f: Furniture)=> {
-                 // 1. 权限检查 (私宅)
+                 // 1. 权限检查 (私宅/学校/夜店)
                  if (DecisionLogic.isRestricted(sim, f)) return false;
                  
                  // 2. 经济检查
@@ -382,6 +565,16 @@ export const DecisionLogic = {
                      const isOccupied = GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id);
                      if (isOccupied) return false;
                  }
+                 
+                 // 4. [修复] 婴幼儿专属过滤：不能使用高级设施
+                 if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                     // 允许：床(energy/nap_crib), 玩具(play/play_blocks), 饮食(hunger), 地毯
+                     const allowed = ['energy', 'nap_crib', 'play', 'play_blocks', 'hunger', 'bladder', 'hygiene'];
+                     if (!allowed.includes(f.utility) && !f.tags?.includes('baby')) return false;
+                     // 排除灶台、健身器材等
+                     if (f.tags?.includes('stove') || f.tags?.includes('gym') || f.tags?.includes('computer')) return false;
+                 }
+
                  return true;
             });
 

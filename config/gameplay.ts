@@ -1,5 +1,11 @@
 import { Job, JobType, AgeStage, NeedType } from '../types';
 
+// 新增：时间流逝配置
+// 60 ticks = 1 游戏分钟 (在 60FPS 下，1秒现实时间 = 1游戏分钟)
+export const TIME_CONFIG = {
+    TICKS_PER_MINUTE: 60
+};
+
 // 画布与基础颜色配置
 export const CONFIG = {
     CANVAS_W: 3600, 

@@ -46,6 +46,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'buy_drink': {
         verb: '咕嘟咕嘟', duration: 5,
         onStart: (sim, obj) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("够不着...", 'bad'); return false; }
             if (sim.money >= 5) { 
                 sim.money -= 5; 
                 sim.needs[NeedType.Hunger] += 5; 
@@ -58,6 +59,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'buy_book': {
         verb: '买书', duration: 15,
         onStart: (sim, obj) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
             if (sim.money >= 60) { 
                 // 复用 EconomyLogic.buyItem 来获得物品效果
                 // 注意：这里已经到了书架前，所以是合法的交互
@@ -70,6 +72,12 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'buy_item': {
         verb: '购物 🛍️', duration: 15,
         onStart: (sim, obj) => {
+            // [修复] 婴幼儿不能购物
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("够不着柜台...", 'bad');
+                return false;
+            }
+
             // 🆕 优先检查是否有特定购买意图
             if (sim.intendedShoppingItemId) {
                 const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
@@ -112,6 +120,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'run': {
         verb: '健身', duration: 60,
         onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太危险了!", 'bad'); return false; }
             // 如果是买课意图，先扣钱
             if (sim.intendedShoppingItemId === 'gym_pass') {
                 const item = ITEMS.find(i => i.id === 'gym_pass');
@@ -144,6 +153,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'stretch': {
         verb: '瑜伽', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("还是玩积木吧", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'athletics', 0.05 * f);
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
@@ -154,6 +167,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'lift': {
         verb: '举铁 💪', duration: 45,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太重了...", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'athletics', 0.1 * f);
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
@@ -258,7 +275,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onStart: (sim) => { 
             // [新增] 婴幼儿不能烹饪
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                sim.say("太高了...", 'bad');
+                sim.say("够不着灶台...", 'bad');
                 return false;
             }
 
@@ -359,6 +376,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'dance': {
         verb: '跳舞 💃', duration: 30,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("站不稳...", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'dancing', 0.1 * f);
             sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.02 * f);
@@ -370,6 +391,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'practice_speech': {
         verb: '练习演讲 🗣️', duration: 45,
         getVerb: () => '对着镜子练习',
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("阿巴阿巴...", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'charisma', 0.08 * f);
             sim.eq = Math.min(100, sim.eq + 0.02 * f); 
@@ -388,6 +413,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     // 🆕 下棋 (逻辑)
     'play_chess': {
         verb: '下棋 ♟️', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("只会吃棋子...", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'logic', 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(80);
@@ -403,6 +432,10 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     // 🆕 演奏乐器 (音乐)
     'play_instrument': {
         verb: '演奏 🎵', duration: 45,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("乱按...", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'music', 0.1 * f);
             sim.needs[NeedType.Fun] += getRate(100);
@@ -564,6 +597,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '吃点心 🌭', 
         duration: 15,
         onStart: (sim, obj) => {
+            // [新增] 婴幼儿不能买吃的
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("...", 'bad'); return false; }
+            
             const cost = 20; 
             if (sim.money >= cost) { 
                 sim.money -= cost; 

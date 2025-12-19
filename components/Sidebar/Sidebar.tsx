@@ -4,6 +4,7 @@ import LogPanel from './LogPanel';
 import Inspector from './Inspector';
 import StatisticsPanel from './StatisticsPanel';
 import EditorPanel from './EditorPanel'; 
+import CreateSimModal from '../CreateSimModal'; // 🆕 引入捏人模态框
 import { GameStore, Sim } from '../../utils/simulation';
 
 // Full Screen Overlay managing HUD elements
@@ -12,6 +13,7 @@ const GameOverlay: React.FC = () => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showStats, setShowStats] = useState(false);
     const [showEditor, setShowEditor] = useState(false); 
+    const [showCreateSim, setShowCreateSim] = useState(false); // 🆕 捏人界面状态
     
     useEffect(() => {
         // Initial fetch
@@ -71,16 +73,23 @@ const GameOverlay: React.FC = () => {
                 <EditorPanel onClose={toggleEditor} />
             )}
 
+            {/* Create Sim Modal (CAS) */}
+            {showCreateSim && (
+                <div className="pointer-events-auto">
+                    <CreateSimModal onClose={() => setShowCreateSim(false)} />
+                </div>
+            )}
+
             {/* Floating Log Panel */}
             {!showEditor && <LogPanel />}
 
             {/* Statistics Modal */}
             {showStats && <StatisticsPanel onClose={() => setShowStats(false)} />}
 
-            {/* [修改] Bottom Right: Unified Controls Bar */}
+            {/* Bottom Right: Unified Controls Bar */}
             <div className="absolute right-8 bottom-8 pointer-events-auto flex items-center gap-6">
                 
-                {/* Tools Group (Editor & Stats) - 移到了这里 */}
+                {/* Tools Group (Editor & Stats) */}
                 <div className="flex gap-3">
                      {/* Editor Button */}
                     <button
@@ -122,7 +131,23 @@ const GameOverlay: React.FC = () => {
 
                 {/* Spawn Buttons Group */}
                 <div className="flex gap-3">
-                    {/* Spawn Single Button */}
+                    {/* 🆕 Create Custom Sim Button */}
+                    <button
+                        onClick={() => setShowCreateSim(true)}
+                        className="
+                            group flex items-center justify-center
+                            bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white 
+                            w-12 h-12 rounded-full 
+                            shadow-lg hover:shadow-[0_0_20px_rgba(244,63,94,0.6)]
+                            border-2 border-[#fff]/20 hover:border-white
+                            transition-all duration-300 transform hover:scale-110 active:scale-95
+                        "
+                        title="捏人 (创建自定义市民)"
+                    >
+                        <span className="text-xl">🎨</span>
+                    </button>
+
+                    {/* Spawn Single Button (Random) */}
                     <button
                         onClick={handleSpawnSingle}
                         className="
@@ -133,13 +158,13 @@ const GameOverlay: React.FC = () => {
                             border-2 border-[#fff]/20 hover:border-white
                             transition-all duration-300 transform hover:scale-105 active:scale-95
                         "
-                        title="添加单身居民"
+                        title="快速生成单人 (随机)"
                     >
                         <span className="text-xl">👤</span>
-                        <span className="font-bold text-xs">单人</span>
+                        <span className="font-bold text-xs">随机</span>
                     </button>
 
-                    {/* Spawn Family Button */}
+                    {/* Spawn Family Button (Random) */}
                     <button
                         onClick={handleSpawnFamily}
                         className="
@@ -150,7 +175,7 @@ const GameOverlay: React.FC = () => {
                             border-2 border-[#fff]/20 hover:border-white
                             transition-all duration-300 transform hover:scale-105 active:scale-95
                         "
-                        title="添加随机家庭"
+                        title="快速生成家庭 (随机)"
                     >
                         <span className="text-xl">👨‍👩‍👧</span>
                         <span className="font-bold text-xs">家庭</span>

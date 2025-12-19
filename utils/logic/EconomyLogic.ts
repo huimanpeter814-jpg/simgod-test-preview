@@ -58,6 +58,7 @@ export const EconomyLogic = {
         if (sim.action !== 'wandering' && sim.action !== 'idle') {
             return;
         }
+        // 🔒 [安全守卫] 婴幼儿绝对禁止产生购物意图
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
         
         if (sim.money <= 0) return;

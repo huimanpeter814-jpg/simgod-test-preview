@@ -1,8 +1,9 @@
-
 import { Job, Furniture, Vector2 } from '../types';
+import { TIME_CONFIG } from '../constants'; // 引入统一配置
 
-// 将游戏分钟转换为 tick 数 (1 游戏分钟 = 60 ticks)
-export const minutes = (m: number) => m * 60;
+// 将游戏分钟转换为 tick 数
+// 保持和 GameLoop 中一致的时间流逝定义
+export const minutes = (m: number) => m * TIME_CONFIG.TICKS_PER_MINUTE;
 
 // 计算特定职业的工位容量
 export const getJobCapacity = (job: Job) => {
@@ -43,7 +44,6 @@ export const hasRequiredTags = (f: Furniture, requiredTags?: string[]): boolean 
     return requiredTags.some(tag => furnitureTags.includes(tag));
 };
 
-// 🆕 [新增] 获取交互锚点系统
 // anchor: 市民走到的位置 (寻路终点)
 // interact: 市民实际进行交互的位置 (动画位置)
 export const getInteractionPos = (f: Furniture): { anchor: Vector2, interact: Vector2 } => {

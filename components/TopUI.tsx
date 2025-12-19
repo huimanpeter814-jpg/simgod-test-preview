@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GameStore } from '../utils/simulation';
-import { SaveMetadata } from '../types'; // Updated import source
+import { SaveMetadata } from '../types';
 import { HOLIDAYS } from '../constants';
-import HelpModal from './HelpModal'; // Import the new HelpModal
+import HelpModal from './HelpModal';
 
 const SaveLoadModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const [slots, setSlots] = useState<(SaveMetadata | null)[]>([]);
@@ -98,16 +98,40 @@ const TopUI: React.FC = () => {
   const [time, setTime] = useState({ ...GameStore.time });
   const [pop, setPop] = useState(0);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false); // State for Help Modal
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  
+  // FPS Logic
+  const [fps, setFps] = useState(60);
+  const lastTimeRef = useRef(performance.now());
+  const frameCountRef = useRef(0);
+  const rafRef = useRef<number>();
 
   useEffect(() => {
+    // 1. GameStore listener
     const unsub = GameStore.subscribe(() => {
         setTime({ ...GameStore.time });
         setPop(GameStore.sims.length);
         setToast(GameStore.toastMessage);
     });
-    return unsub;
+
+    // 2. FPS Calculation loop
+    const calcFps = () => {
+        const now = performance.now();
+        frameCountRef.current++;
+        if (now - lastTimeRef.current >= 1000) {
+            setFps(frameCountRef.current);
+            frameCountRef.current = 0;
+            lastTimeRef.current = now;
+        }
+        rafRef.current = requestAnimationFrame(calcFps);
+    };
+    calcFps();
+
+    return () => {
+        unsub();
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const setSpeed = (s: number) => {
@@ -159,6 +183,13 @@ const TopUI: React.FC = () => {
 
             {/* Right Side Controls */}
             <div className="flex gap-2 pointer-events-auto">
+                {/* FPS Counter */}
+                <div className="bg-black/40 backdrop-blur-sm px-2 h-9 rounded-full border border-white/5 flex items-center justify-center min-w-[50px]">
+                    <span className={`text-[10px] font-mono font-bold ${fps < 30 ? 'text-red-400' : 'text-green-400'}`}>
+                        {fps} FPS
+                    </span>
+                </div>
+
                 <button 
                     onClick={() => setShowSaveModal(true)}
                     className="bg-black/60 backdrop-blur-md px-3 h-9 rounded-full border border-white/10 flex items-center gap-2 text-xs font-bold text-gray-300 hover:text-white hover:border-white/30 transition-all active:scale-95"
@@ -166,7 +197,6 @@ const TopUI: React.FC = () => {
                     <span>💾 存档</span>
                 </button>
 
-                {/* [新增] Help Button */}
                 <button
                     onClick={() => setShowHelpModal(true)}
                     className="bg-black/60 backdrop-blur-md w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-sm font-bold text-gray-300 hover:text-white hover:bg-white/10 hover:border-white/30 transition-all active:scale-95"

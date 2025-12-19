@@ -9,6 +9,7 @@ import { FamilyGenerator } from './logic/genetics';
 import { EditorManager } from '../managers/EditorManager';
 import { SaveManager, GameSaveData } from '../managers/SaveManager'; 
 import { NannyState, PickingUpState } from './logic/SimStates';
+import { SimInitConfig } from './logic/SimInitializer'; // 🆕
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -601,6 +602,23 @@ export class GameStore {
 
     static spawnSingle() {
         this.spawnFamily(1);
+    }
+
+    // 🆕 生成自定义市民
+    static spawnCustomSim(config: SimInitConfig) {
+        // 先生成 Sim 实例，但不直接 new，而是需要处理住所逻辑
+        // 我们利用 assignRandomHome 的逻辑，或者先创建无家可归的，再分配
+        const sim = new Sim(config);
+        
+        this.sims.push(sim);
+        this.assignRandomHome(sim); // 自动分配住所
+        
+        this.addLog(null, `[入住] 新居民 ${sim.name} (自定义) 搬入了城市。`, "sys");
+        this.showToast(`✨ ${sim.name} 创建成功！`);
+        this.notify();
+        
+        // 选中新创建的市民
+        this.selectedSimId = sim.id;
     }
 }
 
