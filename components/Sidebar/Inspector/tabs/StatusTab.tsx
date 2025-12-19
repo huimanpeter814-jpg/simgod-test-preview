@@ -32,6 +32,32 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
 
     return (
         <>
+            {/* [新增] 资产状况 - 移至第一页 */}
+            <div>
+                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">资产状况</div>
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-white/5 p-2 rounded border border-white/5">
+                        <div className="text-[10px] text-gray-400">总资产</div>
+                        <div className="text-lg font-bold text-warning">${sim.money}</div>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded border border-white/5">
+                        <div className="text-[10px] text-gray-400">今日预算</div>
+                        <div className="text-sm font-bold text-gray-300">${sim.dailyBudget}</div>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded border border-white/5 col-span-2 flex justify-between items-center">
+                        <span className="text-[10px] text-gray-400">收支记录</span>
+                        <div className="flex gap-4">
+                            <span className="text-xs font-bold text-success flex items-center gap-1">
+                                <span className="text-[8px] opacity-70">IN</span> +${sim.dailyIncome || 0}
+                            </span>
+                            <span className="text-xs font-bold text-danger flex items-center gap-1">
+                                <span className="text-[8px] opacity-70">OUT</span> -${sim.dailyExpense || 0}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* 当前状态 */}
             <div>
                 <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">当前状态</div>
