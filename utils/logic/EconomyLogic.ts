@@ -5,10 +5,10 @@ import { SocialLogic } from './social';
 import { DecisionLogic } from './decision';
 import { CareerLogic } from './career';
 import { AgeStage } from '../../types';
+import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
 
 export const EconomyLogic = {
     calculateDailyBudget(sim: Sim) {
-        // 🆕 修复：婴幼儿无预算，但青少年可以有预算
         if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
             sim.dailyBudget = 0;
             return;
@@ -37,7 +37,6 @@ export const EconomyLogic = {
         if (sim.action !== 'wandering' && sim.action !== 'idle') {
             return;
         }
-        // 🆕 婴幼儿不能消费
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
         
         if (sim.money <= 0) return;
@@ -123,7 +122,8 @@ export const EconomyLogic = {
 
         if (item.skill) {
             let val = item.skillVal || 5;
-            sim.skills[item.skill] = Math.min(100, sim.skills[item.skill] + val);
+            // 🆕 使用 SkillLogic 处理购买物品获得的技能经验 (例如读书)
+            SkillLogic.gainExperience(sim, item.skill, val);
             sim.say("📚 涨知识", 'act');
         }
 

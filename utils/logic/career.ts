@@ -2,13 +2,13 @@ import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
 import { Furniture, JobType, SimAction, AgeStage, Job } from '../../types';
-import { CommutingState, IdleState } from './SimStates';
+import { CommutingState, IdleState, WorkingState } from './SimStates';
 import { SocialLogic } from './social';
+import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
 
-// 🆕 全职业适应性评分标准 (Job Preferences)
+// Job Preferences logic remains the same...
 const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
     [JobType.Unemployed]: () => -9999,
-
     [JobType.Internet]: (sim) => {
         let s = sim.iq * 0.6 + sim.skills.logic * 3;
         if (sim.mbti.includes('T')) s += 20;
@@ -24,14 +24,12 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
         return s;
     },
     [JobType.Business]: (sim) => {
-        // 🆕 更新：商业职业现在同时看重 EQ 和 Charisma 技能
         let s = sim.eq * 0.4 + (sim.skills.charisma || 0) * 3 + sim.appearanceScore * 0.3;
         if (sim.mbti.includes('E') && sim.mbti.includes('J')) s += 30;
         if (sim.lifeGoal.includes('富翁') || sim.lifeGoal.includes('大亨') || sim.lifeGoal.includes('领袖')) s += 50;
         return s;
     },
     [JobType.Store]: (sim) => {
-        // 🆕 更新：零售服务业也看重 Charisma
         let s = sim.eq * 0.3 + (sim.skills.charisma || 0) * 1.5 + sim.constitution * 0.3 + 30; 
         if (sim.ageStage === AgeStage.Teen) s += 20;
         return s;
@@ -214,7 +212,6 @@ export const CareerLogic = {
     },
 
     checkSchedule(sim: Sim) {
-        // 🆕 [修复] 临时角色(保姆)不参与常规工作调度
         if (sim.isTemporary) return;
 
         if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Elder].includes(sim.ageStage) || sim.job.id === 'unemployed') return;
@@ -279,7 +276,6 @@ export const CareerLogic = {
         let dailyPerf = 0;
         
         if (sim.job.companyType === JobType.Internet && sim.iq > 70) dailyPerf += 3;
-        // 🆕 商务职业晋升看口才
         if (sim.job.companyType === JobType.Business && (sim.eq > 70 || (sim.skills.charisma || 0) > 20)) dailyPerf += 3;
         if (sim.job.companyType === JobType.Hospital && sim.constitution > 70) dailyPerf += 3;
         
@@ -353,7 +349,6 @@ export const CareerLogic = {
         sim.changeState(new IdleState());
     },
 
-    // ✅ [修复] 补回了这个方法
     checkCareerSatisfaction(sim: Sim) {
         if (sim.job.id === 'unemployed') return;
         
@@ -385,7 +380,7 @@ export const CareerLogic = {
         sim.job = JOBS.find(j => j.id === 'unemployed')!;
         sim.workplaceId = undefined;
         sim.workPerformance = 0;
-        sim.consecutiveAbsences = 0; // 重置旷工计数
+        sim.consecutiveAbsences = 0; 
         
         if (reason === 'fired') {
             GameStore.addLog(sim, `被公司开除了 (${oldTitle})`, 'bad');

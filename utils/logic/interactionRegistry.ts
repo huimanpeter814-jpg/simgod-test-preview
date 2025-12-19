@@ -2,6 +2,7 @@ import { ITEMS, BUFFS } from '../../constants';
 import { Furniture, NeedType, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
+import { SkillLogic } from './SkillLogic'; // 🆕 引入技能逻辑系统
 
 // === 接口定义 ===
 export interface InteractionHandler {
@@ -15,7 +16,6 @@ export interface InteractionHandler {
 }
 
 // === 常量定义 ===
-// [优化] 使用 NeedType 作为 Key
 export const RESTORE_TIMES: Record<string, number> = {
     [NeedType.Bladder]: 15, 
     [NeedType.Hygiene]: 25, 
@@ -26,7 +26,7 @@ export const RESTORE_TIMES: Record<string, number> = {
     [NeedType.Social]: 60, 
     art: 120, 
     play: 60, 
-    practice_speech: 45, // 🆕 口才练习时长
+    practice_speech: 45,
     default: 60
 };
 
@@ -79,45 +79,57 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'run': {
         verb: '健身', duration: 60,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.athletics += 0.08 * f;
-            sim.needs[NeedType.Energy] -= getRate(120);
-            sim.needs[NeedType.Hygiene] -= getRate(240);
-            sim.constitution = Math.min(100, sim.constitution + 0.05 * f);
+            // 🆕 使用 SkillLogic 处理经验
+            SkillLogic.gainExperience(sim, 'athletics', 0.08 * f);
+            
+            // 🆕 天赋效果：等级高了之后精力/卫生消耗减少 (Efficiency Perk)
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            
+            sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
+            sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
+            
+            // 体质增长变慢
+            sim.constitution = Math.min(100, sim.constitution + 0.05 * f * decayMod);
         }
     },
     'stretch': {
         verb: '瑜伽', duration: 60,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.athletics += 0.05 * f;
-            sim.needs[NeedType.Energy] -= getRate(120);
-            sim.needs[NeedType.Hygiene] -= getRate(240);
+            SkillLogic.gainExperience(sim, 'athletics', 0.05 * f);
+            
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
+            sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
             sim.constitution = Math.min(100, sim.constitution + 0.03 * f);
         }
     },
     'lift': {
         verb: '举铁 💪', duration: 45,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.athletics += 0.1 * f; 
-            sim.needs[NeedType.Energy] -= getRate(300); 
-            sim.needs[NeedType.Hygiene] -= getRate(300);
+            SkillLogic.gainExperience(sim, 'athletics', 0.1 * f);
+            
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            sim.needs[NeedType.Energy] -= getRate(300) * decayMod; 
+            sim.needs[NeedType.Hygiene] -= getRate(300) * decayMod;
             sim.constitution = Math.min(100, sim.constitution + 0.08 * f);
         }
     },
     'gardening': {
         verb: '修剪枝叶 🌿', duration: 40,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.gardening += 0.08 * f; 
+            SkillLogic.gainExperience(sim, 'gardening', 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(150);
         }
     },
     'fishing': {
         verb: '钓鱼 🎣', duration: 60,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.fishing += 0.08 * f; 
+            SkillLogic.gainExperience(sim, 'fishing', 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(120);
         },
         onFinish: (sim) => {
-            if (Math.random() > 0.6) {
+            // 等级越高，钓到大鱼概率越高
+            if (Math.random() > (0.6 - sim.skills.fishing * 0.003)) {
                 const earned = 15 + sim.skills.fishing * 2;
                 sim.earnMoney(earned, 'sell_fish');
                 sim.say("钓到大鱼了! 🐟", 'money');
@@ -126,8 +138,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
     'cooking': {
         verb: '烹饪', duration: 90,
+        // 🆕 天赋效果：等级越高，做饭越快 (Speed Perk)
+        getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
         onStart: (sim) => { 
-            // [修复] 使用 sim 方法代替直接实例化
             if (sim.interactionTarget?.utility === 'work') {
                 sim.enterWorkingState();
             } else {
@@ -136,7 +149,15 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             return true; 
         },
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.cooking += 0.05 * f;
+            SkillLogic.gainExperience(sim, 'cooking', 0.05 * f);
+        },
+        onFinish: (sim) => {
+            // 🆕 天赋效果：等级高了之后，做出的饭更好吃
+            if (sim.skills.cooking >= 50) {
+                sim.addBuff(BUFFS.good_meal);
+                sim.needs[NeedType.Hunger] = Math.min(100, sim.needs[NeedType.Hunger] + 20); // 额外回复
+                sim.say("营养美味! 🍳", 'act');
+            }
         }
     },
     'art': {
@@ -144,14 +165,16 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onStart: (sim) => { sim.addBuff(BUFFS.art_inspired); return true; },
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Fun] += getRate(RESTORE_TIMES.art);
-            sim.skills.creativity += 0.03 * f;
+            SkillLogic.gainExperience(sim, 'creativity', 0.03 * f);
             sim.creativity = Math.min(100, sim.creativity + 0.05 * f);
         }
     },
     'paint': {
         verb: '绘画 🖌️', duration: 90,
+        // 🆕 天赋效果：创作加速
+        getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.creativity += 0.08 * f;
+            SkillLogic.gainExperience(sim, 'creativity', 0.08 * f);
             sim.creativity = Math.min(100, sim.creativity + 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(120);
         }
@@ -168,31 +191,43 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'dance': {
         verb: '跳舞 💃', duration: 30,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.dancing += 0.1 * f;
+            SkillLogic.gainExperience(sim, 'dancing', 0.1 * f);
             sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.02 * f);
             sim.constitution = Math.min(100, sim.constitution + 0.02 * f);
             sim.needs[NeedType.Fun] += getRate(60);
             sim.needs[NeedType.Energy] -= getRate(200); 
         }
     },
-    // 🆕 口才练习
     'practice_speech': {
         verb: '练习演讲 🗣️', duration: 45,
         getVerb: () => '对着镜子练习',
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.charisma += 0.08 * f;
-            sim.eq = Math.min(100, sim.eq + 0.02 * f); // 练习同时微量提升EQ
-            sim.needs[NeedType.Fun] -= getRate(150); // 练习是枯燥的
+            SkillLogic.gainExperience(sim, 'charisma', 0.08 * f);
+            sim.eq = Math.min(100, sim.eq + 0.02 * f); 
+            sim.needs[NeedType.Fun] -= getRate(150); 
             sim.needs[NeedType.Energy] -= getRate(100);
         },
         onFinish: (sim) => {
-            sim.say("感觉更有自信了！", 'act');
+            if (sim.skills.charisma > 50) {
+                sim.say("我简直是演说家！✨", 'act');
+                sim.addBuff(BUFFS.promoted); // 借用自信buff
+            } else {
+                sim.say("感觉更有自信了！", 'act');
+            }
         }
     },
    'work': {
         verb: '工作 💻', 
         duration: 480, 
-        getDuration: (sim) => sim.isSideHustle ? 180 : 480,
+        getDuration: (sim) => {
+            let base = sim.isSideHustle ? 180 : 480;
+            // 🆕 黑客/作家天赋减少电脑工作时间
+            if (sim.isSideHustle) {
+                base *= SkillLogic.getPerkModifier(sim, 'logic', 'speed');
+                base *= SkillLogic.getPerkModifier(sim, 'creativity', 'speed');
+            }
+            return base;
+        },
         getVerb: (sim) => sim.isSideHustle ? '接单赚外快 💻' : '工作 💻',
         
         onStart: (sim, obj) => {
@@ -215,11 +250,15 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onFinish: (sim, obj) => {
             if (sim.isSideHustle && obj.label.includes('电脑')) {
                 const skillUsed = sim.skills.coding > sim.skills.creativity ? 'coding' : 'writing';
+                
+                // 🆕 使用 SkillLogic
+                if (skillUsed === 'writing') SkillLogic.gainExperience(sim, 'creativity', 0.5);
+                else SkillLogic.gainExperience(sim, 'logic', 0.5);
+
                 let skillVal = sim.skills.logic; 
                 if (skillUsed === 'writing') skillVal = sim.skills.creativity;
+                
                 const earned = 50 + skillVal * 5; 
-                sim.skills.logic += 0.5;
-                sim.skills.creativity += 0.5;
                 sim.iq = Math.min(100, sim.iq + 0.2);
                 sim.earnMoney(earned, 'side_hustle_pc');
             }
@@ -234,7 +273,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
              sim.eq = Math.min(100, sim.eq + 0.02 * f);
         }
     },
-    // [优化] 使用 NeedType.Energy
     [NeedType.Energy]: {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
@@ -247,7 +285,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
              return (missing / 100) * RESTORE_TIMES.energy_sleep * 1.1; 
         },
         onStart: (sim, obj) => { 
-            // [修复] 使用 sim 方法
             if (obj.label.includes('沙发')) sim.enterInteractionState(SimAction.Using);
             else sim.enterInteractionState(SimAction.Sleeping);
             return true; 
@@ -332,7 +369,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onUpdate: (sim, obj, f, getRate) => {
             const u = obj.utility;
             const t = RESTORE_TIMES[u] || RESTORE_TIMES.default;
-            // [Fix] 安全检查 Needs
             if (sim.needs[u as NeedType] !== undefined) sim.needs[u as NeedType] += getRate(t);
             
             if (obj.label.includes('试妆') || obj.label.includes('镜')) {
@@ -351,7 +387,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '堆积木 🧱', duration: 40,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Fun] += getRate(60);
-            sim.creativity += 0.05 * f; 
+            // 🆕 SkillLogic
+            SkillLogic.gainExperience(sim, 'creativity', 0.05 * f);
             sim.needs[NeedType.Social] += getRate(180); 
         }
     },
@@ -374,7 +411,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'study_high': {
         verb: '自习 📖', duration: 90,
         onUpdate: (sim, obj, f, getRate) => {
-            sim.skills.logic += 0.05 * f;
+            SkillLogic.gainExperience(sim, 'logic', 0.05 * f);
         },
         onFinish: (sim) => {
             SchoolLogic.doHomework(sim);

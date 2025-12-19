@@ -1,10 +1,10 @@
-
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { SCHOOL_CONFIG, BUFFS, HOLIDAYS } from '../../constants';
 import { DecisionLogic } from './decision';
 import { SimAction, AgeStage, NeedType } from '../../types';
 import { SchoolingState, CommutingSchoolState, IdleState, PlayingHomeState, PickingUpState, WaitingState } from './SimStates';
+import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
 
 export const SchoolLogic = {
     findObjectInArea(sim: Sim, utility: string, area: {minX: number, maxX: number, minY: number, maxY: number}) {
@@ -38,16 +38,13 @@ export const SchoolLogic = {
         );
     },
 
-    // 🆕 增强版：安排接孩子 (放学)
     arrangePickup(sim: Sim) {
-        // 如果已经有人来接了，就不要再派人了
         const incomingPicker = GameStore.sims.find(s => s.carryingSimId === sim.id && s.action === SimAction.PickingUp);
         if (incomingPicker) return;
 
-        // 1. 尝试找父母
         const parents = GameStore.sims.filter(s => 
             (s.id === sim.fatherId || s.id === sim.motherId) &&
-            !s.isTemporary && // 排除已有保姆
+            !s.isTemporary &&
             s.action !== SimAction.Working && 
             s.action !== SimAction.Commuting &&
             s.action !== SimAction.Sleeping &&
@@ -64,7 +61,6 @@ export const SchoolLogic = {
             carrier.say("接宝宝放学咯~", 'family');
             sim.say("等爸爸/妈妈...", 'normal');
         } else {
-            // 2. 父母没空，生成保姆接送
             if (sim.homeId) {
                 GameStore.spawnNanny(sim.homeId, 'pick_up', sim.id);
                 sim.say("等保姆阿姨...", 'normal');
@@ -88,7 +84,6 @@ export const SchoolLogic = {
             targetY = schoolPlot.y + h / 2;
         }
 
-        // 🆕 幼儿园送学逻辑
         if (type === 'kindergarten') {
             const parents = GameStore.sims.filter(s => 
                 (s.id === sim.fatherId || s.id === sim.motherId) &&
@@ -100,57 +95,48 @@ export const SchoolLogic = {
                 s.action !== SimAction.PickingUp 
             );
 
-            // 优先选心情好、空闲的父母
             const carrier = parents.sort((a, b) => b.mood - a.mood)[0];
 
             if (carrier) {
-                // 1. 父母送
                 carrier.target = { x: sim.pos.x, y: sim.pos.y };
                 carrier.carryingSimId = sim.id; 
                 carrier.changeState(new PickingUpState());
                 carrier.say("送宝宝上学去~", 'family');
             } else {
-                // 2. 父母没空，生成保姆送
                 if (sim.homeId) {
                     GameStore.spawnNanny(sim.homeId, 'drop_off', sim.id);
                 } else {
-                    // 极端情况：无家可归，孩子自己玩
                     sim.changeState(new PlayingHomeState());
                     return false;
                 }
             }
 
-            // 孩子进入等待模式
             sim.say("准备上学...", 'normal');
             sim.changeState(new WaitingState()); 
             
             return true;
         }
 
-        // 中小学自己去
         sim.target = { x: targetX, y: targetY };
         sim.changeState(new CommutingSchoolState());
         sim.say("去学校...", 'act');
         return true;
     },
 
-    // 1. 幼儿园托管逻辑
     checkKindergarten(sim: Sim) {
         if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
 
         const currentHour = GameStore.time.hour;
-        const isDaycareTime = currentHour >= 8 && currentHour < 18; // 8点-18点
+        const isDaycareTime = currentHour >= 8 && currentHour < 18; 
         const inKindergarten = SchoolLogic.isInSchoolArea(sim, 'kindergarten');
 
         if (isDaycareTime) {
-            // 如果不在幼儿园，且不在被护送/接送的状态
             if (!inKindergarten && 
                 sim.action !== SimAction.BeingEscorted && 
                 sim.action !== SimAction.Schooling &&
-                sim.action !== SimAction.Waiting && // 等待中也不要打断
-                sim.action !== SimAction.PickingUp // 正在被接也不要打断
+                sim.action !== SimAction.Waiting && 
+                sim.action !== SimAction.PickingUp 
             ) {
-                // 尝试派送
                 SchoolLogic.sendToSchool(sim, 'kindergarten');
             } 
             else if (inKindergarten) {
@@ -160,20 +146,17 @@ export const SchoolLogic = {
             }
         } 
         else {
-            // 🆕 放学逻辑：如果在幼儿园，进入等待模式，呼叫家长/保姆来接
             if (inKindergarten) {
                 if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
                     sim.changeState(new WaitingState());
                     SchoolLogic.arrangePickup(sim);
                 } else if (sim.action === SimAction.Waiting) {
-                    // 每隔一会检查是否有人来接，如果没有重新呼叫
                     if (Math.random() < 0.05) SchoolLogic.arrangePickup(sim);
                 }
             }
         }
     },
 
-    // 2. 中小学上课逻辑 (保持不变)
     checkSchoolSchedule(sim: Sim) {
         if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
 
@@ -193,7 +176,6 @@ export const SchoolLogic = {
             if (sim.action === SimAction.CommutingSchool) return;
             if (sim.hasLeftWorkToday) return;
 
-            // 逃课逻辑 (保持不变)
             let skipProb = 0.01; 
             if (sim.mbti.includes('P')) skipProb += 0.02; 
             if (sim.mbti.includes('J')) skipProb -= 0.02; 
@@ -277,7 +259,9 @@ export const SchoolLogic = {
     doHomework(sim: Sim) {
         if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
         const successChance = (sim.iq * 0.4 + sim.skills.logic * 0.6) / 100;
-        sim.skills.logic += 0.2;
+        
+        // 🆕 使用 SkillLogic
+        SkillLogic.gainExperience(sim, 'logic', 0.2);
         sim.iq = Math.min(100, sim.iq + 0.05);
         
         if (Math.random() < successChance) {
