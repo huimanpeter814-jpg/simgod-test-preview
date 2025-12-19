@@ -41,6 +41,10 @@ export interface SimInitConfig {
     luck?: number;
     creativity?: number;
     morality?: number;
+    
+    // 🆕 身高体重自定义
+    height?: number;
+    weight?: number;
 }
 
 export const SimInitializer = {
@@ -65,15 +69,21 @@ export const SimInitializer = {
         const stageConfig = AGE_CONFIG[sim.ageStage];
         sim.age = stageConfig.min + Math.floor(Math.random() * (stageConfig.max - stageConfig.min));
 
-        if (sim.ageStage === AgeStage.Infant) { sim.height = 50 + Math.random() * 25; sim.weight = 3 + Math.random() * 7; } 
-        else if (sim.ageStage === AgeStage.Toddler) { sim.height = 80 + Math.random() * 20; sim.weight = 10 + Math.random() * 6; } 
-        else if (sim.ageStage === AgeStage.Child) { sim.height = 110 + Math.random() * 30; sim.weight = 20 + Math.random() * 15; } 
-        else if (sim.ageStage === AgeStage.Teen) { sim.height = 150 + Math.random() * 25; sim.weight = 40 + Math.random() * 25; } 
-        else {
-            const baseHeight = sim.gender === 'M' ? 175 : 163;
-            sim.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
-            const bmi = 18 + Math.random() * 8; 
-            sim.weight = Math.floor((sim.height / 100) * (sim.height / 100) * bmi);
+        // [修复] 优先使用 Config 中的身高体重，否则随机生成
+        if (config.height !== undefined && config.weight !== undefined) {
+            sim.height = config.height;
+            sim.weight = config.weight;
+        } else {
+            if (sim.ageStage === AgeStage.Infant) { sim.height = 50 + Math.random() * 25; sim.weight = 3 + Math.random() * 7; } 
+            else if (sim.ageStage === AgeStage.Toddler) { sim.height = 80 + Math.random() * 20; sim.weight = 10 + Math.random() * 6; } 
+            else if (sim.ageStage === AgeStage.Child) { sim.height = 110 + Math.random() * 30; sim.weight = 20 + Math.random() * 15; } 
+            else if (sim.ageStage === AgeStage.Teen) { sim.height = 150 + Math.random() * 25; sim.weight = 40 + Math.random() * 25; } 
+            else {
+                const baseHeight = sim.gender === 'M' ? 175 : 163;
+                sim.height = baseHeight + Math.floor((Math.random() - 0.5) * 20); 
+                const bmi = 18 + Math.random() * 8; 
+                sim.weight = Math.floor((sim.height / 100) * (sim.height / 100) * bmi);
+            }
         }
         sim.height = Math.floor(sim.height);
         sim.weight = Math.floor(sim.weight);

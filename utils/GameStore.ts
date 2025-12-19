@@ -9,7 +9,8 @@ import { FamilyGenerator } from './logic/genetics';
 import { EditorManager } from '../managers/EditorManager';
 import { SaveManager, GameSaveData } from '../managers/SaveManager'; 
 import { NannyState, PickingUpState } from './logic/SimStates';
-import { SimInitConfig } from './logic/SimInitializer'; // 🆕
+import { SimInitConfig } from './logic/SimInitializer';
+import { SocialLogic } from './logic/social'; // 🆕
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -112,20 +113,22 @@ export class GameStore {
         this.notify();
     }
     
-    static assignRandomHome(sim: Sim) {
-        let targetTypes: string[] = [];
+    static assignRandomHome(sim: Sim, preferredTypes?: string[]) {
+        let targetTypes = preferredTypes || [];
 
-        if (sim.ageStage === AgeStage.Elder) {
-            targetTypes = ['elder_care', 'apartment', 'public_housing'];
-        } 
-        else if (sim.money > 5000) {
-            targetTypes = ['villa', 'apartment'];
-        } 
-        else if (sim.money < 2000) {
-            targetTypes = ['public_housing'];
-        } 
-        else {
-            targetTypes = ['apartment', 'public_housing'];
+        if (targetTypes.length === 0) {
+            if (sim.ageStage === AgeStage.Elder) {
+                targetTypes = ['elder_care', 'apartment', 'public_housing'];
+            } 
+            else if (sim.money > 5000) {
+                targetTypes = ['villa', 'apartment'];
+            } 
+            else if (sim.money < 2000) {
+                targetTypes = ['public_housing'];
+            } 
+            else {
+                targetTypes = ['apartment', 'public_housing'];
+            }
         }
 
         let candidates = this.housingUnits.filter(unit => {
@@ -604,10 +607,8 @@ export class GameStore {
         this.spawnFamily(1);
     }
 
-    // 🆕 生成自定义市民
+    // 🆕 生成自定义市民 (单人)
     static spawnCustomSim(config: SimInitConfig) {
-        // 先生成 Sim 实例，但不直接 new，而是需要处理住所逻辑
-        // 我们利用 assignRandomHome 的逻辑，或者先创建无家可归的，再分配
         const sim = new Sim(config);
         
         this.sims.push(sim);
@@ -617,8 +618,137 @@ export class GameStore {
         this.showToast(`✨ ${sim.name} 创建成功！`);
         this.notify();
         
-        // 选中新创建的市民
         this.selectedSimId = sim.id;
+    }
+
+    // 🆕 生成自定义家庭 (多人)
+    static spawnCustomFamily(configs: any[]) {
+        if (configs.length === 0) return;
+
+        const newSims: Sim[] = [];
+        const familyId = Math.random().toString(36).substring(2, 8);
+        const surname = configs[0].name.substring(0, 1);
+
+        // 1. 创建所有 Sim 实例，分配 ID 和 FamilyId
+        configs.forEach(cfg => {
+            // hack: 传入 hairStyleIndex 生成特定 ID 以保留发型
+            let newId = Math.random().toString(36).substring(2, 11);
+            if (cfg.hairStyleIndex !== undefined) {
+                let attempts = 0;
+                while (attempts < 1000) {
+                    const hash = newId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    if (hash % 17 === cfg.hairStyleIndex) break;
+                    newId = Math.random().toString(36).substring(2, 11);
+                    attempts++;
+                }
+            }
+
+            // 初始化 Sim，暂时不分配父母ID (稍后关联)
+            const sim = new Sim({
+                ...cfg,
+                familyId: familyId,
+                surname: surname, // 统一姓氏? 或者保留自定义名字
+                homeId: null // 稍后分配
+            });
+            sim.id = newId; // 覆盖 ID
+            
+            // 如果没填 appearance.hair，确保清空，以使用像素发型
+            if (!cfg.appearance?.hair) {
+                sim.appearance.hair = ''; 
+            }
+
+            newSims.push(sim);
+        });
+
+        // 2. 建立关系
+        // 假设 configs[0] 是户主 (Head)
+        const head = newSims[0];
+        
+        for (let i = 1; i < newSims.length; i++) {
+            const member = newSims[i];
+            const relation = configs[i].relationshipToHead;
+
+            if (relation === 'spouse') {
+                SocialLogic.marry(head, member, true);
+            } else if (relation === 'child') {
+                // Head 是 Parent
+                SocialLogic.setKinship(head, member, 'child');
+                SocialLogic.setKinship(member, head, 'parent');
+                head.childrenIds.push(member.id);
+                // 如果 Head 有配偶，配偶也是 Parent
+                if (head.partnerId) {
+                    const partner = newSims.find(s => s.id === head.partnerId);
+                    if (partner) {
+                        SocialLogic.setKinship(partner, member, 'child');
+                        SocialLogic.setKinship(member, partner, 'parent');
+                        partner.childrenIds.push(member.id);
+                    }
+                }
+            } else if (relation === 'parent') {
+                // Head 是 Child
+                SocialLogic.setKinship(member, head, 'child');
+                SocialLogic.setKinship(head, member, 'parent');
+                member.childrenIds.push(head.id);
+            } else if (relation === 'sibling') {
+                SocialLogic.setKinship(head, member, 'sibling');
+                SocialLogic.setKinship(member, head, 'sibling');
+            } else {
+                // Roommate / Friend
+                SocialLogic.updateRelationship(head, member, 'friendship', 50);
+                SocialLogic.updateRelationship(member, head, 'friendship', 50);
+            }
+        }
+
+        // 3. 分配共同住所
+        // 计算需要的床位
+        const requiredCapacity = newSims.length;
+        
+        // 寻找合适的空房 (优先找能装下全家的)
+        // 复用 assignRandomHome 的逻辑，但稍微改动以支持找大房子
+        let targetHomeTypes = ['apartment', 'public_housing'];
+        const totalMoney = newSims.reduce((sum, s) => sum + s.money, 0);
+        if (totalMoney > 20000) targetHomeTypes = ['villa', 'apartment'];
+        else if (totalMoney > 5000) targetHomeTypes = ['apartment', 'public_housing'];
+
+        const availableHomes = this.housingUnits.filter(unit => {
+            const occupants = this.sims.filter(s => s.homeId === unit.id).length;
+            return targetHomeTypes.includes(unit.type) && (occupants + requiredCapacity <= unit.capacity);
+        });
+
+        let homeId: string | null = null;
+        if (availableHomes.length > 0) {
+            // 随机选一个
+            const home = availableHomes[Math.floor(Math.random() * availableHomes.length)];
+            homeId = home.id;
+        } else {
+            // 找不到足够大的，尝试找任意能塞进下的
+            const anyHome = this.housingUnits.find(u => {
+                const occupants = this.sims.filter(s => s.homeId === u.id).length;
+                return (occupants + requiredCapacity <= u.capacity);
+            });
+            if (anyHome) homeId = anyHome.id;
+        }
+
+        if (homeId) {
+            const home = this.housingUnits.find(u => u.id === homeId)!;
+            newSims.forEach(s => {
+                s.homeId = homeId;
+                s.pos = { 
+                    x: home.x + home.area.w/2 + (Math.random()-0.5)*20, 
+                    y: home.y + home.area.h/2 + (Math.random()-0.5)*20 
+                };
+            });
+            this.addLog(null, `[入住] 新家庭 (${surname}家) 入住了 ${home.name}`, "sys");
+        } else {
+            this.showToast("⚠️ 警告：没有足够大的空房容纳整个家庭，他们暂时无家可归。");
+            this.addLog(null, `[入住] 新家庭 (${surname}家) 到达城市 (暂无居所)`, "sys");
+        }
+
+        // 4. 加入世界
+        this.sims.push(...newSims);
+        this.selectedSimId = head.id;
+        this.refreshFurnitureOwnership();
+        this.notify();
     }
 }
 
