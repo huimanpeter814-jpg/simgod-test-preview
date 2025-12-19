@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { GameStore, SaveMetadata } from '../utils/simulation';
+import { GameStore } from '../utils/simulation';
+import { SaveMetadata } from '../types'; // Updated import source
 import { HOLIDAYS } from '../constants';
 import HelpModal from './HelpModal'; // Import the new HelpModal
 

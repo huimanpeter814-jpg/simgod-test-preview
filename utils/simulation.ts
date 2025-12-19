@@ -1,6 +1,6 @@
 import { PALETTES, HOLIDAYS, JOBS, CONFIG, SURNAMES } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
-import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
+import { WORLD_LAYOUT,STREET_PROPS  } from '../data/world'; 
 import { LogEntry, GameTime, Job, Furniture, RoomDef, HousingUnit, WorldPlot, SaveMetadata, EditorAction, EditorState, AgeStage } from '../types';
 import { Sim } from './Sim';
 import { SpatialHashGrid } from './spatialHash';
