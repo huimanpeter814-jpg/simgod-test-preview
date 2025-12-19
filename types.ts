@@ -205,7 +205,7 @@ export interface Skills {
   creativity: number;
   gardening: number;
   fishing: number;
-  charisma: number; // 🆕 新增：魅力/口才技能
+  charisma: number; 
   [key: string]: number;
 }
 
@@ -323,6 +323,10 @@ export interface SimData {
   dailyIncome: number; 
   isSideHustle?: boolean;
   
+  // 🆕 新增：版税收入与物品系统字段
+  royalty?: { amount: number, daysLeft: number };
+  hasFreshIngredients?: boolean;
+
   buffs: Buff[];
   mood: number;
 
@@ -341,13 +345,12 @@ export interface SimData {
   isTemporary?: boolean; 
 }
 
-// 🆕 更新：扩展日志类型和分类
 export interface LogEntry {
   id: number;
   time: string;
   text: string;
   type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family' | 'career';
-  category: 'sys' | 'chat' | 'rel' | 'life' | 'career'; // 新增 career 分类
+  category: 'sys' | 'chat' | 'rel' | 'life' | 'career'; 
   isAI: boolean;
   simName?: string;
 }

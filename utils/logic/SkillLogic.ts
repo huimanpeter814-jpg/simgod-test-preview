@@ -28,6 +28,18 @@ export const SKILL_PERKS: Record<string, Record<number, { title: string; desc: s
         75: { title: "高产作家", desc: "文思泉涌，写作/绘画耗时减少 25%", type: 'speed' },
         100: { title: "艺术大师", desc: "作品价值连城", type: 'quality' }
     },
+    gardening: {
+        25: { title: "绿手指", desc: "植物存活率大幅提升", type: 'quality' },
+        50: { title: "丰收", desc: "每次收获的产量增加", type: 'quality' },
+        75: { title: "植物语者", desc: "园艺带来的娱乐回复效果翻倍", type: 'efficiency' },
+        100: { title: "自然之子", desc: "枯木逢春", type: 'quality' }
+    },
+    fishing: {
+        25: { title: "耐心", desc: "钓鱼不再容易空军", type: 'quality' },
+        50: { title: "大鱼猎手", desc: "钓到高价值鱼类的概率提升", type: 'quality' },
+        75: { title: "海王", desc: "甚至能钓到宝藏", type: 'quality' },
+        100: { title: "姜太公", desc: "愿者上钩", type: 'speed' }
+    },
     charisma: {
         25: { title: "自来熟", desc: "打招呼效果提升", type: 'quality' },
         50: { title: "倾听者", desc: "聊天时对方好感度增加更快", type: 'quality' },
@@ -113,10 +125,12 @@ export const SkillLogic = {
             }
             if (skillId === 'logic' && level >= 75) modifier = 0.8;
             if (skillId === 'creativity' && level >= 75) modifier = 0.75;
+            if (skillId === 'fishing' && level >= 100) modifier = 0.5; // 姜太公
         } 
         else if (type === 'efficiency') {
             // 效率修正：值越小消耗越少 (cost * modifier)
             if (skillId === 'athletics' && level >= 75) modifier = 0.8; // 铁人：减少精力消耗
+            if (skillId === 'gardening' && level >= 75) modifier = 0.5; // 园艺不再那么累
         }
 
         return modifier;

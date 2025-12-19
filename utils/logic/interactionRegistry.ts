@@ -2,7 +2,8 @@ import { ITEMS, BUFFS } from '../../constants';
 import { Furniture, NeedType, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
-import { SkillLogic } from './SkillLogic'; // 🆕 引入技能逻辑系统
+import { SkillLogic } from './SkillLogic'; 
+import { GameStore } from '../simulation';
 
 // === 接口定义 ===
 export interface InteractionHandler {
@@ -40,7 +41,7 @@ const genericRestore = (needType: NeedType, timeKey?: string) => {
     };
 };
 
-// === 核心交互策略表 ===
+// 🆕 核心交互策略表
 export const INTERACTIONS: Record<string, InteractionHandler> = {
     'buy_drink': {
         verb: '咕嘟咕嘟', duration: 5,
@@ -79,24 +80,25 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'run': {
         verb: '健身', duration: 60,
         onUpdate: (sim, obj, f, getRate) => {
-            // 🆕 使用 SkillLogic 处理经验
             SkillLogic.gainExperience(sim, 'athletics', 0.08 * f);
-            
-            // 🆕 天赋效果：等级高了之后精力/卫生消耗减少 (Efficiency Perk)
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
-            
             sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
             sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
-            
-            // 体质增长变慢
             sim.constitution = Math.min(100, sim.constitution + 0.05 * f * decayMod);
+        },
+        onFinish: (sim) => {
+            // 🆕 健身翻车：低体质概率拉伤
+            if (sim.constitution < 30 && Math.random() < 0.1) {
+                sim.say("哎哟！腰闪了... 🚑", 'bad');
+                sim.health -= 5;
+                sim.needs[NeedType.Energy] -= 10;
+            }
         }
     },
     'stretch': {
         verb: '瑜伽', duration: 60,
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'athletics', 0.05 * f);
-            
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
             sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
             sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
@@ -107,18 +109,51 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '举铁 💪', duration: 45,
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'athletics', 0.1 * f);
-            
             const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
             sim.needs[NeedType.Energy] -= getRate(300) * decayMod; 
             sim.needs[NeedType.Hygiene] -= getRate(300) * decayMod;
             sim.constitution = Math.min(100, sim.constitution + 0.08 * f);
+        },
+        onFinish: (sim) => {
+            if (sim.constitution < 40 && Math.random() < 0.15) {
+                sim.say("砸到脚了！💢", 'bad');
+                sim.mood -= 10;
+            }
         }
     },
+    // 🆕 园艺：产出蔬菜
     'gardening': {
-        verb: '修剪枝叶 🌿', duration: 40,
+        verb: '照料植物 🌿', duration: 60,
+        onStart: (sim) => {
+            if (sim.money < 5) { sim.say("买不起种子...", 'bad'); return false; }
+            sim.money -= 5; // 种子成本
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'gardening', 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(150);
+            sim.needs[NeedType.Energy] -= getRate(200);
+        },
+        onFinish: (sim) => {
+            // 翻车概率
+            const failChance = Math.max(0.05, 0.4 - sim.skills.gardening * 0.01);
+            if (Math.random() < failChance) {
+                sim.say("植物枯死了... 🍂", 'bad');
+                return;
+            }
+            // 成功收获
+            const yieldAmount = Math.floor(2 + sim.skills.gardening * 0.1); 
+            const shouldSell = sim.money > 500 || sim.hasFreshIngredients;
+            
+            if (shouldSell) {
+                const profit = yieldAmount * 10;
+                sim.earnMoney(profit, 'selling_veggies');
+                sim.say(`卖菜赚钱! +$${profit}`, 'money');
+            } else {
+                sim.hasFreshIngredients = true;
+                sim.say("收菜啦！今晚加餐 🥬", 'act');
+                GameStore.addLog(sim, "收获了新鲜蔬菜，放入了冰箱。", "life");
+            }
         }
     },
     'fishing': {
@@ -128,19 +163,33 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Fun] += getRate(120);
         },
         onFinish: (sim) => {
-            // 等级越高，钓到大鱼概率越高
+            if (Math.random() < 0.2 && sim.skills.fishing < 30) {
+                sim.say("钓到一只靴子... 👢", 'bad');
+                sim.needs[NeedType.Fun] -= 10;
+                return;
+            }
             if (Math.random() > (0.6 - sim.skills.fishing * 0.003)) {
-                const earned = 15 + sim.skills.fishing * 2;
+                const earned = 15 + sim.skills.fishing * 2 + Math.floor(Math.random()*20);
                 sim.earnMoney(earned, 'sell_fish');
-                sim.say("钓到大鱼了! 🐟", 'money');
+                sim.say("大鱼! 🐟", 'money');
+            } else {
+                sim.say("空军了...", 'normal');
             }
         }
     },
+    // 🆕 烹饪
     'cooking': {
         verb: '烹饪', duration: 90,
-        // 🆕 天赋效果：等级越高，做饭越快 (Speed Perk)
         getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
         onStart: (sim) => { 
+            if (sim.hasFreshIngredients) {
+                sim.say("使用自家蔬菜 🥗", 'act');
+                sim.hasFreshIngredients = false; 
+            } else {
+                const cost = 20; 
+                if (sim.money < cost) { sim.say("吃不起饭了...", 'bad'); return false; }
+                sim.money -= cost;
+            }
             if (sim.interactionTarget?.utility === 'work') {
                 sim.enterWorkingState();
             } else {
@@ -152,11 +201,17 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             SkillLogic.gainExperience(sim, 'cooking', 0.05 * f);
         },
         onFinish: (sim) => {
-            // 🆕 天赋效果：等级高了之后，做出的饭更好吃
-            if (sim.skills.cooking >= 50) {
+            const failChance = Math.max(0.01, 0.3 - sim.skills.cooking * 0.01);
+            if (Math.random() < failChance) {
+                sim.say("烧焦了... 🔥", 'bad');
+                sim.needs[NeedType.Hunger] += 20;
+                sim.mood -= 10;
+                GameStore.addLog(sim, "做饭把锅烧糊了，含泪吃下黑暗料理。", 'bad');
+            } else {
                 sim.addBuff(BUFFS.good_meal);
-                sim.needs[NeedType.Hunger] = Math.min(100, sim.needs[NeedType.Hunger] + 20); // 额外回复
-                sim.say("营养美味! 🍳", 'act');
+                sim.needs[NeedType.Hunger] = 100;
+                if (sim.skills.cooking >= 50) sim.say("大厨水准! 👨‍🍳", 'act');
+                else sim.say("开饭咯!", 'act');
             }
         }
     },
@@ -169,14 +224,35 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.creativity = Math.min(100, sim.creativity + 0.05 * f);
         }
     },
+    // 🆕 绘画
     'paint': {
-        verb: '绘画 🖌️', duration: 90,
-        // 🆕 天赋效果：创作加速
-        getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
+        verb: '绘画 🖌️', duration: 120,
+        getDuration: (sim) => 120 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
+        onStart: (sim) => {
+            if (sim.money < 20) { sim.say("买不起颜料...", 'bad'); return false; }
+            sim.money -= 20; 
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
             SkillLogic.gainExperience(sim, 'creativity', 0.08 * f);
             sim.creativity = Math.min(100, sim.creativity + 0.08 * f);
             sim.needs[NeedType.Fun] += getRate(120);
+        },
+        onFinish: (sim) => {
+            const failChance = Math.max(0.05, 0.4 - sim.skills.creativity * 0.008);
+            if (Math.random() < failChance) {
+                sim.say("画得像涂鸦... 🗑️", 'bad');
+                return; 
+            }
+            let value = 30 + sim.skills.creativity * 3 + Math.random() * 50;
+            if (sim.skills.creativity > 80 && Math.random() > 0.8) {
+                value *= 3; 
+                sim.say("传世杰作! 🎨", 'act');
+                sim.addMemory("我创作出了一幅惊人的杰作！", 'achievement');
+            } else {
+                sim.say("卖掉画作 🖼️", 'money');
+            }
+            sim.earnMoney(Math.floor(value), 'selling_art');
         }
     },
     'play': {
@@ -210,10 +286,37 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         onFinish: (sim) => {
             if (sim.skills.charisma > 50) {
                 sim.say("我简直是演说家！✨", 'act');
-                sim.addBuff(BUFFS.promoted); // 借用自信buff
+                sim.addBuff(BUFFS.promoted); 
             } else {
                 sim.say("感觉更有自信了！", 'act');
             }
+        }
+    },
+    // 🆕 下棋 (逻辑)
+    'play_chess': {
+        verb: '下棋 ♟️', duration: 60,
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'logic', 0.08 * f);
+            sim.needs[NeedType.Fun] += getRate(80);
+            sim.iq = Math.min(100, sim.iq + 0.01 * f);
+        },
+        onFinish: (sim) => {
+            if (sim.skills.logic > 50 && Math.random() > 0.7) {
+                sim.say("妙手！", 'act');
+                sim.addBuff(BUFFS.gamer_joy);
+            }
+        }
+    },
+    // 🆕 演奏乐器 (音乐)
+    'play_instrument': {
+        verb: '演奏 🎵', duration: 45,
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'music', 0.1 * f);
+            sim.needs[NeedType.Fun] += getRate(100);
+            sim.creativity = Math.min(100, sim.creativity + 0.02 * f);
+        },
+        onFinish: (sim) => {
+            sim.say("🎶 ~", 'act');
         }
     },
    'work': {
@@ -221,14 +324,13 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         duration: 480, 
         getDuration: (sim) => {
             let base = sim.isSideHustle ? 180 : 480;
-            // 🆕 黑客/作家天赋减少电脑工作时间
             if (sim.isSideHustle) {
                 base *= SkillLogic.getPerkModifier(sim, 'logic', 'speed');
                 base *= SkillLogic.getPerkModifier(sim, 'creativity', 'speed');
             }
             return base;
         },
-        getVerb: (sim) => sim.isSideHustle ? '接单赚外快 💻' : '工作 💻',
+        getVerb: (sim) => sim.isSideHustle ? (sim.skills.coding > sim.skills.creativity ? '接单修Bug 💻' : '闭关写作 ✍️') : '工作 💻',
         
         onStart: (sim, obj) => {
             if (sim.isSideHustle) {
@@ -249,18 +351,35 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
 
         onFinish: (sim, obj) => {
             if (sim.isSideHustle && obj.label.includes('电脑')) {
-                const skillUsed = sim.skills.coding > sim.skills.creativity ? 'coding' : 'writing';
-                
-                // 🆕 使用 SkillLogic
-                if (skillUsed === 'writing') SkillLogic.gainExperience(sim, 'creativity', 0.5);
-                else SkillLogic.gainExperience(sim, 'logic', 0.5);
-
-                let skillVal = sim.skills.logic; 
-                if (skillUsed === 'writing') skillVal = sim.skills.creativity;
-                
-                const earned = 50 + skillVal * 5; 
-                sim.iq = Math.min(100, sim.iq + 0.2);
-                sim.earnMoney(earned, 'side_hustle_pc');
+                const isWriting = sim.skills.creativity > sim.skills.coding;
+                if (isWriting) {
+                    SkillLogic.gainExperience(sim, 'creativity', 0.6);
+                    if (Math.random() < 0.2 && sim.skills.creativity < 30) {
+                        sim.say("毫无灵感... 🤯", 'bad');
+                        sim.needs[NeedType.Fun] -= 20;
+                        return;
+                    }
+                    const quality = sim.skills.creativity;
+                    const royaltyPerDay = Math.floor(10 + quality * 0.5);
+                    const durationDays = 3 + Math.floor(quality / 20); 
+                    
+                    if (!sim.royalty) sim.royalty = { amount: 0, daysLeft: 0 };
+                    sim.royalty.amount += royaltyPerDay;
+                    sim.royalty.daysLeft = Math.max(sim.royalty.daysLeft, durationDays);
+                    
+                    sim.say("新书发布! 📖", 'act');
+                    GameStore.addLog(sim, `发布了新文章，预计未来 ${durationDays} 天每天获得 $${royaltyPerDay} 版税。`, 'career');
+                } else {
+                    SkillLogic.gainExperience(sim, 'logic', 0.6);
+                    if (Math.random() < 0.2 && sim.skills.logic < 30) {
+                        sim.say("修不好这Bug... 😭", 'bad');
+                        sim.mood -= 10;
+                        return;
+                    }
+                    const earned = 30 + sim.skills.logic * 4; 
+                    sim.iq = Math.min(100, sim.iq + 0.2);
+                    sim.earnMoney(earned, 'freelance_coding');
+                }
             }
         }
     },
@@ -387,7 +506,6 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '堆积木 🧱', duration: 40,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Fun] += getRate(60);
-            // 🆕 SkillLogic
             SkillLogic.gainExperience(sim, 'creativity', 0.05 * f);
             sim.needs[NeedType.Social] += getRate(180); 
         }

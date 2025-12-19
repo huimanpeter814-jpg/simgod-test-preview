@@ -101,6 +101,10 @@ export class Sim {
     isSideHustle: boolean = false;
     currentShiftStart: number = 0;
 
+    // 🆕 自由职业/物品相关
+    royalty: { amount: number, daysLeft: number } = { amount: 0, daysLeft: 0 };
+    hasFreshIngredients: boolean = false;
+
     schoolPerformance: number = 60; 
     hasLeftWorkToday: boolean = false;
 
@@ -157,9 +161,23 @@ export class Sim {
             LifeCycleLogic.checkDeath(this, dt); 
             this.checkSchedule();
 
-            // 零点检查
+            // 零点检查 & 版税结算
             if (GameStore.time.hour === 0 && GameStore.time.minute === 0) { 
                 CareerLogic.checkFire(this); 
+                
+                // 🆕 结算版税
+                if (this.royalty && this.royalty.amount > 0) {
+                    this.money += this.royalty.amount;
+                    this.dailyIncome += this.royalty.amount;
+                    GameStore.addLog(this, `收到作品版税 +$${this.royalty.amount}`, 'money');
+                    this.say("版税到账 💰", 'money');
+                    
+                    this.royalty.daysLeft--;
+                    if (this.royalty.daysLeft <= 0) {
+                        this.royalty.amount = 0;
+                        this.say("版税停了，该写新书了...", 'sys');
+                    }
+                }
             }
             
             // 怀孕逻辑

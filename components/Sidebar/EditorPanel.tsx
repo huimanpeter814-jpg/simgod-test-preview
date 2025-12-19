@@ -44,6 +44,32 @@ const PLOT_NAMES: Record<string, string> = {
 
 // 家具分类目录
 const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furniture>[] }> = {
+    'skills': {
+        label: '技能提升',
+        items: [
+            // 烹饪
+            { label: '整体橱柜', w: 100, h: 40, color: '#b2bec3', utility: 'cooking', pixelPattern: 'kitchen', tags: ['kitchen', 'stove'] },
+            // 健身
+            { label: '跑步机', w: 44, h: 84, color: '#0984e3', utility: 'run', pixelPattern: 'treadmill', tags: ['gym'] },
+            { label: '瑜伽垫', w: 44, h: 84, color: '#ff7aa8', utility: 'stretch', pixelPattern: 'picnic_mat', tags: ['gym'] },
+            { label: '举重床', w: 60, h: 100, color: '#2d3436', utility: 'lift', pixelPattern: 'weights_rack', tags: ['gym'] },
+            // 音乐
+            { label: '钢琴', w: 60, h: 80, color: '#2d3436', utility: 'play_instrument', pixelPattern: 'piano', tags: ['piano', 'instrument'] },
+            { label: '吉他', w: 30, h: 60, color: '#e17055', utility: 'play_instrument', pixelPattern: 'statue', tags: ['instrument'] }, // 暂用statue占位，或generic
+            // 逻辑
+            { label: '国际象棋', w: 40, h: 40, color: '#dfe6e9', utility: 'play_chess', pixelPattern: 'table_dining', tags: ['desk', 'game'] },
+            { label: '编程电脑', w: 60, h: 50, color: '#dfe6e9', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'desk'] },
+            // 绘画/创意
+            { label: '画架', w: 44, h: 54, color: '#ff5252', utility: 'paint', pixelPattern: 'easel', tags: ['easel', 'art'] },
+            // 园艺
+            { label: '蔬菜种植箱', w: 44, h: 44, color: '#55efc4', utility: 'gardening', pixelPattern: 'bush', tags: ['plant'] },
+            // 钓鱼
+            { label: '私家鱼塘', w: 100, h: 80, color: '#74b9ff', utility: 'fishing', pixelPattern: 'water', tags: ['decor'] },
+            // 魅力
+            { label: '演讲台', w: 40, h: 40, color: '#a29bfe', utility: 'practice_speech', pixelPattern: 'desk_simple', tags: ['desk'] },
+            { label: '落地镜', w: 30, h: 80, color: '#81ecec', utility: 'practice_speech', pixelPattern: 'closet', tags: ['mirror'] },
+        ]
+    },
     'career': {
         label: '职业设施', 
         items: [
@@ -55,7 +81,6 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '服务器机组', w: 64, h: 38, color: '#253048', utility: 'none', pixelPattern: 'server', pixelGlow: true, tags: ['server'] },
             { label: '收银台', w: 60, h: 44, color: '#2c3e50', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
             { label: '前台', w: 100, h: 40, color: '#a29bfe', utility: 'work', pixelPattern: 'reception', tags: ['desk', 'reception'] },
-            { label: '画架', w: 44, h: 54, color: '#ff5252', utility: 'paint', pixelPattern: 'easel', tags: ['easel', 'art'] },
             { label: '课桌', w: 50, h: 30, color: '#fdcb6e', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] },
             { label: '黑板', w: 100, h: 10, color: '#2d3436', utility: 'none', tags: ['blackboard'] },
             { label: '医疗床', w: 60, h: 70, color: '#fff', utility: 'healing', pixelPattern: 'bed_king', tags: ['medical_bed', 'bed'] },
@@ -76,10 +101,7 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '懒人沙发', w: 44, h: 44, color: '#ff7aa8', utility: 'comfort', pixelPattern: 'beanbag', tags: ['sofa', 'seat'] },
             { label: '衣柜', w: 40, h: 100, color: '#636e72', utility: 'none', pixelPattern: 'closet', tags: ['furniture'] },
             { label: '餐桌', w: 64, h: 64, color: '#fab1a0', utility: 'hunger', pixelPattern: 'table_dining', tags: ['table'] },
-            { label: '整体橱柜', w: 100, h: 40, color: '#b2bec3', utility: 'cook', pixelPattern: 'kitchen', tags: ['kitchen', 'stove'] },
             { label: '冰箱', w: 40, h: 40, color: '#fff', utility: 'hunger', pixelPattern: 'fridge', tags: ['kitchen'] },
-            { label: '钢琴', w: 60, h: 80, color: '#2d3436', utility: 'play', pixelPattern: 'piano', tags: ['piano', 'instrument'] },
-            { label: '全身镜', w: 30, h: 80, color: '#74b9ff', utility: 'practice_speech', pixelPattern: 'closet', tags: ['mirror'] }, // 🆕 新增镜子
         ]
     },
     'bathroom': {
@@ -106,16 +128,6 @@ const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<Furnitur
             { label: '赛车游戏机', w: 54, h: 74, color: '#8a7cff', utility: 'play', pixelPattern: 'arcade_racing', pixelGlow: true, tags: ['game'] },
             { label: '跳舞机', w: 64, h: 64, color: '#ff7aa8', utility: 'dance', pixelPattern: 'dance_machine', pixelGlow: true, tags: ['game'] },
             { label: '网吧电脑', w: 44, h: 34, color: '#3742fa', utility: 'work', pixelPattern: 'pc_pixel', tags: ['computer', 'game'] },
-        ]
-    },
-    'fitness': {
-        label: '运动设施',
-        items: [
-            { label: '跑步机', w: 44, h: 84, color: '#0984e3', utility: 'run', pixelPattern: 'treadmill', tags: ['gym'] },
-            { label: '哑铃架', w: 44, h: 44, color: '#d63031', utility: 'lift', pixelPattern: 'weights_rack', tags: ['gym'] },
-            { label: '篮球架', w: 20, h: 40, color: '#e17055', utility: 'play', pixelPattern: 'hoop', tags: ['sports'] },
-            { label: '滑梯', w: 60, h: 100, color: '#ff7675', utility: 'play', pixelPattern: 'slide', tags: ['play'] },
-            { label: '游戏垫', w: 44, h: 44, color: '#74b9ff', utility: 'play_blocks', pixelPattern: 'play_mat', tags: ['play'] },
         ]
     },
     'decor': {
@@ -162,7 +174,7 @@ const FLOOR_PATTERNS = [
 const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     // 模式状态：Plot(地皮) | Floor(房间) | Furniture(家具)
     const [mode, setMode] = useState<'plot' | 'furniture' | 'floor'>('plot');
-    const [category, setCategory] = useState('career'); // 默认显示职业
+    const [category, setCategory] = useState('skills'); // 默认显示技能类
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
     
     // 编辑状态
