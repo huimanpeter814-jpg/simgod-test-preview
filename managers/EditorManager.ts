@@ -151,7 +151,7 @@ export class EditorManager implements EditorState {
 
     private applyUndoRedo(action: EditorAction, isUndo: boolean) {
         const data = isUndo ? action.prevData : action.newData;
-        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : (action.type === 'modify' ? 'modify' : (action.type === 'resize' ? 'resize' : 'move')))) : action.type;
+        const type = isUndo ? (action.type === 'add' ? 'remove' : (action.type === 'remove' ? 'add' : (action.type === 'modify' ? 'modify' : (action.type === 'resize' ? 'resize' : (action.type === 'rotate' ? 'rotate' : 'move'))))) : action.type;
 
         if (type === 'move') {
             if (action.entityType === 'plot') {
@@ -203,6 +203,15 @@ export class EditorManager implements EditorState {
                     room.x = data.x; room.y = data.y; room.w = data.w; room.h = data.h;
                 }
             }
+        } else if (type === 'rotate') {
+            if (action.entityType === 'furniture' && data) {
+                const f = GameStore.furniture.find(f => f.id === action.id);
+                if (f) {
+                    f.rotation = data.rotation;
+                    f.w = data.w;
+                    f.h = data.h;
+                }
+            }
         }
         GameStore.initIndex();
         GameStore.notify();
@@ -244,7 +253,8 @@ export class EditorManager implements EditorState {
 
     startPlacingFurniture(template: Partial<Furniture>) {
         this.mode = 'furniture';
-        this.placingFurniture = template;
+        // 初始旋转为 0
+        this.placingFurniture = { ...template, rotation: 0 };
         this.placingTemplateId = null;
         this.drawingFloor = null;
         this.drawingPlot = null;
@@ -267,6 +277,43 @@ export class EditorManager implements EditorState {
         this.selectedRoomId = null;
         this.interactionState = 'drawing';
         GameStore.notify();
+    }
+
+    rotateSelection() {
+        // 1. 旋转正在放置的家具
+        if (this.placingFurniture) {
+            const oldRot = this.placingFurniture.rotation || 0;
+            const newRot = (oldRot + 1) % 4;
+            this.placingFurniture.rotation = newRot;
+            
+            // 交换宽高
+            const oldW = this.placingFurniture.w || 0;
+            const oldH = this.placingFurniture.h || 0;
+            this.placingFurniture.w = oldH;
+            this.placingFurniture.h = oldW;
+            
+            // 更新拖拽偏移，保持中心
+            this.dragOffset = { x: oldH / 2, y: oldW / 2 };
+            GameStore.notify();
+            return;
+        }
+
+        // 2. 旋转已选中的家具
+        if (this.selectedFurnitureId) {
+            const f = GameStore.furniture.find(i => i.id === this.selectedFurnitureId);
+            if (f) {
+                const prevData = { rotation: f.rotation || 0, w: f.w, h: f.h };
+                
+                f.rotation = ((f.rotation || 0) + 1) % 4;
+                const temp = f.w;
+                f.w = f.h;
+                f.h = temp;
+                
+                const newData = { rotation: f.rotation, w: f.w, h: f.h };
+                this.recordAction({ type: 'rotate', entityType: 'furniture', id: f.id, prevData, newData });
+                GameStore.notify();
+            }
+        }
     }
 
     placePlot(x: number, y: number) {
@@ -300,14 +347,28 @@ export class EditorManager implements EditorState {
     placeFurniture(x: number, y: number) {
         const tpl = this.placingFurniture;
         if (!tpl) return;
-        const newItem = { ...tpl, id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, x: x, y: y } as Furniture;
+        const newItem = { 
+            ...tpl, 
+            id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, 
+            x: x, 
+            y: y,
+            rotation: tpl.rotation || 0 // 确保保存旋转
+        } as Furniture;
+        
         this.recordAction({ type: 'add', entityType: 'furniture', id: newItem.id, newData: newItem });
         GameStore.furniture.push(newItem);
         GameStore.initIndex();
         GameStore.refreshFurnitureOwnership();
-        this.placingFurniture = null;
-        this.isDragging = false;
-        this.interactionState = 'idle';
+        
+        // 连续放置模式：不清除 placingFurniture，但生成新的 ID
+        // 如果想按ESC退出，在UI里处理
+        // this.placingFurniture = null; 
+        // this.isDragging = false;
+        // this.interactionState = 'idle';
+        
+        // 暂时保持单次放置，如果想连续放置，注释掉下面这行
+        this.placingFurniture = null; this.isDragging = false; this.interactionState = 'idle';
+        
         this.selectedFurnitureId = newItem.id;
         GameStore.notify();
     }

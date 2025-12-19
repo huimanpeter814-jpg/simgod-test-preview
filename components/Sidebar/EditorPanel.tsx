@@ -142,12 +142,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     const [selectedFurniture, setSelectedFurniture] = useState<Furniture | null>(null);
     const [activeTool, setActiveTool] = useState<'camera' | 'select'>('select');
 
-    // 面板拖拽
-    const panelRef = useRef<HTMLDivElement>(null);
+    // 拖拽相关逻辑可移除，因为现在是底部通栏布局
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [position, setPosition] = useState({ x: 90, y: 80 });
-    const [isPanelDragging, setIsPanelDragging] = useState(false);
-    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
         GameStore.enterEditorMode();
@@ -171,41 +167,6 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         return unsub;
     }, []);
 
-    // 键盘事件
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Delete' || e.key === 'Backspace') handleDelete();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
-
-    // 拖拽逻辑
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (isPanelDragging) {
-                setPosition({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y });
-            }
-        };
-        const handleMouseUp = () => setIsPanelDragging(false);
-        if (isPanelDragging) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-        }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isPanelDragging, dragOffset]);
-
-    const startDrag = (e: React.MouseEvent) => {
-        if (panelRef.current) {
-            setIsPanelDragging(true);
-            const rect = panelRef.current.getBoundingClientRect();
-            setDragOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-        }
-    };
-    
     const handleToolChange = (tool: 'camera' | 'select') => {
         GameStore.editor.setTool(tool);
         setActiveTool(tool);
@@ -215,7 +176,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         setMode(m);
         GameStore.editor.mode = m;
         GameStore.resetEditorState();
-        GameStore.editor.mode = m; // resetState 会清空 mode，需重设
+        GameStore.editor.mode = m;
         GameStore.notify();
     };
 
@@ -236,6 +197,10 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         if (GameStore.editor.selectedPlotId) GameStore.removePlot(GameStore.editor.selectedPlotId);
         else if (GameStore.editor.selectedFurnitureId) GameStore.removeFurniture(GameStore.editor.selectedFurnitureId);
         else if (GameStore.editor.selectedRoomId) GameStore.removeRoom(GameStore.editor.selectedRoomId);
+    };
+
+    const handleRotate = () => {
+        GameStore.editor.rotateSelection();
     };
 
     const handleColorChange = (color: string) => {
@@ -285,132 +250,206 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         document.body.removeChild(link);
     };
 
-    return (
-        <div ref={panelRef} style={{ left: position.x, top: position.y }} className="fixed w-[280px] bg-[#121212]/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl pointer-events-auto flex flex-col animate-[fadeIn_0.2s_ease-out] z-40 max-h-[85vh]">
+    // --- Components ---
+
+    const renderTools = () => (
+        <div className="flex flex-col gap-2 p-2 border-r border-white/10 bg-[#1e222e]">
+            <button onClick={() => handleToolChange('select')} className={`w-10 h-10 rounded flex items-center justify-center text-lg ${activeTool === 'select' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`} title="选择 (V)">👆</button>
+            <button onClick={() => handleToolChange('camera')} className={`w-10 h-10 rounded flex items-center justify-center text-lg ${activeTool === 'camera' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`} title="漫游 (H)">✋</button>
+            <div className="h-px bg-white/10 my-1"></div>
+            <button onClick={handleRotate} className="w-10 h-10 rounded flex items-center justify-center text-lg bg-white/5 text-gray-400 hover:text-warning hover:bg-white/10" title="旋转 (R)">🔄</button>
+            <button onClick={handleDelete} className="w-10 h-10 rounded flex items-center justify-center text-lg bg-white/5 text-gray-400 hover:text-danger hover:bg-white/10" title="删除 (Del)">🗑️</button>
+            <div className="h-px bg-white/10 my-1"></div>
+            <button onClick={() => GameStore.undo()} disabled={!canUndo} className={`w-10 h-10 rounded flex items-center justify-center text-lg ${canUndo ? 'bg-white/5 text-gray-200 hover:bg-white/10' : 'bg-transparent text-gray-700'}`} title="撤销 (Ctrl+Z)">↩</button>
+            <button onClick={() => GameStore.redo()} disabled={!canRedo} className={`w-10 h-10 rounded flex items-center justify-center text-lg ${canRedo ? 'bg-white/5 text-gray-200 hover:bg-white/10' : 'bg-transparent text-gray-700'}`} title="重做 (Ctrl+Y)">↪</button>
+        </div>
+    );
+
+    const renderCategoryTabs = () => (
+        <div className="flex flex-col gap-1 w-24 bg-[#1e222e] border-r border-white/10 p-2">
+            {[
+                { id: 'plot', icon: '🗺️', label: '地皮' },
+                { id: 'floor', icon: '🏗️', label: '建筑' },
+                { id: 'furniture', icon: '🪑', label: '家具' }
+            ].map(m => (
+                <button 
+                    key={m.id}
+                    onClick={() => handleSetMode(m.id as any)}
+                    className={`
+                        flex flex-col items-center justify-center py-3 rounded transition-all
+                        ${mode === m.id ? 'bg-white/10 text-white shadow-inner' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}
+                    `}
+                >
+                    <span className="text-xl mb-1">{m.icon}</span>
+                    <span className="text-[10px] font-bold">{m.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+
+    const renderContent = () => (
+        <div className="flex-1 bg-[#2d3436] p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+            {/* Header: Sub-Categories or Controls */}
+            {mode === 'furniture' && (
+                <div className="flex gap-2 pb-2 border-b border-white/10 overflow-x-auto no-scrollbar">
+                    {Object.keys(FURNITURE_CATALOG).map(k => (
+                        <button 
+                            key={k} 
+                            onClick={() => setCategory(k)} 
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${category === k ? 'bg-accent text-black' : 'bg-white/10 text-gray-400 hover:bg-white/20'}`}
+                        >
+                            {FURNITURE_CATALOG[k].label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Grid Area */}
+            <div className="flex-1 overflow-y-auto">
+                {/* --- PLOT MODE --- */}
+                {mode === 'plot' && (
+                    <div className="space-y-4">
+                        <div>
+                            <div className="text-xs text-gray-400 font-bold mb-2">基础工具</div>
+                            <div className="grid grid-cols-4 gap-3">
+                                <button onClick={handleStartDrawingPlot} className="aspect-square bg-white/5 hover:bg-white/10 rounded flex flex-col items-center justify-center gap-2 border border-white/10 transition-colors">
+                                    <span className="text-2xl">⬜</span>
+                                    <span className="text-[10px]">自定义区域</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-xs text-gray-400 font-bold mb-2">地形笔刷</div>
+                            <div className="grid grid-cols-4 gap-3">
+                                {SURFACE_TYPES.map(t => (
+                                    <button key={t.pattern} onClick={() => handleStartDrawingFloor(t)} className="aspect-square bg-white/5 hover:bg-white/10 rounded flex flex-col items-center justify-center gap-1 border border-white/10 transition-colors group">
+                                        <div className="w-8 h-8 rounded" style={{background: t.color}}></div>
+                                        <span className="text-[10px] text-gray-400 group-hover:text-white">{t.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-xs text-gray-400 font-bold mb-2">预设蓝图</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {Object.keys(PLOTS).filter(k => !k.startsWith('road') && k!=='default_empty').map(key => (
+                                    <button key={key} onClick={() => handleStartPlacingPlot(key)} className="bg-white/5 hover:bg-white/10 p-2 rounded flex items-center gap-3 border border-white/10 transition-colors text-left">
+                                        <div className="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-xs">{PLOTS[key].width/100}x</div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-xs font-bold text-gray-200 truncate">{PLOT_NAMES[key] || key}</div>
+                                            <div className="text-[9px] text-gray-500">{PLOTS[key].width}x{PLOTS[key].height}</div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- FLOOR MODE --- */}
+                {mode === 'floor' && (
+                    <div className="space-y-4">
+                        <button onClick={handleStartDrawingRoom} className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded p-4 flex items-center justify-center gap-3 group transition-all">
+                            <span className="text-2xl group-hover:scale-110 transition-transform">🏗️</span>
+                            <span className="font-bold text-blue-100">新建房间 (拖拽框选)</span>
+                        </button>
+                        
+                        <div>
+                            <div className="text-xs text-gray-400 font-bold mb-2">地板材质</div>
+                            <div className="grid grid-cols-4 gap-3">
+                                {FLOOR_PATTERNS.map(fp => (
+                                    <button key={fp.pattern} onClick={() => handlePatternChange(fp.pattern)} className="aspect-square bg-white/5 hover:bg-white/10 rounded flex flex-col items-center justify-center gap-1 border border-white/10 transition-colors">
+                                        <div className={`w-8 h-8 border border-white/20 bg-gray-600`}></div>
+                                        <span className="text-[10px] text-gray-400">{fp.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- FURNITURE MODE --- */}
+                {mode === 'furniture' && (
+                    <div className="grid grid-cols-4 gap-3">
+                        {FURNITURE_CATALOG[category].items.map((item, idx) => (
+                            <button 
+                                key={idx} 
+                                onClick={() => handleStartPlacingFurniture(item)} 
+                                className="aspect-square bg-white/5 hover:bg-white/10 rounded flex flex-col items-center justify-center p-2 border border-white/10 transition-all hover:scale-105 hover:border-white/30 group relative overflow-hidden"
+                                title={`${item.label} (${item.w}x${item.h})`}
+                            >
+                                <div className="w-8 h-8 rounded mb-1 shadow-sm" style={{background: item.color}}></div>
+                                <span className="text-[9px] text-gray-400 group-hover:text-white text-center leading-tight">{item.label}</span>
+                                <span className="absolute top-1 right-1 text-[8px] text-gray-600 opacity-0 group-hover:opacity-100">{item.w}x{item.h}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Colors Palette (Bottom) */}
+            {(mode === 'furniture' || mode === 'floor') && (
+                <div className="pt-3 border-t border-white/10">
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                        {COLORS.map(c => (
+                            <button 
+                                key={c} 
+                                onClick={() => handleColorChange(c)} 
+                                className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 ${selectedColor === c ? 'border-white scale-110 shadow-[0_0_5px_rgba(255,255,255,0.5)]' : 'border-white/10'}`} 
+                                style={{background: c}} 
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const renderStatusBar = () => (
+        <div className="w-[200px] bg-[#1e222e] border-l border-white/10 p-3 flex flex-col gap-3">
             <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileChange} />
             
-            {/* Header */}
-            <div onMouseDown={startDrag} className="p-3 border-b border-white/10 flex flex-col gap-2 bg-white/5 rounded-t-xl cursor-move select-none">
-                <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-warning flex items-center gap-2">🛠️ 地图编辑器</span>
-                    <div className="flex gap-1">
-                        <button onMouseDown={e => e.stopPropagation()} onClick={handleImportClick} className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded">导入</button>
-                        <button onMouseDown={e => e.stopPropagation()} onClick={handleExport} className="bg-purple-600 text-white text-[10px] px-2 py-1 rounded">导出</button>
-                        <button onMouseDown={e => e.stopPropagation()} onClick={handleSave} className="bg-success text-black text-[10px] px-2 py-1 rounded">保存</button>
-                        <button onMouseDown={e => e.stopPropagation()} onClick={handleCancel} className="bg-white/10 text-white text-[10px] px-2 py-1 rounded">退出</button>
-                    </div>
-                </div>
-                <div className="flex gap-1 justify-between" onMouseDown={e => e.stopPropagation()}>
-                    <div className="flex gap-1">
-                        <button onClick={() => GameStore.undo()} disabled={!canUndo} className={`px-2 py-1 rounded text-[10px] border ${canUndo ? 'text-white border-white/20' : 'text-gray-600 border-transparent'}`}>↩ 撤销</button>
-                        <button onClick={() => GameStore.redo()} disabled={!canRedo} className={`px-2 py-1 rounded text-[10px] border ${canRedo ? 'text-white border-white/20' : 'text-gray-600 border-transparent'}`}>↪ 恢复</button>
-                    </div>
-                    <button onClick={() => GameStore.clearMap()} className="px-2 py-1 rounded text-[10px] border border-danger/30 text-danger">🗑️ 清空</button>
+            <div className="flex-1 bg-black/20 rounded p-2 text-[10px] text-gray-400 font-mono">
+                {GameStore.editor.selectedPlotId ? (
+                    <div>SELECTED: PLOT<br/>ID: {GameStore.editor.selectedPlotId}</div>
+                ) : GameStore.editor.selectedFurnitureId ? (
+                    <div>SELECTED: OBJ<br/>ID: {selectedFurniture?.label || 'Unknown'}</div>
+                ) : (
+                    <div>READY</div>
+                )}
+                {/* 状态指示 */}
+                <div className="mt-2 text-warning">
+                    {GameStore.editor.interactionState === 'carrying' ? '>> PLACING...' : ''}
                 </div>
             </div>
 
-            {/* Tools */}
-            <div className="flex gap-2 p-2 bg-black/20 border-b border-white/10">
-                <button onClick={() => handleToolChange('camera')} className={`flex-1 py-1.5 text-xs rounded border ${activeTool === 'camera' ? 'bg-accent text-black border-accent' : 'bg-white/5 border-white/10 text-gray-400'}`}>✋ 漫游</button>
-                <button onClick={() => handleToolChange('select')} className={`flex-1 py-1.5 text-xs rounded border ${activeTool === 'select' ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/5 border-white/10 text-gray-400'}`}>👆 编辑</button>
+            <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleSave} className="bg-success hover:bg-green-400 text-black py-2 rounded text-xs font-bold transition-colors shadow-lg shadow-green-900/20">✔ 应用</button>
+                <button onClick={handleCancel} className="bg-white/10 hover:bg-white/20 text-white py-2 rounded text-xs font-bold transition-colors">✕ 取消</button>
+                <button onClick={handleImportClick} className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 py-1.5 rounded text-[10px]">导入</button>
+                <button onClick={handleExport} className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 py-1.5 rounded text-[10px]">导出</button>
             </div>
+            
+            <button onClick={() => GameStore.clearMap()} className="w-full mt-2 border border-danger/20 text-danger hover:bg-danger/10 py-1 rounded text-[10px]">⚠️ 清空地图</button>
+        </div>
+    );
 
-            {/* Mode Switcher */}
-            <div className="flex border-b border-white/10">
-                {[{id:'plot', l:'地皮'}, {id:'floor', l:'房间'}, {id:'furniture', l:'家具'}].map(m => (
-                    <button key={m.id} onClick={() => handleSetMode(m.id as any)} className={`flex-1 py-2 text-xs font-bold ${mode === m.id ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500'}`}>{m.l}</button>
-                ))}
-            </div>
+    return (
+        <div 
+            onMouseDown={(e) => e.stopPropagation()}
+            className="fixed bottom-0 left-0 right-0 h-[280px] bg-[#121212] border-t border-white/20 shadow-[0_-5px_30px_rgba(0,0,0,0.5)] z-50 flex animate-[slideUp_0.3s_ease-out] pointer-events-auto"
+        >
+            {/* 1. Tools Strip */}
+            {renderTools()}
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
-                {/* Info Box */}
-                <div className="bg-white/5 p-2 rounded border border-white/5">
-                    <div className="text-[10px] text-gray-500 font-bold mb-1">当前选择</div>
-                    <div className="text-xs text-gray-300 truncate mb-2">
-                        {GameStore.editor.selectedPlotId ? `地皮: ${GameStore.editor.selectedPlotId}` : 
-                         GameStore.editor.selectedRoomId ? `房间: ${GameStore.editor.selectedRoomId}` : 
-                         GameStore.editor.selectedFurnitureId ? `家具: ${selectedFurniture?.label}` : "无"}
-                    </div>
-                    {(GameStore.editor.selectedPlotId || GameStore.editor.selectedRoomId || GameStore.editor.selectedFurnitureId) && (
-                        <button onClick={handleDelete} className="w-full bg-danger/20 text-danger border border-danger/30 rounded py-1 text-xs">删除选中项 (Del)</button>
-                    )}
-                </div>
+            {/* 2. Category Tabs */}
+            {renderCategoryTabs()}
 
-                {mode === 'floor' && GameStore.editor.selectedRoomId && (
-                    <div className="bg-white/5 p-2 rounded border border-white/5">
-                        <div className="text-[10px] text-gray-500 font-bold mb-2">地面材质</div>
-                        <div className="grid grid-cols-3 gap-1">
-                            {FLOOR_PATTERNS.map(fp => (
-                                <button key={fp.pattern} onClick={() => handlePatternChange(fp.pattern)} className="text-[10px] py-1 rounded border bg-black/20 border-white/10 text-gray-300 hover:text-white">{fp.label}</button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+            {/* 3. Main Content (Catalog/Grid) */}
+            {renderContent()}
 
-                {(mode === 'furniture' || mode === 'floor') && (
-                    <div className="bg-white/5 p-2 rounded border border-white/5">
-                        <div className="text-[10px] text-gray-500 font-bold mb-2">颜色</div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {COLORS.map(c => (
-                                <button key={c} onClick={() => handleColorChange(c)} className={`w-5 h-5 rounded-full border ${selectedColor === c ? 'border-white scale-110' : 'border-white/10'}`} style={{background: c}} />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Lists */}
-                {mode === 'plot' && (
-                    <div className="flex flex-col gap-2">
-                        <button onClick={handleStartDrawingPlot} className="w-full bg-white/5 border border-white/10 rounded p-2 text-xs font-bold text-gray-200">⬜ 自定义空地</button>
-                        <div className="text-[10px] text-gray-500 font-bold mt-2">地表笔刷</div>
-                        <div className="grid grid-cols-2 gap-2">
-                            {SURFACE_TYPES.map(t => (
-                                <button key={t.pattern} onClick={() => handleStartDrawingFloor(t)} className="bg-white/5 border border-white/10 rounded p-2 flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded" style={{background: t.color}}></div><span className="text-xs text-gray-300">{t.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                        <div className="text-[10px] text-gray-500 font-bold mt-2">预设模板</div>
-                        <div className="grid grid-cols-2 gap-2">
-                            {Object.keys(PLOTS).filter(k => !k.startsWith('road') && k!=='default_empty').map(key => (
-                                <button key={key} onClick={() => handleStartPlacingPlot(key)} className="bg-white/5 border border-white/10 rounded p-2 text-left">
-                                    <span className="text-xs font-bold text-gray-200 block truncate">{PLOT_NAMES[key] || key}</span>
-                                    <span className="text-[9px] text-gray-500">{PLOTS[key].width}x{PLOTS[key].height}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {mode === 'floor' && (
-                    <button onClick={handleStartDrawingRoom} className="w-full bg-white/5 border border-white/10 rounded p-4 text-center">
-                        <span className="text-xl block mb-1">🏗️</span>
-                        <span className="text-xs font-bold text-gray-200">框选建造房间</span>
-                    </button>
-                )}
-
-                {mode === 'furniture' && (
-                    <>
-                        <div className="flex flex-wrap gap-1 mb-2">
-                            {Object.keys(FURNITURE_CATALOG).map(k => (
-                                <button key={k} onClick={() => setCategory(k)} className={`px-2 py-1 rounded text-[10px] border ${category === k ? 'bg-accent/20 border-accent text-accent' : 'border-white/10 text-gray-400'}`}>{FURNITURE_CATALOG[k].label}</button>
-                            ))}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            {FURNITURE_CATALOG[category].items.map((item, idx) => (
-                                <button key={idx} onClick={() => handleStartPlacingFurniture(item)} className="bg-white/5 border border-white/10 rounded p-2 text-left flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full" style={{background: item.color}}></div>
-                                    <div className="overflow-hidden">
-                                        <div className="text-xs font-bold text-gray-200 truncate">{item.label}</div>
-                                        <div className="text-[9px] text-gray-500">{item.w}x{item.h}</div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </>
-                )}
-            </div>
+            {/* 4. Right Status & Actions */}
+            {renderStatusBar()}
         </div>
     );
 };

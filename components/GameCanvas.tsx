@@ -163,6 +163,12 @@ const GameCanvas: React.FC = () => {
                 else if (GameStore.editor.selectedFurnitureId) GameStore.removeFurniture(GameStore.editor.selectedFurnitureId);
                 else if (GameStore.editor.selectedRoomId) GameStore.removeRoom(GameStore.editor.selectedRoomId);
             }
+            // 🆕 旋转快捷键
+            if (e.key === 'r' || e.key === 'R') {
+                if (GameStore.editor.mode !== 'none') {
+                    GameStore.editor.rotateSelection();
+                }
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -816,12 +822,13 @@ const GameCanvas: React.FC = () => {
                 onContextMenu={(e) => e.preventDefault()}
             />
             {/* Editor Instruction Overlay */}
-            {GameStore.editor.mode !== 'none' && (
+            {GameStore.editor.mode !== 'none' && showInstructions && (
                 <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none bg-black/60 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-lg border border-white/10 shadow-xl flex flex-col items-center gap-1 z-20">
                     {/* [新增] 关闭按钮 */}
                     <button 
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => setShowInstructions(false)}
-                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] pointer-events-auto shadow-md transition-colors border border-white/20 z-30"
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] pointer-events-auto shadow-md transition-colors border border-white/20 z-30 cursor-pointer"
                         title="关闭指引"
                     >
                         ✕
@@ -831,7 +838,7 @@ const GameCanvas: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px]">
                         <div className="flex items-center gap-2"><span className="text-xl">🖱️</span> <span>单击物体: 拿起 / 再次点击放置</span></div>
-                        <div className="flex items-center gap-2"><span className="text-xl">🤏</span> <span>拖拽四角: 调整物体大小</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">🔄</span> <span>R 键: 旋转物体</span></div>
                         <div className="flex items-center gap-2"><span className="text-xl">✋</span> <span>漫游: 拖拽移动视角</span></div>
                         <div className="flex items-center gap-2"><span className="text-xl">⌨️</span> <span>Delete键: 删除选中物体</span></div>
                     </div>

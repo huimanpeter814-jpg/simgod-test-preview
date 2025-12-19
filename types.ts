@@ -69,6 +69,7 @@ export interface Furniture {
   y: number;
   w: number;
   h: number;
+  rotation?: number; // 🆕 0, 1, 2, 3 (对应 0, 90, 180, 270 度)
   color: string;
   label: string;
   utility: string;
@@ -170,7 +171,7 @@ export interface EditorState {
 }
 
 export interface EditorAction {
-    type: 'add' | 'remove' | 'move' | 'modify' | 'resize';
+    type: 'add' | 'remove' | 'move' | 'modify' | 'resize' | 'rotate'; // 🆕 新增 rotate
     entityType: 'plot' | 'furniture' | 'room';
     id: string;
     prevData?: any; 
