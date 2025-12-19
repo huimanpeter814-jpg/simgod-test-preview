@@ -1,4 +1,3 @@
-
 export interface Vector2 {
   x: number;
   y: number;
@@ -338,15 +337,16 @@ export interface SimData {
   carryingSimId?: string | null;
   carriedBySimId?: string | null;
 
-  isTemporary?: boolean; // 🆕 标记是否为临时生成的NPC (如保姆)
+  isTemporary?: boolean; 
 }
 
+// 🆕 更新：扩展日志类型和分类
 export interface LogEntry {
   id: number;
   time: string;
   text: string;
-  type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family';
-  category: 'sys' | 'chat' | 'rel' | 'life';
+  type: 'normal' | 'sys' | 'act' | 'chat' | 'love' | 'bad' | 'jealous' | 'rel_event' | 'money' | 'family' | 'career';
+  category: 'sys' | 'chat' | 'rel' | 'life' | 'career'; // 新增 career 分类
   isAI: boolean;
   simName?: string;
 }
@@ -366,5 +366,4 @@ export interface SaveMetadata {
     timeLabel: string;
     pop: number;
     realTime: string;
-
 }

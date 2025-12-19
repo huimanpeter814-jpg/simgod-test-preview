@@ -3,8 +3,8 @@ import { GameStore } from '../../utils/simulation';
 import { LogEntry } from '../../types';
 
 // [分类优化] 细化的分类
-// 修正：将 'social' 改回 'chat' 以匹配 types.ts 中的 LogEntry 定义
-type TabType = 'all' | 'life' | 'chat' | 'rel' | 'sys';
+// 🆕 更新：新增 'career' (生涯) 分类，更名 'sys' 为系统(重要)
+type TabType = 'all' | 'life' | 'chat' | 'rel' | 'career' | 'sys';
 
 const LogPanel: React.FC = () => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -70,7 +70,7 @@ const LogPanel: React.FC = () => {
                 top: position.y,
                 height: isMinimized ? 'auto' : '300px'
             }}
-            className="fixed w-[400px] flex flex-col pointer-events-auto z-50 transition-height duration-200"
+            className="fixed w-[420px] flex flex-col pointer-events-auto z-50 transition-height duration-200"
         >
             {/* Header / Drag Handle */}
             <div
@@ -91,18 +91,19 @@ const LogPanel: React.FC = () => {
             {!isMinimized && (
                 <div className="flex-1 flex flex-col bg-[#121212]/90 backdrop-blur-md border-x border-b border-white/10 rounded-b-lg shadow-xl overflow-hidden">
                     {/* Tabs */}
-                    <div className="flex border-b border-white/10">
+                    <div className="flex border-b border-white/10 overflow-x-auto no-scrollbar">
                         {[
                             { id: 'all', label: '全部' },
-                            { id: 'life', label: '生活' },
-                            { id: 'chat', label: '社交' }, // 修正：id 改为 chat，标签保持“社交”
-                            { id: 'rel', label: '情感' },
-                            { id: 'sys', label: '系统' },
+                            { id: 'sys', label: '❗️ 系统' },
+                            { id: 'career', label: '💼 生涯' },
+                            { id: 'rel', label: '❤️ 情感' },
+                            { id: 'chat', label: '💬 社交' },
+                            { id: 'life', label: '🌱 生活' },
                         ].map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as TabType)}
-                                className={`flex-1 py-1.5 text-[10px] font-bold transition-colors ${activeTab === tab.id ? 'bg-white/10 text-white border-b-2 border-white' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
+                                className={`flex-1 py-1.5 px-2 text-[10px] font-bold whitespace-nowrap transition-colors ${activeTab === tab.id ? 'bg-white/10 text-white border-b-2 border-white' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
                             >
                                 {tab.label}
                             </button>
@@ -114,12 +115,12 @@ const LogPanel: React.FC = () => {
                         {filteredLogs.map(log => {
                             let colorClass = 'text-gray-400';
                             if (log.category === 'rel') colorClass = 'text-love';
-                            if (log.category === 'chat') colorClass = 'text-chat'; // 修正：判断 chat 而非 social
+                            if (log.category === 'chat') colorClass = 'text-chat';
+                            if (log.category === 'career') colorClass = 'text-warning';
                             if (log.type === 'bad') colorClass = 'text-danger';
                             if (log.type === 'jealous') colorClass = 'text-danger font-bold';
                             if (log.isAI) colorClass = 'text-ai';
-                            if (log.category === 'sys') colorClass = 'text-warning';
-                            if (log.type === 'money') colorClass = 'text-yellow-400';
+                            if (log.category === 'sys') colorClass = 'text-red-400 font-bold border-l-2 border-red-500 pl-1'; // 突出系统消息
 
                             return (
                                 <div key={log.id} className="text-[11px] leading-snug hover:bg-white/5 px-1 rounded flex gap-2">

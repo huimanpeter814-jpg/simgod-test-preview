@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GameStore, Sim } from '../../utils/simulation';
-import { JobType, NeedType } from '../../types';
-import { BUFFS } from '../../constants';
+import { JobType, NeedType, AgeStage } from '../../types';
+import { BUFFS, MBTI_TYPES, ORIENTATIONS } from '../../constants';
 
 interface StatsPanelProps {
     onClose: () => void;
@@ -37,6 +37,7 @@ const StatRow: React.FC<{ label: string, value: number, color?: string, onClick?
 
 const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
     const [sims, setSims] = useState<Sim[]>([]);
+    const [activeTab, setActiveTab] = useState<'overview' | 'social' | 'traits'>('overview');
     
     // [新增] 详情视图状态
     const [detailView, setDetailView] = useState<{ title: string, list: {name: string, sub?: string, id: string}[] } | null>(null);
@@ -47,197 +48,374 @@ const StatisticsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
         return unsub;
     }, []);
 
-    // 1. 职业统计 [优化：使用 JobType 枚举]
-    const jobStats: Record<string, number> = {};
+    // --- 统计数据计算 ---
+
+    // 1. 职业统计 [优化：遍历所有 JobType]
+    const jobStats: Record<string, {count: number, sims: any[]}> = {};
+    Object.values(JobType).forEach(type => jobStats[type] = {count: 0, sims: []}); // 初始化所有类型
+    
     sims.forEach(s => {
-        let type = '其他';
-        switch (s.job.companyType) {
-            case JobType.Unemployed: type = '自由职业'; break;
-            case JobType.Internet: type = '互联网'; break;
-            case JobType.Design: type = '设计'; break;
-            case JobType.Business: type = '商业'; break;
-            case JobType.Store: type = '零售'; break;
-            case JobType.Restaurant: type = '餐饮'; break;
-            case JobType.Library: type = '图书'; break;
-            case JobType.School: type = '教育'; break;
-            case JobType.Nightlife: type = '娱乐'; break;
-            default: type = '其他'; break;
-        }
-        jobStats[type] = (jobStats[type] || 0) + 1;
+        const type = s.job.companyType || '其他';
+        if (!jobStats[type]) jobStats[type] = {count: 0, sims: []};
+        jobStats[type].count++;
+        jobStats[type].sims.push({ name: s.name, sub: s.job.title, id: s.id });
     });
 
-    // 2. 关系统计 (收集具体名单)
+    // 2. 人口属性统计 (年龄/性别/MBTI/星座)
+    const ageStats: Record<string, any[]> = {};
+    const mbtiStats: Record<string, any[]> = {};
+    const zodiacStats: Record<string, any[]> = {};
+    const genderStats: Record<string, number> = { 'M': 0, 'F': 0 };
+    const orientationStats: Record<string, any[]> = {};
+
+    // 3. 状态与特征
+    const traitStats: Record<string, any[]> = {};
+    const homelessSims: any[] = [];
+    const criticalHealthSims: any[] = []; // 病危
+
+    // 4. 情感状态
+    const relStatusStats = {
+        single: [] as any[],
+        dating: [] as any[],
+        married: [] as any[],
+        divorced: [] as any[], // 需要结合 buff 判断
+    };
+
+    sims.forEach(s => {
+        // Age
+        if (!ageStats[s.ageStage]) ageStats[s.ageStage] = [];
+        ageStats[s.ageStage].push({ name: s.name, sub: `${Math.floor(s.age)}岁`, id: s.id });
+
+        // MBTI
+        const mbtiKey = s.mbti;
+        if (!mbtiStats[mbtiKey]) mbtiStats[mbtiKey] = [];
+        mbtiStats[mbtiKey].push({ name: s.name, id: s.id });
+
+        // Zodiac
+        const zName = s.zodiac.name;
+        if (!zodiacStats[zName]) zodiacStats[zName] = [];
+        zodiacStats[zName].push({ name: s.name, id: s.id });
+
+        // Gender
+        genderStats[s.gender]++;
+
+        // Orientation
+        const orient = s.orientation;
+        if (!orientationStats[orient]) orientationStats[orient] = [];
+        orientationStats[orient].push({ name: s.name, id: s.id });
+
+        // Traits
+        s.traits.forEach(t => {
+            if (!traitStats[t]) traitStats[t] = [];
+            traitStats[t].push({ name: s.name, id: s.id });
+        });
+
+        // Housing
+        if (!s.homeId) homelessSims.push({ name: s.name, sub: '流浪中', id: s.id });
+
+        // Health
+        if (s.health < 30) criticalHealthSims.push({ name: s.name, sub: `HP: ${Math.floor(s.health)}`, id: s.id });
+
+        // Relationship Status logic
+        if (s.partnerId) {
+            const rel = s.relationships[s.partnerId];
+            if (rel && rel.isSpouse) {
+                relStatusStats.married.push({ name: s.name, sub: '已婚', id: s.id });
+            } else {
+                relStatusStats.dating.push({ name: s.name, sub: '恋爱中', id: s.id });
+            }
+        } else {
+            if (s.hasBuff('divorced')) { // 简单判断，实际可能需要更复杂逻辑
+                 relStatusStats.divorced.push({ name: s.name, sub: '离异', id: s.id });
+            } else {
+                 relStatusStats.single.push({ name: s.name, sub: '单身', id: s.id });
+            }
+        }
+    });
+
+    // 5. 关系统计 (Couple List)
     const lovers: {name: string, sub: string, id: string}[] = [];
-    const ambiguous: {name: string, sub: string, id: string}[] = [];
-    const bestFriends: {name: string, sub: string, id: string}[] = []; // 好友
-    const normalFriends: {name: string, sub: string, id: string}[] = []; // 普通朋友
-    const enemies: {name: string, sub: string, id: string}[] = [];
-    
-    // 使用 Set 避免重复计数 (A-B 和 B-A)
     const processedPairs = new Set<string>();
     
     sims.forEach(s => {
         Object.keys(s.relationships).forEach(targetId => {
             const key = [s.id, targetId].sort().join('-');
             if (processedPairs.has(key)) return;
-            processedPairs.add(key);
             
             const target = sims.find(t => t.id === targetId);
             if (!target) return;
-
             const rel = s.relationships[targetId];
-            const pairName = `${s.name} & ${target.name}`;
-
+            
             if (rel.isLover) {
+                processedPairs.add(key);
+                const pairName = `${s.name} & ${target.name}`;
                 lovers.push({ name: pairName, sub: `热度: ${Math.floor(rel.romance)}`, id: s.id });
-            }
-            else if (rel.romance > 40) {
-                // 暧昧关系：有一定浪漫值但未确立关系
-                ambiguous.push({ name: pairName, sub: `暧昧: ${Math.floor(rel.romance)}`, id: s.id });
-            }
-            else if (rel.friendship > 60) {
-                bestFriends.push({ name: pairName, sub: `深厚: ${Math.floor(rel.friendship)}`, id: s.id });
-            }
-            else if (rel.friendship >= 20) {
-                // [新增] 普通朋友：友谊度 20-60
-                normalFriends.push({ name: pairName, sub: `友谊: ${Math.floor(rel.friendship)}`, id: s.id });
-            }
-            else if (rel.friendship < -60) {
-                enemies.push({ name: pairName, sub: `仇恨: ${Math.floor(rel.friendship)}`, id: s.id });
             }
         });
     });
 
-    // 3. 状态统计 [优化：使用 NeedType 和 BUFFS 常量]
-    const happyCount = sims.filter(s => s.mood > 80).length;
-    const sadCount = sims.filter(s => s.mood < 40).length;
-    const smellyCount = sims.filter(s => s.needs[NeedType.Hygiene] < 30 || s.hasBuff(BUFFS.smelly.id)).length;
-    const hungryCount = sims.filter(s => s.needs[NeedType.Hunger] < 30).length;
-    const richCount = sims.filter(s => s.money > 5000).length;
-    const brokeCount = sims.filter(s => s.money < 200).length;
-
-    // 显示详情的辅助函数
+    // 辅助函数
     const showList = (title: string, list: any[]) => {
         setDetailView({ title, list });
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out] pointer-events-auto">
-            <div className="w-full max-w-md bg-[#121212] border border-white/20 rounded-xl shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="w-full max-w-2xl bg-[#1e222e] border border-white/20 rounded-xl shadow-2xl flex flex-col max-h-[85vh]">
                 
                 {/* Header */}
-                <div className="flex justify-between items-center p-4 border-b border-white/10">
+                <div className="flex justify-between items-center p-4 border-b border-white/10 shrink-0">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         {detailView ? (
-                            <button onClick={() => setDetailView(null)} className="hover:text-accent mr-2">←</button>
-                        ) : '📊'} 
-                        {detailView ? detailView.title : '城镇统计数据'}
-                        {!detailView && <span className="text-xs font-normal text-gray-500 bg-white/10 px-2 py-0.5 rounded-full">POP: {sims.length}</span>}
+                            <button onClick={() => setDetailView(null)} className="hover:text-accent mr-2">← 返回</button>
+                        ) : '📊 城镇数据中心'}
+                        {detailView && <span className="text-gray-400 text-sm">/ {detailView.title}</span>}
                     </h2>
-                    <button 
-                        onClick={onClose} 
-                        className="text-gray-500 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
-                    >
-                        ✕
-                    </button>
+                    <div className="flex items-center gap-4">
+                        {!detailView && <span className="text-xs font-mono text-gray-500 bg-white/10 px-2 py-1 rounded">POPULATION: {sims.length}</span>}
+                        <button 
+                            onClick={onClose} 
+                            className="text-gray-500 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
+                        >
+                            ✕
+                        </button>
+                    </div>
                 </div>
+
+                {/* Tabs (Main View Only) */}
+                {!detailView && (
+                    <div className="flex border-b border-white/10 bg-black/20 shrink-0">
+                        {['overview', 'social', 'traits'].map(t => (
+                            <button 
+                                key={t}
+                                onClick={() => setActiveTab(t as any)}
+                                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeTab === t ? 'text-accent border-b-2 border-accent bg-white/5' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                {{'overview': '概览 & 职业', 'social': '社交 & 情感', 'traits': '特征 & 个性'}[t]}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 
                 {/* Content */}
-                <div className="overflow-y-auto p-4 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[#121212]/50">
                     
                     {/* View: List Details */}
                     {detailView ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="grid grid-cols-2 gap-2">
                             {detailView.list.length > 0 ? (
-                                detailView.list.map((item) => (
-                                    <SimListItem key={item.name} name={item.name} sub={item.sub} id={item.id} />
+                                detailView.list.map((item, idx) => (
+                                    <div key={idx} className="bg-white/5 rounded px-2">
+                                        <SimListItem name={item.name} sub={item.sub} id={item.id} />
+                                    </div>
                                 ))
                             ) : (
-                                <div className="text-center text-gray-500 py-4 text-xs">空空如也</div>
+                                <div className="col-span-2 text-center text-gray-500 py-10">暂无数据</div>
                             )}
                         </div>
                     ) : (
-                        // View: Dashboard
-                        <div className="grid grid-cols-2 gap-6">
+                        // View: Dashboard Tabs
+                        <div className="flex flex-col gap-6">
                             
-                            {/* 状态概览 */}
-                            <div className="col-span-2 bg-white/5 rounded-lg p-3 border border-white/5">
-                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">当前状态</div>
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                                    <StatRow label="😄 开心" value={happyCount} color="text-success" />
-                                    <StatRow label="😭 难过" value={sadCount} color="text-danger" />
-                                    <StatRow label="🤢 发臭/邋遢" value={smellyCount} color="text-yellow-600" />
-                                    <StatRow label="🍖 饥饿" value={hungryCount} color="text-orange-400" />
-                                    <StatRow label="💰 富裕 (>5k)" value={richCount} color="text-warning" />
-                                    <StatRow label="💸 贫穷 (<200)" value={brokeCount} color="text-gray-400" />
-                                </div>
-                            </div>
+                            {/* --- TAB: OVERVIEW --- */}
+                            {activeTab === 'overview' && (
+                                <>
+                                    {/* 关键指标 */}
+                                    <div className="grid grid-cols-4 gap-4">
+                                        <div className="bg-white/5 p-3 rounded border border-white/5 flex flex-col items-center cursor-pointer hover:bg-white/10" onClick={() => showList('无家可归名单', homelessSims)}>
+                                            <div className="text-2xl mb-1">⛺</div>
+                                            <div className="text-[10px] text-gray-400">流浪人口</div>
+                                            <div className={`text-xl font-bold font-mono ${homelessSims.length > 0 ? 'text-danger' : 'text-gray-500'}`}>{homelessSims.length}</div>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded border border-white/5 flex flex-col items-center cursor-pointer hover:bg-white/10" onClick={() => showList('病危名单 (HP<30)', criticalHealthSims)}>
+                                            <div className="text-2xl mb-1">🚑</div>
+                                            <div className="text-[10px] text-gray-400">健康危急</div>
+                                            <div className={`text-xl font-bold font-mono ${criticalHealthSims.length > 0 ? 'text-danger' : 'text-success'}`}>{criticalHealthSims.length}</div>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded border border-white/5 flex flex-col items-center">
+                                            <div className="text-2xl mb-1">👫</div>
+                                            <div className="text-[10px] text-gray-400">性别比例</div>
+                                            <div className="text-xs font-bold font-mono text-blue-300">M:{genderStats.M} <span className="text-pink-300">F:{genderStats.F}</span></div>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded border border-white/5 flex flex-col items-center">
+                                            <div className="text-2xl mb-1">💰</div>
+                                            <div className="text-[10px] text-gray-400">平均资产</div>
+                                            <div className="text-lg font-bold font-mono text-warning">${Math.floor(sims.reduce((a,b)=>a+b.money,0)/Math.max(1, sims.length))}</div>
+                                        </div>
+                                    </div>
 
-                            {/* 社会关系 */}
-                            <div className="col-span-1 bg-white/5 rounded-lg p-3 border border-white/5">
-                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">社会关系网</div>
-                                <div className="flex flex-col gap-1">
-                                    <StatRow 
-                                        label="❤️ 情侣对数" 
-                                        value={lovers.length} 
-                                        color="text-love" 
-                                        onClick={() => showList('情侣名单', lovers)}
-                                    />
-                                    <StatRow 
-                                        label="💕 暧昧关系" 
-                                        value={ambiguous.length} 
-                                        color="text-pink-400" 
-                                        onClick={() => showList('暧昧名单', ambiguous)}
-                                    />
-                                    <StatRow 
-                                        label="🌟 亲密好友" 
-                                        value={bestFriends.length} 
-                                        color="text-act" 
-                                        onClick={() => showList('亲密好友名单', bestFriends)}
-                                    />
-                                    <StatRow 
-                                        label="🙂 普通朋友" 
-                                        value={normalFriends.length} 
-                                        color="text-gray-300" 
-                                        onClick={() => showList('普通朋友名单', normalFriends)}
-                                    />
-                                    <StatRow 
-                                        label="⚔️ 死对头" 
-                                        value={enemies.length} 
-                                        color="text-gray-500" 
-                                        onClick={() => showList('死对头名单', enemies)}
-                                    />
-                                </div>
-                            </div>
+                                    {/* 职业分布 (全职业) */}
+                                    <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">职业分布</div>
+                                        <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                            {Object.entries(jobStats)
+                                                .sort(([,a], [,b]) => b.count - a.count)
+                                                .map(([type, data]) => {
+                                                    // Mapping english types to chinese for display if possible
+                                                    const displayType = {
+                                                        [JobType.Unemployed]: '无业/自由',
+                                                        [JobType.Internet]: '互联网',
+                                                        [JobType.Design]: '设计艺术',
+                                                        [JobType.Business]: '商业金融',
+                                                        [JobType.Store]: '零售服务',
+                                                        [JobType.Restaurant]: '餐饮美食',
+                                                        [JobType.Library]: '图书管理',
+                                                        [JobType.School]: '教育行业',
+                                                        [JobType.Nightlife]: '娱乐夜场',
+                                                        [JobType.Hospital]: '医疗卫生',
+                                                        [JobType.ElderCare]: '养老护理'
+                                                    }[type] || type;
 
-                            {/* 职业分布 */}
-                            <div className="col-span-1 bg-white/5 rounded-lg p-3 border border-white/5">
-                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">职业分布</div>
-                                <div className="flex flex-col">
-                                    {Object.entries(jobStats)
-                                        .sort(([,a], [,b]) => b - a)
-                                        .slice(0, 6) // 只显示前6个
-                                        .map(([type, count]) => (
-                                            <div key={type} className="flex justify-between items-center text-[10px] mb-1">
-                                                <span className="text-gray-400">{type}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-12 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-blue-400" style={{ width: `${(count / sims.length) * 100}%` }}></div>
-                                                    </div>
-                                                    <span className="text-gray-200 w-3 text-right">{count}</span>
-                                                </div>
+                                                    return (
+                                                        <StatRow 
+                                                            key={type}
+                                                            label={displayType}
+                                                            value={data.count}
+                                                            color={data.count > 0 ? 'text-blue-300' : 'text-gray-600'}
+                                                            onClick={() => showList(`${displayType} 从业者`, data.sims)}
+                                                        />
+                                                    );
+                                                })
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {/* 年龄分布 */}
+                                    <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">年龄结构</div>
+                                        <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                            {Object.values(AgeStage).map(stage => {
+                                                const list = ageStats[stage] || [];
+                                                return (
+                                                    <StatRow 
+                                                        key={stage}
+                                                        label={stage} 
+                                                        value={list.length} 
+                                                        color="text-purple-300" 
+                                                        onClick={() => showList(`${stage} 名单`, list)}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* --- TAB: SOCIAL --- */}
+                            {activeTab === 'social' && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        {/* 情感状态 */}
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">情感状态</div>
+                                            <div className="flex flex-col gap-1">
+                                                <StatRow label="💍 已婚" value={relStatusStats.married.length} color="text-love" onClick={() => showList('已婚名单', relStatusStats.married)} />
+                                                <StatRow label="💕 恋爱中" value={relStatusStats.dating.length} color="text-pink-400" onClick={() => showList('恋爱名单', relStatusStats.dating)} />
+                                                <StatRow label="🦅 单身" value={relStatusStats.single.length} color="text-gray-300" onClick={() => showList('单身名单', relStatusStats.single)} />
+                                                {relStatusStats.divorced.length > 0 && <StatRow label="💔 离异" value={relStatusStats.divorced.length} color="text-gray-500" onClick={() => showList('离异名单', relStatusStats.divorced)} />}
                                             </div>
-                                        ))
-                                    }
-                                </div>
-                            </div>
+                                        </div>
+
+                                        {/* 性取向 */}
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">性取向分布</div>
+                                            <div className="flex flex-col gap-1">
+                                                {ORIENTATIONS.map(o => (
+                                                    <StatRow 
+                                                        key={o.type}
+                                                        label={o.label} 
+                                                        value={orientationStats[o.type]?.length || 0} 
+                                                        color="text-indigo-300"
+                                                        onClick={() => showList(`${o.label} 名单`, orientationStats[o.type] || [])}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 现存情侣 */}
+                                    <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">当前情侣/伴侣 ({lovers.length} 对)</div>
+                                        <div className="max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                            {lovers.length > 0 ? lovers.map((l, i) => (
+                                                <div key={i} className="flex justify-between text-xs py-1 border-b border-white/5 last:border-0">
+                                                    <span className="text-pink-200">{l.name}</span>
+                                                    <span className="text-gray-500 scale-90">{l.sub}</span>
+                                                </div>
+                                            )) : <div className="text-gray-500 text-xs italic">暂无情侣</div>}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* --- TAB: TRAITS --- */}
+                            {activeTab === 'traits' && (
+                                <>
+                                    {/* MBTI 分布 */}
+                                    <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">MBTI 人格分布</div>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {MBTI_TYPES.map(type => {
+                                                const count = mbtiStats[type]?.length || 0;
+                                                return (
+                                                    <div 
+                                                        key={type} 
+                                                        className={`text-center p-1 rounded border ${count > 0 ? 'bg-accent/10 border-accent/30 cursor-pointer hover:bg-accent/20' : 'bg-transparent border-white/5 opacity-50'}`}
+                                                        onClick={count > 0 ? () => showList(`${type} 人群`, mbtiStats[type]) : undefined}
+                                                    >
+                                                        <div className="text-[10px] font-bold text-gray-300">{type}</div>
+                                                        <div className="text-xs font-mono text-accent">{count}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-6">
+                                        {/* 性格特质 Top 10 */}
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">热门性格特质</div>
+                                            <div className="flex flex-col gap-1">
+                                                {Object.entries(traitStats)
+                                                    .sort(([,a], [,b]) => b.length - a.length)
+                                                    .slice(0, 8)
+                                                    .map(([trait, list]) => (
+                                                        <StatRow 
+                                                            key={trait} 
+                                                            label={trait} 
+                                                            value={list.length} 
+                                                            color="text-yellow-200" 
+                                                            onClick={() => showList(`具有 [${trait}] 的市民`, list)}
+                                                        />
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+
+                                        {/* 星座分布 */}
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5">
+                                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">星座分布</div>
+                                            <div className="flex flex-col gap-1">
+                                                {Object.entries(zodiacStats)
+                                                    .sort(([,a], [,b]) => b.length - a.length)
+                                                    .map(([z, list]) => (
+                                                        <StatRow 
+                                                            key={z} 
+                                                            label={z} 
+                                                            value={list.length} 
+                                                            color="text-purple-300"
+                                                            onClick={() => showList(`${z} 市民`, list)}
+                                                        />
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                         </div>
                     )}
-                </div>
-                
-                <div className="p-3 border-t border-white/10 text-center">
-                    <p className="text-[9px] text-gray-600">点击数字查看具体名单 · SimGod</p>
                 </div>
             </div>
         </div>

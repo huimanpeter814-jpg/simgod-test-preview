@@ -397,7 +397,7 @@ export class NannyState extends BaseState {
     wanderTimer = 0;
     update(sim: Sim, dt: number) {
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
-        if (parentsHome) { GameStore.addLog(sim, "主人回来啦，我下班了。", "sys"); GameStore.removeSim(sim.id); return; }
+        if (parentsHome) { GameStore.addLog(sim, "主人回来啦，我下班了。", "normal"); GameStore.removeSim(sim.id); return; }
         const babies = GameStore.sims.filter(s => s.homeId === sim.homeId && (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler));
         if (babies.length > 0) {
             const needyBaby = babies.sort((a, b) => a.mood - b.mood)[0];

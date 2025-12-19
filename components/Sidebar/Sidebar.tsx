@@ -77,10 +77,10 @@ const GameOverlay: React.FC = () => {
             {/* Statistics Modal */}
             {showStats && <StatisticsPanel onClose={() => setShowStats(false)} />}
 
-            {/* Bottom Right: Controls */}
-            <div className="absolute right-8 bottom-8 pointer-events-auto flex flex-col gap-3 items-end">
+            {/* [修改] Bottom Right: Unified Controls Bar */}
+            <div className="absolute right-8 bottom-8 pointer-events-auto flex items-center gap-6">
                 
-                {/* Editor & Stats Buttons Row */}
+                {/* Tools Group (Editor & Stats) - 移到了这里 */}
                 <div className="flex gap-3">
                      {/* Editor Button */}
                     <button
@@ -89,7 +89,7 @@ const GameOverlay: React.FC = () => {
                             group flex items-center justify-center
                             w-12 h-12 rounded-full
                             shadow-lg border-2 
-                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                            transition-all duration-300 transform hover:scale-110 active:scale-95
                             ${showEditor 
                                 ? 'bg-warning text-black border-white shadow-[0_0_20px_rgba(253,203,110,0.6)]' 
                                 : 'bg-purple-600 hover:bg-purple-500 text-white border-white/20 hover:border-white'
@@ -109,13 +109,16 @@ const GameOverlay: React.FC = () => {
                             w-12 h-12 rounded-full
                             shadow-[0_0_20px_rgba(9,132,227,0.6)] hover:shadow-[0_0_30px_rgba(116,185,255,0.8)]
                             border-2 border-white/20 hover:border-white
-                            transition-all duration-300 transform hover:scale-105 active:scale-95
+                            transition-all duration-300 transform hover:scale-110 active:scale-95
                         "
                         title="查看统计"
                     >
                         <span className="text-xl">📊</span>
                     </button>
                 </div>
+
+                {/* Divider */}
+                <div className="h-8 w-px bg-white/20"></div>
 
                 {/* Spawn Buttons Group */}
                 <div className="flex gap-3">
