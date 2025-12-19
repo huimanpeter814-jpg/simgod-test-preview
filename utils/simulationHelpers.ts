@@ -1,52 +1,34 @@
-import { Job, Furniture } from '../types';
+
+import { Job, Furniture, Vector2 } from '../types';
 
 // 将游戏分钟转换为 tick 数 (1 游戏分钟 = 60 ticks)
 export const minutes = (m: number) => m * 60;
 
 // 计算特定职业的工位容量
 export const getJobCapacity = (job: Job) => {
-    // [修改] 暂时取消基于家具数量的判断
-    // 直接返回固定数值，确保每个岗位都有充足的名额
     const FIXED_CAPACITY = 50; 
-    
-    // 如果是老板，还是保持稀缺性（可选）
     if (job.level >= 4) return 1;
-
     return FIXED_CAPACITY;
 };
 
-// 🆕 标签辅助函数：获取家具的所有标签（包含向下兼容）
 export const getFurnitureTags = (f: Furniture): string[] => {
-    // 1. 如果有明确的 tags，直接返回
     if (f.tags && f.tags.length > 0) return f.tags;
-
-    // 2. 否则，根据 label, utility, pixelPattern 进行推断 (兼容旧存档)
     const inferred: string[] = [];
-    
     const label = f.label || '';
     const utility = f.utility || '';
     const pattern = f.pixelPattern || '';
 
-    // 办公设备
     if (label.includes('电脑') || pattern.includes('pc')) inferred.push('computer', 'work');
     if (label.includes('办公桌') || label.includes('工位') || pattern.includes('desk')) inferred.push('desk', 'work');
     if (label.includes('会议') || pattern.includes('meet')) inferred.push('meeting', 'work');
     if (label.includes('老板') || label.includes('保险')) inferred.push('boss_chair', 'work');
-    
-    // 商业设施
     if (label.includes('收银') || pattern.includes('cashier')) inferred.push('cashier', 'work');
     if (label.includes('货架') || label.includes('柜台')) inferred.push('shelf', 'counter', 'work');
     if (label.includes('吧台') || label.includes('酒')) inferred.push('bar', 'work');
-    
-    // 餐饮
     if (label.includes('灶') || utility === 'cook') inferred.push('stove', 'kitchen', 'work');
     if (label.includes('餐桌') || label.includes('椅')) inferred.push('table', 'seat');
-    
-    // 医疗/教育
     if (label.includes('病床') || utility === 'healing') inferred.push('medical_bed', 'bed', 'work');
     if (label.includes('黑板') || label.includes('讲台')) inferred.push('blackboard', 'work');
-    
-    // 娱乐/其他
     if (label.includes('DJ')) inferred.push('dj_booth', 'work');
     if (label.includes('画架')) inferred.push('easel', 'art', 'work');
     if (label.includes('床') || utility === 'energy') inferred.push('bed');
@@ -55,11 +37,49 @@ export const getFurnitureTags = (f: Furniture): string[] => {
     return inferred;
 };
 
-// 🆕 检查家具是否满足标签要求
 export const hasRequiredTags = (f: Furniture, requiredTags?: string[]): boolean => {
-    if (!requiredTags || requiredTags.length === 0) return true; // 无要求则通过
+    if (!requiredTags || requiredTags.length === 0) return true; 
     const furnitureTags = getFurnitureTags(f);
-    // 只要包含其中任意一个标签即可 (OR 逻辑)，或者根据需求改为 AND
-    // 这里假设是 OR 逻辑：只要家具具备职业所需的任意关键功能即可
     return requiredTags.some(tag => furnitureTags.includes(tag));
+};
+
+// 🆕 [新增] 获取交互锚点系统
+// anchor: 市民走到的位置 (寻路终点)
+// interact: 市民实际进行交互的位置 (动画位置)
+export const getInteractionPos = (f: Furniture): { anchor: Vector2, interact: Vector2 } => {
+    const center = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+    
+    // 默认：走到中心，在中心交互
+    let anchor = { ...center };
+    let interact = { ...center };
+
+    const tags = getFurnitureTags(f);
+    const label = f.label || '';
+
+    // 1. 床 (Bed): 走到床边，躺在中心
+    if (tags.includes('bed')) {
+        // 简单假设走到床的左侧或右侧，视空间而定，这里简化为左侧略偏下
+        // 实际上为了不穿模，应该根据家具方向，这里暂定下方或侧方
+        anchor = { x: f.x - 15, y: f.y + f.h / 2 }; 
+        // 如果是双人床，可能需要更精细判断，这里先统一
+    }
+    // 2. 座椅/沙发 (Seat): 走到前方，坐到中心
+    else if (tags.includes('seat') || tags.includes('sofa') || tags.includes('boss_chair') || label.includes('马桶')) {
+        // 假设椅子正面朝下 (y+)
+        anchor = { x: center.x, y: f.y + f.h + 10 }; 
+        interact = { ...center };
+    }
+    // 3. 柜台/灶台/货架 (Work/Counter): 走到前方，在前方操作 (不进入物体)
+    else if (tags.includes('stove') || tags.includes('counter') || tags.includes('cashier') || tags.includes('bar') || tags.includes('shelf') || tags.includes('easel') || label.includes('黑板')) {
+        anchor = { x: center.x, y: f.y + f.h + 15 };
+        interact = { x: center.x, y: f.y + f.h + 5 }; // 贴近物体边缘
+    }
+    // 4. 电脑桌 (Desk): 走到椅子位置
+    else if (tags.includes('desk') || tags.includes('computer')) {
+        // 假设椅子在桌子下方
+        anchor = { x: center.x, y: f.y + f.h + 15 };
+        interact = { x: center.x, y: f.y + f.h + 5 }; 
+    }
+
+    return { anchor, interact };
 };

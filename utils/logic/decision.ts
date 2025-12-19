@@ -1,7 +1,9 @@
+
 import type { Sim } from '../Sim'; 
 import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
 import { Furniture, SimAction, NeedType, AgeStage } from '../../types';
+import { getInteractionPos } from '../simulationHelpers'; // 🆕 引入辅助函数
 
 export const DecisionLogic = {
     isRestricted(sim: Sim, target: { x: number, y: number } | Furniture): boolean {
@@ -19,7 +21,6 @@ export const DecisionLogic = {
 
         if (homeId) {
             if (sim.homeId === homeId) return false;
-            // 🆕 养老院目前视为半私有，非住户不能随意使用床位
             const isOccupied = GameStore.sims.some(s => s.homeId === homeId);
             if (isOccupied) return true;
         }
@@ -27,11 +28,7 @@ export const DecisionLogic = {
     },
 
     decideAction(sim: Sim) {
-        // 🆕 1. 紧急医疗逻辑：健康低或生病时优先去医院
-        if (sim.health < 60 || sim.hasBuff('sick')) {
-            DecisionLogic.findObject(sim, 'healing');
-            return;
-        }
+        if (sim.health < 60 || sim.hasBuff('sick')) { DecisionLogic.findObject(sim, 'healing'); return; }
 
         let critical = [
             { id: NeedType.Energy, val: sim.needs[NeedType.Energy] },
@@ -61,37 +58,24 @@ export const DecisionLogic = {
         if (sim.appearanceScore > 70) socialScore *= 1.2; 
         if (sim.eq > 70) socialScore *= 1.3; 
 
-        if (['万人迷', '派对之王', '交际花', '政坛领袖'].some(g => sim.lifeGoal.includes(g))) {
-            socialScore *= 1.5; 
-        } else if (['隐居', '独处', '黑客', '作家'].some(g => sim.lifeGoal.includes(g))) {
-            socialScore *= 0.6; 
-        }
+        if (['万人迷', '派对之王', '交际花', '政坛领袖'].some(g => sim.lifeGoal.includes(g))) { socialScore *= 1.5; } 
+        else if (['隐居', '独处', '黑客', '作家'].some(g => sim.lifeGoal.includes(g))) { socialScore *= 0.6; }
         if (sim.mood < 30) socialScore *= 0.3;
-
-        // 🆕 2. 老年人更喜欢社交
         if (sim.ageStage === AgeStage.Elder) socialScore *= 1.3;
 
         scores.push({ id: NeedType.Social, score: socialScore, type: 'social' });
 
-        // 🆕 3. 超市购物冲动：有钱时随机触发
-        if (sim.money > 200 && Math.random() > 0.85) {
-            scores.push({ id: 'buy_item', score: 60, type: 'obj' });
-        }
+        if (sim.money > 200 && Math.random() > 0.85) { scores.push({ id: 'buy_item', score: 60, type: 'obj' }); }
 
-        // 青少年兼职逻辑
         if (sim.job.id === 'unemployed' && ![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
             let moneyDesire = 0;
             if (sim.money < 500) moneyDesire = 200; 
             else if (sim.money < 2000) moneyDesire = 100;
             else if (sim.lifeGoal.includes('富翁')) moneyDesire = 80;
-            
             if (sim.skills.coding > 10) moneyDesire += sim.skills.coding;
             if (sim.skills.fishing > 10) moneyDesire += sim.skills.fishing;
             if (sim.skills.creativity > 10) moneyDesire += sim.skills.creativity;
-
-            if (moneyDesire > 0) {
-                scores.push({ id: 'side_hustle', score: moneyDesire, type: 'work' });
-            }
+            if (moneyDesire > 0) { scores.push({ id: 'side_hustle', score: moneyDesire, type: 'work' }); }
         }
 
         for (let skillKey in sim.skills) {
@@ -102,7 +86,6 @@ export const DecisionLogic = {
 
         if (sim.needs[NeedType.Fun] < 50 && sim.money > 100) {
             scores.push({ id: 'cinema_3d', score: 90, type: 'obj' });
-            
             let gymScore = 60;
             if (sim.constitution > 70) gymScore += 30;
             scores.push({ id: 'gym_run', score: gymScore, type: 'obj' });
@@ -129,15 +112,12 @@ export const DecisionLogic = {
             sim.startWandering();
         }
 
-        // 学生写作业逻辑
         if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage) && sim.job.id === 'unemployed') {
             let studyDesire = 0;
             if (sim.mbti.includes('J')) studyDesire += 40;
             if ((sim.schoolPerformance || 60) < 60) studyDesire += 50; 
-            
             const hour = GameStore.time.hour;
             if (hour > 16 && hour < 21) studyDesire += 30;
-
             if (studyDesire > 60) {
                 DecisionLogic.findObject(sim, sim.ageStage === AgeStage.Teen ? 'study_high' : 'study');
                 return;
@@ -151,18 +131,12 @@ export const DecisionLogic = {
         if (sim.skills.logic > 5 || sim.skills.creativity > 5) {
             let pcs = GameStore.furniture.filter(f => f.label.includes('电脑') && (!f.reserved || f.reserved === sim.id));
             pcs = pcs.filter(f => !DecisionLogic.isRestricted(sim, f));
-
             if (pcs.length > 0) {
                 const netCafePcs = pcs.filter(p => p.label.includes('网吧'));
                 const homePcs = pcs.filter(p => !p.label.includes('网吧'));
-                
-                if (sim.money > 100 && netCafePcs.length > 0 && Math.random() > 0.4) {
-                     options.push({ type: 'pc', target: netCafePcs[Math.floor(Math.random() * netCafePcs.length)] });
-                } else if (homePcs.length > 0) {
-                     options.push({ type: 'pc', target: homePcs[Math.floor(Math.random() * homePcs.length)] });
-                } else if (pcs.length > 0) {
-                     options.push({ type: 'pc', target: pcs[Math.floor(Math.random() * pcs.length)] });
-                }
+                if (sim.money > 100 && netCafePcs.length > 0 && Math.random() > 0.4) { options.push({ type: 'pc', target: netCafePcs[Math.floor(Math.random() * netCafePcs.length)] }); } 
+                else if (homePcs.length > 0) { options.push({ type: 'pc', target: homePcs[Math.floor(Math.random() * homePcs.length)] }); } 
+                else if (pcs.length > 0) { options.push({ type: 'pc', target: pcs[Math.floor(Math.random() * pcs.length)] }); }
             }
         }
         
@@ -171,15 +145,15 @@ export const DecisionLogic = {
 
         let flowers = GameStore.furnitureIndex.get('gardening') || [];
         flowers = flowers.filter(f => !DecisionLogic.isRestricted(sim, f));
-
         if (flowers.length > 0) options.push({ type: 'garden', target: flowers[Math.floor(Math.random() * flowers.length)] });
 
         if (options.length > 0) {
             let best = options[Math.floor(Math.random() * options.length)];
-            sim.target = { x: best.target.x + best.target.w / 2, y: best.target.y + best.target.h / 2 };
+            // 🆕 修复：使用交互锚点
+            const { anchor } = getInteractionPos(best.target);
+            sim.target = anchor;
             sim.interactionTarget = best.target;
             sim.isSideHustle = true; 
-            
             sim.startMovingToInteraction();
         } else {
             sim.startWandering();
@@ -193,24 +167,18 @@ export const DecisionLogic = {
              [NeedType.Bladder]: 'bladder', 
              [NeedType.Hygiene]: 'hygiene',
              [NeedType.Energy]: 'energy',
-             'healing': 'healing', // 🆕 映射
+             'healing': 'healing', 
              cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play'
         };
         if (simpleMap[type]) utility = simpleMap[type];
 
         let candidates: Furniture[] = [];
 
-        // 🆕 4. 医疗设施查找
-        if (type === 'healing') {
-            candidates = GameStore.furnitureIndex.get('healing') || [];
-        } 
+        if (type === 'healing') { candidates = GameStore.furnitureIndex.get('healing') || []; } 
         else if (type === NeedType.Fun) {
             const funTypes = ['fun', 'cinema_2d', 'cinema_3d', 'cinema_imax', 'art', 'play', 'fishing'];
             if (sim.needs[NeedType.Energy] < 70) funTypes.push('comfort');
-            funTypes.forEach(t => {
-                const list = GameStore.furnitureIndex.get(t);
-                if (list) candidates = candidates.concat(list);
-            });
+            funTypes.forEach(t => { const list = GameStore.furnitureIndex.get(t); if (list) candidates = candidates.concat(list); });
         } else if (type === NeedType.Energy) {
              const beds = GameStore.furnitureIndex.get('energy') || [];
              candidates = candidates.concat(beds);
@@ -222,7 +190,7 @@ export const DecisionLogic = {
             candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []);
             candidates = candidates.concat(GameStore.furnitureIndex.get('buy_drink') || []);
-            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []); // 超市/小吃摊
+            candidates = candidates.concat(GameStore.furnitureIndex.get('buy_food') || []); 
         } else if (type === NeedType.Hygiene) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('hygiene') || []);
              candidates = candidates.concat(GameStore.furnitureIndex.get('shower') || []);
@@ -253,7 +221,6 @@ export const DecisionLogic = {
             });
 
             if (candidates.length) {
-                // 找最近的
                 candidates.sort((a: Furniture, b: Furniture) => {
                     const distA = Math.pow(a.x - sim.pos.x, 2) + Math.pow(a.y - sim.pos.y, 2);
                     const distB = Math.pow(b.x - sim.pos.x, 2) + Math.pow(b.y - sim.pos.y, 2);
@@ -266,17 +233,15 @@ export const DecisionLogic = {
                 
                 let obj = candidates[Math.floor(Math.random() * Math.min(candidates.length, poolSize))];
                 
-                sim.target = { x: obj.x + obj.w / 2, y: obj.y + obj.h / 2 };
+                // 🆕 修复：使用交互锚点
+                const { anchor } = getInteractionPos(obj);
+                sim.target = anchor;
                 sim.interactionTarget = obj;
                 
                 sim.startMovingToInteraction();
                 return;
             } else {
-                if (type === 'healing') {
-                    sim.say("医院没床位了...", 'bad');
-                } else {
-                    sim.say("没钱/没位置...", 'bad');
-                }
+                if (type === 'healing') { sim.say("医院没床位了...", 'bad'); } else { sim.say("没钱/没位置...", 'bad'); }
             }
         }
         sim.startWandering();
@@ -312,7 +277,6 @@ export const DecisionLogic = {
             };
             
             sim.interactionTarget = { type: 'human', ref: partner };
-            
             sim.startMovingToInteraction();
         } else {
             sim.startWandering();
