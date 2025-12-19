@@ -184,9 +184,15 @@ export const FamilyGenerator = {
             
             // 3. MBTI 遗传
             config.mbti = mixMBTI(p1.mbti, p2.mbti);
+
+            // 4. [修复] 显式设置父母 ID
+            const father = parents.find(p => p.gender === 'M');
+            const mother = parents.find(p => p.gender === 'F');
+            if (father) config.fatherId = father.id;
+            if (mother) config.motherId = mother.id;
         }
 
-        // 🆕 4. 性格特质遗传 (Personality Traits)
+        // 🆕 5. 性格特质遗传 (Personality Traits)
         config.traits = FamilyGenerator.generatePersonality(parents);
 
         return config;
@@ -399,15 +405,6 @@ export const FamilyGenerator = {
                 config = attachLore(config);
                 
                 const child = new Sim(config);
-                
-                // 补充父母ID字段
-                if (parents.length > 0) {
-                    const father = parents.find(p => p.gender === 'M');
-                    const mother = parents.find(p => p.gender === 'F');
-                    if (father) child.fatherId = father.id;
-                    if (mother) child.motherId = mother.id;
-                }
-
                 members.push(child);
 
                 // 建立关系

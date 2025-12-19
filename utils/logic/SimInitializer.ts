@@ -2,7 +2,7 @@ import { Sim } from '../Sim';
 import { SimData, AgeStage, NeedType, SimAppearance } from '../../types';
 import { CONFIG, AGE_CONFIG, SURNAMES, GIVEN_NAMES, ASSET_CONFIG, MBTI_TYPES, ZODIACS, LIFE_GOALS, JOBS, BASE_DECAY } from '../../constants';
 
-// 将 SimInitConfig 移到这里或保留在 Sim.ts 并导出
+// [修改] 扩充配置接口，支持属性传入（用于遗传）
 export interface SimInitConfig {
     x?: number;
     y?: number;
@@ -19,6 +19,14 @@ export interface SimInitConfig {
     traits?: string[]; 
     familyLore?: string; 
     workplaceId?: string; 
+    // 🆕 新增属性字段
+    iq?: number;
+    eq?: number;
+    constitution?: number;
+    appearanceScore?: number;
+    luck?: number;
+    creativity?: number;
+    morality?: number;
 }
 
 export const SimInitializer = {
@@ -56,19 +64,31 @@ export const SimInitializer = {
         sim.height = Math.floor(sim.height);
         sim.weight = Math.floor(sim.weight);
         
-        // 属性
+        // [修复] 属性初始化：优先使用传入的 config 值（遗传），否则随机
         const rand = (Math.random() + Math.random() + Math.random()) / 3;
-        sim.appearanceScore = Math.floor(rand * 100);
-        sim.luck = Math.floor(Math.random() * 100);
-        const constRand = (Math.random() + Math.random()) / 2;
-        sim.constitution = Math.floor(constRand * 100);
-        sim.eq = Math.floor(Math.random() * 100);
-        const iqRand = (Math.random() + Math.random() + Math.random()) / 3;
-        sim.iq = Math.floor(iqRand * 100);
-        sim.reputation = Math.floor(Math.random() * 40); 
-        sim.morality = Math.floor(Math.random() * 100);
-        sim.creativity = Math.floor(Math.random() * 100);
+        sim.appearanceScore = config.appearanceScore ?? Math.floor(rand * 100);
         
+        sim.luck = config.luck ?? Math.floor(Math.random() * 100);
+        
+        const constRand = (Math.random() + Math.random()) / 2;
+        sim.constitution = config.constitution ?? Math.floor(constRand * 100);
+        
+        sim.eq = config.eq ?? Math.floor(Math.random() * 100);
+        
+        const iqRand = (Math.random() + Math.random() + Math.random()) / 3;
+        sim.iq = config.iq ?? Math.floor(iqRand * 100);
+        
+        sim.reputation = Math.floor(Math.random() * 40); 
+        sim.morality = config.morality ?? Math.floor(Math.random() * 100);
+        sim.creativity = config.creativity ?? Math.floor(Math.random() * 100);
+        
+        // 🆕 [修复] 婴幼儿体质修正：即使遗传了强壮基因，婴幼儿时期也相对脆弱
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+            // 保留潜力，但当前表现值打折，或者直接限制上限
+            // 这里选择限制上限，随年龄增长可以通过 LifeCycleLogic 恢复/增长
+            sim.constitution = Math.min(sim.constitution, 60); 
+        }
+
         // 身份
         sim.surname = config.surname || SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
         sim.name = sim.surname + GIVEN_NAMES[Math.floor(Math.random() * GIVEN_NAMES.length)];
@@ -106,7 +126,7 @@ export const SimInitializer = {
         let baseFaith = sim.mbti.includes('J') ? 70 : 40;
         sim.faithfulness = Math.min(100, Math.max(0, baseFaith + (Math.random() * 40 - 20)));
 
-        // 需求与技能
+        // 需求
         const randNeed = () => 60 + Math.floor(Math.random() * 40);
         sim.needs = { 
             [NeedType.Hunger]: randNeed(), 
@@ -117,8 +137,36 @@ export const SimInitializer = {
             [NeedType.Hygiene]: randNeed(),
             [NeedType.Comfort]: 100
         };
-        // 🆕 初始化技能，增加 charisma
+
+        // 🆕 [修复] 技能初始化逻辑
+        // 1. 先全部置零
         sim.skills = { cooking: 0, athletics: 0, music: 0, dancing: 0, logic: 0, creativity: 0, gardening: 0, fishing: 0, charisma: 0 };
+
+        // 2. 如果是青少年及以上，随机赋予一些初始生活技能 (避免成年人也是白板)
+        if (![AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+            const skillBonus = sim.ageStage === AgeStage.Elder ? 45 : (sim.ageStage === AgeStage.MiddleAged ? 30 : 15);
+            
+            Object.keys(sim.skills).forEach(key => {
+                // 30% 概率拥有某项基础技能
+                if (Math.random() < 0.3) {
+                    let val = Math.floor(Math.random() * skillBonus);
+                    
+                    // 根据 MBTI 和 属性 稍微加成
+                    if (sim.mbti.includes('N') && ['logic', 'creativity'].includes(key)) val += 10;
+                    if (sim.mbti.includes('S') && ['athletics', 'cooking'].includes(key)) val += 10;
+                    if (sim.mbti.includes('E') && ['charisma', 'dancing'].includes(key)) val += 10;
+                    if (sim.constitution > 80 && key === 'athletics') val += 15;
+                    
+                    sim.skills[key] = Math.min(100, val);
+                }
+            });
+        }
+        
+        // 3. 强制清零保险：确保婴幼儿绝对没有任何技能
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+             Object.keys(sim.skills).forEach(k => sim.skills[k] = 0);
+        }
+
         sim.relationships = {};
 
         // 经济
@@ -134,6 +182,12 @@ export const SimInitializer = {
         // 初始化修饰符
         sim.metabolism = {};
         for (let key in BASE_DECAY) sim.metabolism[key] = 1.0;
+        // 婴幼儿代谢修正：容易饿，容易困
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+            sim.metabolism[NeedType.Hunger] = 1.5;
+            sim.metabolism[NeedType.Energy] = 1.3;
+        }
+
         sim.skillModifiers = {};
         for (let key in sim.skills) sim.skillModifiers[key] = 1.0;
         sim.socialModifier = 1.0;
